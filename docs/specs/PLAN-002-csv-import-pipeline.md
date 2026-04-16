@@ -7,7 +7,7 @@
 | Task | Title | Status | Depends-on |
 | ---- | ----- | ------ | ---------- |
 | TASK-01 | Extend the Prisma schema for strict staged import | `done` | — |
-| TASK-02 | Implement bundle parsing | `pending` | — |
+| TASK-02 | Implement bundle parsing | `done` | — |
 | TASK-03 | Implement batch staging | `pending` | TASK-01, TASK-02 |
 | TASK-04 | Implement deterministic validation and issue generation | `pending` | TASK-01, TASK-02, TASK-03 |
 | TASK-05 | Implement issue reads | `pending` | TASK-01, TASK-02, TASK-03, TASK-04 |
@@ -38,7 +38,14 @@ human-created signal for TASK-01 cycle 1
 | ---- | ------ | --------- | ----- | ----- | ---------------- | --------- |
 | TASK-01 | pass | null | 1 | gpt-5.4 | high | 7:26AM SGT |
 | TASK-02 | blocked | D-001 | 1 | gpt-5.4 | high | 2026-04-16T23:30:20.007Z |
+| TASK-02 | pass | null | 1 | gpt-5.4 | high | 2026-04-16T23:46:47.905Z |
+| TASK-02 | pass | null | 2 | gpt-5.4 | high | 2026-04-16T23:50:52.665Z |
 
 ## Review Notes
 
 - TASK-01 cycle 1: `confirmed` -> `docs/sdd/reviews/TASK-01-epoch-1-cycle-1.md`
+
+
+- TASK-02 cycle 1: `contested` -> `docs/sdd/reviews/TASK-02-epoch-2-cycle-1.md`
+
+- TASK-02 cycle 2: `deferred` -> `docs/sdd/reviews/TASK-02-epoch-2-cycle-2.md`
