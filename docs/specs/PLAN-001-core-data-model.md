@@ -7,7 +7,7 @@
 | Task | Title | Status | Depends-on |
 | ---- | ----- | ------ | ---------- |
 | TASK-00 | Initialize project | `done` | — |
-| TASK-01 | Define Prisma schema | `pending` | TASK-00 |
+| TASK-01 | Define Prisma schema | `done` | TASK-00 |
 | TASK-02a | Generate initial migration | `pending` | TASK-01 |
 | TASK-02b | Constraint tests | `pending` | TASK-02a |
 | TASK-03 | Implement normalization utility | `pending` | — |
@@ -25,9 +25,12 @@ Status values: `pending` | `active` | `done` | `fail` | `blocked` | `skipped`
 | ---- | ------ | --------- | ----- | ----- | ---------------- | --------- |
 | TASK-00 | pass | null | 1 | gpt-5.4 | high | 2026-04-16T00:58:24.445Z |
 | TASK-00 | pass | null | 2 | gpt-5.4 | high | 2026-04-16T01:03:31.236Z |
+| TASK-01 | pass | null | 1 | gpt-5.4 | high | 2026-04-16T01:54:36.154Z |
 
 ## Review Notes
 
 <!-- Orchestrator review notes append below. -->
+
+- TASK-01 cycle 1: `confirmed` -> `docs/sdd/reviews/TASK-01-epoch-1-cycle-1.md`
 
 - TASK-00 cycle 1: `confirmed` -> `docs/sdd/reviews/TASK-00-epoch-1-cycle-1.md`
