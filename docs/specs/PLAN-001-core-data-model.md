@@ -13,7 +13,7 @@
 | TASK-03 | Implement normalization utility | `done` | — |
 | TASK-04a | Seed reference data | `done` | TASK-02a, TASK-03 |
 | TASK-04b | Seed transactional data + derive scores | `done` | TASK-04a |
-| TASK-05 | Verify query patterns against seed data | `pending` | TASK-02b, TASK-03, TASK-04b |
+| TASK-05 | Verify query patterns against seed data | `done` | TASK-02b, TASK-03, TASK-04b |
 
 Status values: `pending` | `active` | `done` | `fail` | `blocked` | `skipped`
 
@@ -33,10 +33,13 @@ Status values: `pending` | `active` | `done` | `fail` | `blocked` | `skipped`
 | TASK-02b | pass | null | 1 | gpt-5.4 | high | 2026-04-16T03:58:57.188Z |
 | TASK-04a | pass | null | 1 | gpt-5.4 | high | 2026-04-16T04:05:25.301Z |
 | TASK-04b | pass | null | 1 | gpt-5.4 | high | 2026-04-16T04:14:13.171Z |
+| TASK-05 | pass | null | 1 | gpt-5.4 | high | 2026-04-16T04:21:06.132Z |
 
 ## Review Notes
 
 <!-- Orchestrator review notes append below. -->
+
+- TASK-05 cycle 1: `confirmed` -> `docs/sdd/reviews/TASK-05-epoch-1-cycle-1.md`
 
 - TASK-04b cycle 1: `confirmed` -> `docs/sdd/reviews/TASK-04b-epoch-1-cycle-1.md`
 
