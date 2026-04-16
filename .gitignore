@@ -1,4 +1,6 @@
 node_modules/
 .env
-
 /generated/prisma
+config/project.local.env
+docs/sdd/orchestrator.log
+docs/sdd/last-diff*
