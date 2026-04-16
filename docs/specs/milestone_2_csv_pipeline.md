@@ -177,3 +177,16 @@ Track:
 ## 🚀 Next
 
 Milestone 3 — Round Page
+
+---
+
+## Appendix D: Discoveries Log
+
+### D-001 — 2026-04-17T00:00:00Z
+
+- **Trigger:** Loading the runtime-authoritative `spec_universal_path` and `spec_task_slice_path` for `TASK-02`.
+- **Nature:** `gap`
+- **Affected sections:** Dispatch package for Milestone 2 / `TASK-02` (no approved dispatchable spec or task slice present in the worktree).
+- **Agent assessment:** Implementation should wait for an approved `SPEC-002` universal file plus a `TASK-02` slice, or an approved full spec with task annotations and contract references.
+- **Escalation required:** `yes`
+- **Resolution:** Pending orchestrator/spec update.

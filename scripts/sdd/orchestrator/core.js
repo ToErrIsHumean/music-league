@@ -12,6 +12,7 @@ const promotionModule = require('./promotion');
 const reviewerCheckpointModule = require('./reviewer-checkpoint');
 const worktreeModule = require('./worktree');
 const summaryModule = require('./summary');
+const milestoneModule = require('./milestone');
 const { runImplementerPhase } = require('./implementer-cycle');
 const { runReviewerPhase } = require('./reviewer-cycle');
 const { createSummary } = summaryModule;
@@ -304,7 +305,12 @@ async function runOrchestrator(options) {
     state.worktree = worktreeModule.prepareTaskWorkspace({
       repoRoot: context.options.repoRoot,
       taskId: state.task.id,
-      milestone: context.options.milestone || process.env.SDD_MILESTONE || 'M1',
+      milestone: milestoneModule.resolveMilestoneLabel({
+        milestone: context.options.milestone,
+        envMilestone: process.env.SDD_MILESTONE,
+        specPath: context.options.specPath,
+        planPath: context.options.planPath,
+      }),
       progress: runtime.progress,
       worktreeOps: runtime.worktreeOps,
     });

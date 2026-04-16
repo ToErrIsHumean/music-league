@@ -39,6 +39,9 @@ function parseArgs(argv) {
       case '--plan':
         index = assignOption(argv, index, options, 'planPath');
         break;
+      case '--milestone':
+        index = assignOption(argv, index, options, 'milestone');
+        break;
       case '--cc':
         options.useClaude = true;
         break;
@@ -147,6 +150,7 @@ async function main() {
         ? path.resolve(options.specSlicePath)
         : undefined,
       planPath: path.resolve(options.planPath),
+      milestone: options.milestone,
       passthroughArgs: options.passthroughArgs,
       useClaude: options.useClaude,
       useCline: options.useCline,

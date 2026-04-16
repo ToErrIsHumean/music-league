@@ -13,6 +13,8 @@ Options:
   --spec <path>                 Approved spec file for the workstream.
   --spec-slice <dir>            Optional slice directory (passthrough).
   --plan <path>                 Plan file storing task state and signals.
+  --milestone <id>              Optional worktree milestone label (for example
+                                M2). Defaults to spec/plan-derived milestone.
   --cc                          Use the Claude Code backend (passthrough).
                                 Incompatible with --cline, --sandbox,
                                 --reasoning-effort.
@@ -110,6 +112,7 @@ META_RUNNER="${SCRIPT_DIR}/meta-orchestrator.js"
 SPEC_PATH=""
 PLAN_PATH=""
 SPEC_SLICE_PATH=""
+MILESTONE=""
 CC=false
 CLINE=false
 SANDBOX=""
@@ -135,6 +138,12 @@ while (($# > 0)); do
     --plan)
       require_option_value "$1" "${2-}"
       PLAN_PATH="$2"
+      shift 2
+      continue
+      ;;
+    --milestone)
+      require_option_value "$1" "${2-}"
+      MILESTONE="$2"
       shift 2
       continue
       ;;
@@ -296,6 +305,10 @@ ARGS=(
 
 if [[ -n "${SPEC_SLICE_PATH}" ]]; then
   ARGS+=("--spec-slice" "${SPEC_SLICE_PATH}")
+fi
+
+if [[ -n "${MILESTONE}" ]]; then
+  ARGS+=("--milestone" "${MILESTONE}")
 fi
 
 if [[ "${CC}" == true ]]; then

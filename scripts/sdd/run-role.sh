@@ -78,6 +78,27 @@ resolve_codex_config_path() {
   printf '%s/config.toml\n' "${codex_home}"
 }
 
+resolve_codex_exec_home() {
+  if [[ -n "${CODEX_HOME:-}" ]]; then
+    printf '%s\n' "${CODEX_HOME}"
+    return
+  fi
+
+  local default_home="${HOME:-}/.codex"
+  if [[ -d "${default_home}" && -w "${default_home}" ]]; then
+    printf '%s\n' "${default_home}"
+    return
+  fi
+
+  local memories_home="${HOME:-}/.codex/memories/codex-home"
+  if [[ -d "${HOME:-}/.codex/memories" && -w "${HOME:-}/.codex/memories" ]]; then
+    printf '%s\n' "${memories_home}"
+    return
+  fi
+
+  printf '%s\n' "/tmp/codex-home-${USER:-codex}"
+}
+
 read_codex_config_value() {
   local config_path="$1"
   local key_name="$2"
@@ -539,4 +560,9 @@ fi
 
 CODEX_COMMAND+=("-")
 
-"${CODEX_COMMAND[@]}" < "${COMPOSED_PROMPT}"
+CODEX_EXEC_HOME="$(resolve_codex_exec_home)"
+mkdir -p "${CODEX_EXEC_HOME}"
+
+# Original behavior for easy reversal:
+# "${CODEX_COMMAND[@]}" < "${COMPOSED_PROMPT}"
+CODEX_HOME="${CODEX_EXEC_HOME}" "${CODEX_COMMAND[@]}" < "${COMPOSED_PROMPT}"

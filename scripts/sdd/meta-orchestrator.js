@@ -59,6 +59,9 @@ function parseArgs(argv) {
       case '--plan':
         index = assignOption(argv, index, options, 'planPath');
         break;
+      case '--milestone':
+        index = assignOption(argv, index, options, 'milestone');
+        break;
       case '--cc':
         options.useClaude = true;
         break;
@@ -230,6 +233,10 @@ function buildOrchestratorArgs(options, outputLastMessagePath) {
 
   if (options.specSlicePath) {
     args.push('--spec-slice', options.specSlicePath);
+  }
+
+  if (options.milestone) {
+    args.push('--milestone', options.milestone);
   }
 
   if (options.useClaude) {

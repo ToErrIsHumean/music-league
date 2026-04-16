@@ -27,6 +27,12 @@ into the canonical SDD task/contract/acceptance-criteria format.
   Reviewer entrypoint for structured verdict generation.
 - `scripts/sdd/orchestrator.sh`
   Disk-backed Orchestrator entrypoint.
+- `scripts/sdd/define-slices.js`
+  Derives Appendix E.4 `SLICE` blocks from a dispatchable spec's task
+  decomposition and dependency graph.
+- `scripts/sdd/extract-slices.js`
+  Materializes `<spec>-universal.md` plus task slice files from Appendix E
+  slice definitions.
 - `scripts/sdd/orchestrator/`
   Supporting JS modules for plan parsing, worktree management, gating, and
   promotion.
@@ -109,4 +115,11 @@ scripts/sdd/orchestrator.sh \
   --spec docs/specs/SPEC-001-example.md \
   --plan docs/specs/PLAN-001-example.md \
   --dry-run
+```
+
+Slice utilities:
+
+```bash
+node scripts/sdd/define-slices.js docs/specs/SPEC-001-example.md --stdout
+node scripts/sdd/extract-slices.js docs/specs/SPEC-001-example.md docs/specs/slices-001
 ```

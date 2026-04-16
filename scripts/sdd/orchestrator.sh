@@ -17,6 +17,8 @@ Options:
   --spec-slice <dir>            Optional slice directory. When present, pass it
                                 through to implementer/reviewer wrappers.
   --plan <path>                 Plan file storing task state and signals.
+  --milestone <id>              Optional worktree milestone label (for example
+                                M2). Defaults to spec/plan-derived milestone.
   --cc                          Use the Claude Code backend for dry-run composition
                                 and nested role dispatch. Incompatible with
                                 --sandbox, --reasoning-effort, --profile, --json,
@@ -86,6 +88,7 @@ LOOP_RUNNER="${SCRIPT_DIR}/orchestrator-loop.js"
 SPEC_PATH=""
 SPEC_SLICE_PATH=""
 PLAN_PATH=""
+MILESTONE=""
 CC=false
 CLINE=false
 
@@ -112,6 +115,12 @@ while (($# > 0)); do
     --plan)
       require_option_value "$1" "${2-}"
       PLAN_PATH="$2"
+      shift 2
+      continue
+      ;;
+    --milestone)
+      require_option_value "$1" "${2-}"
+      MILESTONE="$2"
       shift 2
       continue
       ;;
@@ -274,6 +283,7 @@ if [[ "${CC}" == true ]]; then
 
   LOOP_ARGS+=("--cc")
   [[ -n "${SPEC_SLICE_PATH}" ]] && LOOP_ARGS+=("--spec-slice" "${SPEC_SLICE_PATH}")
+  [[ -n "${MILESTONE}" ]] && LOOP_ARGS+=("--milestone" "${MILESTONE}")
   [[ -n "${OUTPUT_LAST_MESSAGE}" ]] && LOOP_ARGS+=("--output-last-message" "${OUTPUT_LAST_MESSAGE}")
   [[ -n "${MODEL}" ]] && LOOP_ARGS+=("--model" "${MODEL}")
   LOOP_ARGS+=("--effort" "${EFFORT:-${CC_DEFAULT_EFFORT}}")
@@ -284,6 +294,7 @@ elif [[ "${CLINE}" == true ]]; then
 
   LOOP_ARGS+=("--cline")
   [[ -n "${SPEC_SLICE_PATH}" ]] && LOOP_ARGS+=("--spec-slice" "${SPEC_SLICE_PATH}")
+  [[ -n "${MILESTONE}" ]] && LOOP_ARGS+=("--milestone" "${MILESTONE}")
   [[ -n "${OUTPUT_LAST_MESSAGE}" ]] && LOOP_ARGS+=("--output-last-message" "${OUTPUT_LAST_MESSAGE}")
 else
   [[ -n "${SANDBOX}" ]] && ROLE_ARGS+=("--sandbox" "${SANDBOX}")
@@ -296,6 +307,7 @@ else
   [[ "${DRY_RUN}" == true ]] && ROLE_ARGS+=("--dry-run")
 
   [[ -n "${SPEC_SLICE_PATH}" ]] && LOOP_ARGS+=("--spec-slice" "${SPEC_SLICE_PATH}")
+  [[ -n "${MILESTONE}" ]] && LOOP_ARGS+=("--milestone" "${MILESTONE}")
   [[ -n "${SANDBOX}" ]] && LOOP_ARGS+=("--sandbox" "${SANDBOX}")
   [[ -n "${OUTPUT_LAST_MESSAGE}" ]] && LOOP_ARGS+=("--output-last-message" "${OUTPUT_LAST_MESSAGE}")
   [[ -n "${MODEL}" ]] && LOOP_ARGS+=("--model" "${MODEL}")
