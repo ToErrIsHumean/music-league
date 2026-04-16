@@ -4,4 +4,117 @@ generator client {
 
 datasource db {
   provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Player {
+  id             Int          @id @default(autoincrement())
+  displayName    String
+  normalizedName String       @unique
+  sourcePlayerId String?      @unique
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  submissions    Submission[]
+  votes          Vote[]
+}
+
+model Artist {
+  id             Int      @id @default(autoincrement())
+  name           String
+  normalizedName String   @unique
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  songs          Song[]
+}
+
+model Song {
+  id              Int          @id @default(autoincrement())
+  title           String
+  normalizedTitle String
+  artistId        Int
+  spotifyUri      String       @unique
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  artist          Artist       @relation(fields: [artistId], references: [id])
+  submissions     Submission[]
+  votes           Vote[]
+}
+
+model Round {
+  id             Int          @id @default(autoincrement())
+  leagueSlug     String       @default("main")
+  name           String
+  description    String?
+  playlistUrl    String?
+  sequenceNumber Int?
+  occurredAt     DateTime?
+  sourceRoundId  String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  submissions    Submission[]
+  votes          Vote[]
+
+  @@index([leagueSlug, sequenceNumber])
+  @@unique([leagueSlug, sourceRoundId])
+}
+
+model Submission {
+  id              Int          @id @default(autoincrement())
+  roundId         Int
+  playerId        Int
+  songId          Int
+  score           Int?
+  rank            Int?
+  comment         String?
+  visibleToVoters Boolean      @default(false)
+  submittedAt     DateTime?
+  sourceImportId  Int?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  round        Round        @relation(fields: [roundId], references: [id])
+  player       Player       @relation(fields: [playerId], references: [id])
+  song         Song         @relation(fields: [songId], references: [id])
+  sourceImport ImportBatch? @relation(fields: [sourceImportId], references: [id])
+
+  @@unique([roundId, playerId, songId])
+  @@index([roundId])
+  @@index([playerId])
+  @@index([songId])
+}
+
+model Vote {
+  id             Int          @id @default(autoincrement())
+  roundId        Int
+  voterId        Int
+  songId         Int
+  pointsAssigned Int
+  comment        String?
+  votedAt        DateTime?
+  sourceImportId Int?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  round        Round        @relation(fields: [roundId], references: [id])
+  voter        Player       @relation(fields: [voterId], references: [id])
+  song         Song         @relation(fields: [songId], references: [id])
+  sourceImport ImportBatch? @relation(fields: [sourceImportId], references: [id])
+
+  @@unique([roundId, voterId, songId])
+  @@index([roundId])
+  @@index([voterId])
+  @@index([songId])
+}
+
+model ImportBatch {
+  id             Int          @id @default(autoincrement())
+  sourceType     String
+  sourceFilename String?
+  rowCount       Int          @default(0)
+  status         String
+  notes          String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  submissions    Submission[]
+  votes          Vote[]
 }
