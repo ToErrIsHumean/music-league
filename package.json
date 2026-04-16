@@ -2,6 +2,9 @@
   "name": "m1-task-00",
   "version": "1.0.0",
   "main": "index.js",
+  "prisma": {
+    "seed": "node prisma/seed.js"
+  },
   "scripts": {
     "test": "node --test"
   },
