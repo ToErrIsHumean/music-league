@@ -8,7 +8,7 @@
 | ---- | ----- | ------ | ---------- |
 | TASK-00 | Initialize project | `done` | — |
 | TASK-01 | Define Prisma schema | `done` | TASK-00 |
-| TASK-02a | Generate initial migration | `blocked` | TASK-01 |
+| TASK-02a | Generate initial migration | `done` | TASK-01 |
 | TASK-02b | Constraint tests | `pending` | TASK-02a |
 | TASK-03 | Implement normalization utility | `done` | — |
 | TASK-04a | Seed reference data | `pending` | TASK-02a, TASK-03 |
@@ -29,10 +29,16 @@ Status values: `pending` | `active` | `done` | `fail` | `blocked` | `skipped`
 | TASK-02a | pass | null | 1 | gpt-5.4 | high | 2026-04-16T01:59:53.366Z |
 | TASK-02a | blocked | null | 2 | llm-fallback | unknown | 2026-04-16T02:26:42.661Z |
 | TASK-03 | pass | null | 1 | gpt-5.4 | high | 2026-04-16T02:28:02.273Z |
+| TASK-02a | pass | null | 1 | gpt-5.4 | high | 2026-04-16T03:52:32.984Z |
 
 ## Review Notes
 
 <!-- Orchestrator review notes append below. -->
+
+- TASK-02a cycle 1: `confirmed` -> `docs/sdd/reviews/TASK-02a-epoch-2-cycle-1.md`
+
+- META: TASK-02a marked blocked — execution error after 3 attempts ((no output))
+- TASK-02a cycle 2: `contested` -> `docs/sdd/reviews/TASK-02a-epoch-1-cycle-2.md`
 
 - TASK-03 cycle 1: `confirmed` -> `docs/sdd/reviews/TASK-03-epoch-1-cycle-1.md`
 
