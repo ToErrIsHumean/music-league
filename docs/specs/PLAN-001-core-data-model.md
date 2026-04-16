@@ -6,7 +6,7 @@
 
 | Task | Title | Status | Depends-on |
 | ---- | ----- | ------ | ---------- |
-| TASK-00 | Initialize project | `active` | — |
+| TASK-00 | Initialize project | `done` | — |
 | TASK-01 | Define Prisma schema | `pending` | TASK-00 |
 | TASK-02a | Generate initial migration | `pending` | TASK-01 |
 | TASK-02b | Constraint tests | `pending` | TASK-02a |
