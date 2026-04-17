@@ -10,7 +10,7 @@
 | TASK-02 | Implement bundle parsing | `done` | — |
 | TASK-03 | Implement batch staging | `done` | TASK-01, TASK-02 |
 | TASK-04 | Implement deterministic validation and issue generation | `done` | TASK-01, TASK-02, TASK-03 |
-| TASK-05 | Implement issue reads | `pending` | TASK-01, TASK-02, TASK-03, TASK-04 |
+| TASK-05 | Implement issue reads | `done` | TASK-01, TASK-02, TASK-03, TASK-04 |
 | TASK-06 | Implement summary and history reads | `pending` | TASK-01, TASK-02, TASK-03, TASK-04 |
 | TASK-07 | Implement round-result recompute | `pending` | TASK-01 |
 | TASK-08 | Implement transactional commit orchestration | `pending` | TASK-01, TASK-02, TASK-03, TASK-04, TASK-07 |
@@ -44,6 +44,8 @@ human-created signal for TASK-01 cycle 1
 | TASK-03 | pass | null | 2 | gpt-5.4 | high | 2026-04-17T00:08:39.056Z |
 | TASK-04 | pass | null | 1 | gpt-5.4 | high | 2026-04-17T00:21:26.130Z |
 | TASK-04 | pass | null | 2 | gpt-5.4 | high | 2026-04-17T00:28:16.786Z |
+| TASK-05 | pass | null | 1 | gpt-5.4 | high | 2026-04-17T00:36:20.985Z |
+| TASK-05 | pass | null | 2 | gpt-5.4 | high | 2026-04-17T00:42:05.160Z |
 
 ## Review Notes
 
@@ -61,3 +63,7 @@ human-created signal for TASK-01 cycle 1
 - TASK-04 cycle 1: `contested` -> `docs/sdd/reviews/TASK-04-epoch-1-cycle-1.md`
 
 - TASK-04 cycle 2: `deferred` -> `docs/sdd/reviews/TASK-04-epoch-1-cycle-2.md`
+
+- TASK-05 cycle 1: `contested` -> `docs/sdd/reviews/TASK-05-epoch-1-cycle-1.md`
+
+- TASK-05 cycle 2: `confirmed` -> `docs/sdd/reviews/TASK-05-epoch-1-cycle-2.md`
