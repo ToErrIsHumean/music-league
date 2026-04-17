@@ -1,4 +1,24 @@
 # BACKLOG.md
+---
+
+## Player Modal Full Content
+
+**Outcome:** Users can open a full Player Modal from round detail and see cross-round submission history, identity summaries, and later milestone social insights without losing archive context.
+**Trigger:** Milestone 4 sequencing after the Milestone 3 round-scoped modal shell ships
+**Complexity:** Medium
+**Dependencies:** Milestone 3 archive route, round detail overlay, and round-scoped player modal shell
+**Notes:** Milestone 3 intentionally ships the player modal as a round-scoped shell only; preserve URL-state close/back behavior when expanding it.
+
+---
+
+## Song Modal Full Content
+
+**Outcome:** Users can open a full Song Modal from round detail and see cross-round song history, recurrence context, and later milestone lookup detail without losing archive context.
+**Trigger:** Milestone 5 sequencing after the Milestone 3 round-scoped modal shell ships
+**Complexity:** Medium
+**Dependencies:** Milestone 3 archive route, round detail overlay, and round-scoped song modal shell
+**Notes:** Milestone 3 intentionally ships the song modal as a round-scoped shell only; preserve URL-state close/back behavior when expanding it.
+
 <!-- SKILL CONTRACT
   Location: First comment block in the file, immediately after the # Title line. Must not appear elsewhere.
   Purpose: Holding pen for Music League work that is real but not yet sequenced. Exists to prevent scope creep and amnesia.

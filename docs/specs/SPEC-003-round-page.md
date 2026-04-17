@@ -1,9 +1,9 @@
 # SPEC: Game Browser and Round Detail Surface
 
-> **Version:** 0.1.1-draft
+> **Version:** 0.1.3-draft
 > **Milestone:** 3 — Round Page
 > **Status:** `draft`
-> **Author:** architecture-audit 1
+> **Author:** final-review 1
 > **Depends-on:** `docs/specs/SPEC-001-core-data-model.md`, `docs/specs/SPEC-002-csv-import-pipeline.md`
 > **Invalidated-by:** none
 
@@ -86,8 +86,8 @@ GET /?round=<roundId>&song=<songId>&player=<playerId>
 ```txt
 Query params:
   round?: integer   // canonical Round.id for the open round overlay
-  song?: integer    // canonical Song.id for the nested song peek
-  player?: integer  // canonical Player.id for the nested player peek
+  song?: integer    // canonical Song.id for the nested song modal shell
+  player?: integer  // canonical Player.id for the nested player modal shell
 
 Response:
   200 HTML document containing:
@@ -231,6 +231,10 @@ interface GameArchivePageProps {
 }
 ```
 
+**Composition note:** `GameArchivePage` owns the archive browse surface only.
+The route-layer page composes optional `RoundDetailDialog` and
+`RoundScopedEntityModal` siblings around it based on URL state.
+
 **Presentation rules:**
 
 - Each game renders as a distinct section or card group.
@@ -281,8 +285,8 @@ interface RoundDetailDialogProps {
 - Render 2-3 highlights only.
 - Submission rows are vertically scannable and keep song, artist, player, and
   score/rank on one coherent row or compact stack.
-- Song and player names are actionable affordances that open nested peeks
-  without dismissing the round dialog.
+- Song and player names are actionable affordances that open nested modal
+  shells without dismissing the round dialog.
 
 #### §4c-3. `RoundScopedEntityModal`
 
@@ -376,7 +380,8 @@ listArchiveGames(): Promise<Array<{
 **Contract rules:**
 
 - Returns every `Game` with at least one round.
-- Game order: newest `Round.occurredAt` DESC, then `Game.sourceGameId` ASC.
+- Game order: newest non-null `Round.occurredAt` within each game DESC, nulls
+  last, then `Game.sourceGameId` ASC.
 - `displayLabel` uses:
   - `Game.displayName` when non-empty
   - otherwise the short game identifier rule from §4b-2
@@ -530,13 +535,11 @@ buildArchiveHref(input: {
    `contracts: §4b-1, §4d-0` · `preserves: INV-06, INV-07` · `validates: AC-09`
 4. **[TASK-04] Build archive loader utilities and URL-state helpers** — Implement `listArchiveGames()`, `getRoundDetail()`, `getSongRoundModal()`, `getPlayerRoundModal()`, and `buildArchiveHref()` under a shared data/UI utility layer, with Node-based tests covering ordering, fallback labels, highlight count, and scoped modal behavior.
    `contracts: §4d-1, §4d-2, §4d-3, §4d-4, §4d-5` · `preserves: INV-01, INV-03, INV-04, INV-05` · `validates: AC-01, AC-03, AC-05`
-5. **[TASK-05] Scaffold the app route and archive shell** — Add the minimal Next.js runtime, root layout, and `/` route wiring needed to server-render the archive using the shared loaders without introducing a separate public API surface.
-   `contracts: §4a-1, §4e` · `preserves: INV-02, INV-03` · `validates: AC-02`
-6. **[TASK-06] Implement the game browser and round summary UI** — Render game sections, concise round summary cards, and archive-level fallback/error states so the archive structure is immediately understandable and visually tidy on desktop and mobile.
-   `contracts: §4a-1, §4c-1, §4d-1, §4d-5` · `preserves: INV-01, INV-03, INV-04` · `validates: AC-01, AC-05, AC-08`
-7. **[TASK-07] Implement round detail overlay and highlights** — Add the round dialog, header context, deterministic highlight rendering, and full submission list so opening a round feels lightweight but complete.
+5. **[TASK-05] Ship the archive route and round summary browser** — Add the minimal Next.js runtime, root layout, and `/` route wiring, then render game sections, concise round summary cards, and archive-level fallback/error states so the archive structure is immediately understandable and visually tidy on desktop and mobile.
+   `contracts: §4a-1, §4c-1, §4d-1, §4d-5, §4e` · `preserves: INV-01, INV-02, INV-03, INV-04` · `validates: AC-01, AC-05, AC-08`
+6. **[TASK-06] Implement round detail overlay and highlights** — Add the round dialog, direct-entry handling, header context, deterministic highlight rendering, and full submission list so opening a round feels lightweight but complete.
    `contracts: §4a-1, §4c-2, §4d-2, §4d-5` · `preserves: INV-02, INV-03, INV-04` · `validates: AC-02, AC-03`
-8. **[TASK-08] Add round-scoped song/player modal shells and final polish** — Wire nested song/player modal shells, confirm round context preservation, and finish the concise/high-signal interaction polish required by the milestone heuristic.
+7. **[TASK-07] Add round-scoped song/player modal shells and final polish** — Wire nested song/player modal shells, confirm round context preservation, and finish the concise/high-signal interaction polish required by the milestone heuristic.
    `contracts: §4a-1, §4c-3, §4d-3, §4d-4, §4d-5` · `preserves: INV-02, INV-05` · `validates: AC-04`
 
 ### Dependency Graph
@@ -549,13 +552,12 @@ TASK-04: TASK-01,TASK-02,TASK-03
 TASK-05: TASK-04
 TASK-06: TASK-04,TASK-05
 TASK-07: TASK-04,TASK-06
-TASK-08: TASK-04,TASK-07
 ```
 
 ## 7. Out of Scope
 
-- [ ] Full player-history modal content, summary traits, or social insights beyond the round-scoped modal shell — Milestone 4
-- [ ] Full song-history modal content, recurrence counts, or cross-round lookup utility beyond the round-scoped modal shell — Milestone 5
+- [ ] Full player-history modal content, summary traits, or social insights beyond the round-scoped modal shell — Milestone 4. `Disposition: deferred` `Reason: sequencing` `Trace: §7 | BACKLOG.md`
+- [ ] Full song-history modal content, recurrence counts, or cross-round lookup utility beyond the round-scoped modal shell — Milestone 5. `Disposition: deferred` `Reason: sequencing` `Trace: §7 | BACKLOG.md`
 - [ ] League overview landing page, overview aggregates, or curated insights outside the round/archive flow — Milestone 6
 - [ ] Vote-by-vote breakdowns, scoring explainers, or ballot inspection
 - [ ] Cross-game filters, faceting, or comparison tools
