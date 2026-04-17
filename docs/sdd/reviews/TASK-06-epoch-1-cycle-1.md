@@ -1,37 +1,32 @@
-***
-
 ### Reviewer Verdict — TASK-06
 
 **AC Audit** (`validates:` from §6)
 
 | AC | Criterion (§5 text) | Status | Evidence |
 |----|---------------------|--------|----------|
-| AC-10 | Batch summary/history exposes batch status, per-file row counts, issue counts, `failureStage`, and `failureSummary` for failed and committed imports | `satisfied` | `src/import/get-batch-summary.js:65-94` returns status, per-file `rowCounts`, issue totals, and failure fields; `src/import/list-batches.js:31-43` returns history status, issue counts, and failure metadata; covered by `src/import/get-batch-summary.test.js:253-459` and `src/import/list-batches.test.js:173-235`, which passed under `node --test src/import/get-batch-summary.test.js src/import/list-batches.test.js`. |
-| AC-11 | The internal import workflow is adapter-neutral: a bundle-path ingest followed by issue listing, summary, and commit can be exercised entirely through the §4d service contracts | `satisfied` | `src/import/get-batch-summary.test.js:253-320` drives bundle parsing/staging, `analyzeImportBatch`, `listImportBatchIssues`, `getImportBatchSummary`, and `commitImportBatch` entirely through service modules, confirming the workflow remains exercisable without UI adapters; the targeted test run passed. |
-| AC-15 | `getImportBatchSummary(batchId)` exposes batch workflow stage progress and whether the batch is still awaiting system work | `satisfied` | `src/import/get-batch-summary.js:69-71,102-171` implements the canonical workflow stage mapping and `awaiting` values for parsed, ready, committed, and failed batches; `src/import/get-batch-summary.test.js:123-245,253-315,328-459` verifies parsed, ready, failed-validation, and committed summaries. |
+| AC-02 | Direct entry to `/?round=<valid-id>` opens the same round detail overlay as an in-app open, and invalid `round` params fall back gracefully to the archive with a non-blocking notice | `satisfied` | `src/archive/game-archive-page.js:26-69,266-388` resolves `round` from URL state, opens the overlay from `getRoundDetail()`, and falls back to `Round not found.` when the requested round does not resolve; `prisma/tests/archive-page.test.js:66-123` covers missing-round fallback and direct-entry overlay rendering. |
+| AC-03 | Round detail shows round identity, parent game context, 2-3 quick-scan highlights, and the full submission list ordered per §4d-2 | `satisfied` | `src/archive/game-archive-page.js:104-122,220-349` renders the round title, parent game context, up to 3 highlight cards, and the full submission list; `prisma/tests/archive-page.test.js:87-123` asserts three highlight cards and verifies rendered submission order follows `props.openRound.submissions`. |
 
 **Invariant Audit** (`preserves:` + repo constitutional)
 
 | Invariant | Source | Status | Evidence |
 |-----------|--------|--------|----------|
-| INV-01 | spec | `preserved` | `src/import/get-batch-summary.js:12-48,229-244` and `src/import/list-batches.js:11-44` only read via Prisma `findUnique`/`findMany`; the new summary/history surfaces do not mutate canonical tables before commit. |
-| INV-07 | spec | `preserved` | `src/import/get-batch-summary.js:71-94` and `src/import/list-batches.js:31-43` surface durable batch issue/failure state from persisted records; `src/import/get-batch-summary.test.js:267-320` and `src/import/list-batches.test.js:221-231` confirm failed imports remain inspectable through summary/history reads. |
-| `AGENTS.md` is the canonical repo guidance | guidance | `preserved` | The implementer diff is limited to `src/import/*.js` and `src/import/*.test.js`; it does not modify `AGENTS.md` or `CLAUDE.md`. |
-| `docs/sdd/` contains the tracked Planner, Implementer, Reviewer, and Orchestrator prompts | guidance | `preserved` | The implementer diff adds no changes under `docs/sdd/`; tracked prompt files were not altered. |
-| `scripts/sdd/` contains the tracked wrapper and orchestration scripts | guidance | `preserved` | The implementer diff adds no changes under `scripts/sdd/`; orchestration scripts were not altered. |
-| Only the Orchestrator writes `PLAN-*.md` files during execution | guidance | `preserved` | No `PLAN-*.md` files appear in the implementer diff. |
-| Do not change active spec contracts or acceptance criteria implicitly in code | guidance | `preserved` | The additions in `src/import/get-batch-summary.js:65-94,102-171` and `src/import/list-batches.js:31-43` implement the slice-defined read contracts directly; no spec files or acceptance criteria text were edited. |
-| New dependencies must be explicitly allowed by the active spec or already present in `package.json` when one exists | guidance | `preserved` | `package.json` is unchanged in the implementer diff; no new dependencies were introduced. |
+| INV-02 | spec §3 | `preserved` | Round open state is read from `searchParams.round`, the overlay renders on `/`, and both backdrop and close control return to the archive route via `buildArchiveHref({})` (`src/archive/game-archive-page.js:26-43,266-325`). |
+| INV-03 | spec §3 | `preserved` | The dialog stays artifact-first: it renders at most 3 highlight cards and then the full submission list, with no charts, filters, or analytics framing added (`src/archive/game-archive-page.js:104-122,327-349`; `app/globals.css:291-348`). |
+| INV-04 | spec §3 | `preserved` | Missing optional data falls back intentionally instead of suppressing content: date uses `Date TBD`, playlist uses `Playlist TBD`, null rank uses `Unranked`, and null score uses `Score pending` (`src/archive/game-archive-page.js:72-75,125-130,299-307`). |
+| Only the Orchestrator writes `PLAN-*.md` files during execution | AGENTS.md | `preserved` | `last-diff-task-06.md:1-389` shows changes only in `app/globals.css`, `prisma/tests/archive-page.test.js`, and `src/archive/game-archive-page.js`; no `PLAN-*.md` files were touched. |
+| New dependencies must be explicitly allowed by the active spec or already present in `package.json` when one exists | AGENTS.md | `preserved` | `last-diff-task-06.md:1-389` contains no `package.json` or lockfile changes. |
 
 **Contract Audit** (`contracts:` → §4 items)
 
 | Contract ref | §4 item | Status | Evidence |
 |--------------|---------|--------|----------|
-| §4d-5 | `getImportBatchSummary(batchId)` | `fulfilled` | `src/import/get-batch-summary.js:7-99` returns the contract fields, `buildWorkflow()` at `src/import/get-batch-summary.js:102-171` implements the required stage mapping, and `buildCommittedEntityCounts()` at `src/import/get-batch-summary.js:192-212` zeroes pre-commit snapshots; verified by `src/import/get-batch-summary.test.js:123-475`. |
-| §4d-6 | `listImportBatches(input?)` | `fulfilled` | `src/import/list-batches.js:5-44` returns the specified history shape with exact-status filtering, newest-first ordering, and capped results; `buildCreatedCounts()` at `src/import/list-batches.js:52-72` preserves zeroed uncommitted snapshots; verified by `src/import/list-batches.test.js:125-265`. |
+| §4a-1 | Archive browser route with URL-state round overlay and graceful missing-round fallback | `fulfilled` | `src/archive/game-archive-page.js:26-69,266-388` reads `?round=`, ignores non-positive/non-integer values, opens the overlay when a round resolves, and keeps the archive visible with a non-blocking notice when it does not; `prisma/tests/archive-page.test.js:66-123` exercises both paths. |
+| §4c-2 | Round detail dialog shows parent game context, 2-3 highlights, and a vertically scannable submission list | `fulfilled` | The dialog header shows game context and round identity, renders a 3-card highlight list, and presents submissions in a compact stacked row layout (`src/archive/game-archive-page.js:266-349`; `app/globals.css:217-348`). |
+| §4c-2 | Song and player names are actionable affordances that open nested modal shells without dismissing the round dialog | `broken` | Song title, artist, and submitter are rendered as plain `<p>` text with no link/button affordance or URL-state transition (`src/archive/game-archive-page.js:227-244`). |
+| §4d-2 | Round detail payload is used to render deterministic highlights and the ordered full submission list | `fulfilled` | The page opens the dialog from `getRoundDetail()` and renders `round.highlights` before `round.submissions`; the added regression test verifies the rendered submission order matches the returned payload (`src/archive/game-archive-page.js:37-43,104-122,327-348`; `prisma/tests/archive-page.test.js:87-123`). |
+| §4d-5 | Archive href helper is used for canonical open/close round state on `/` | `fulfilled` | Round cards open with `buildArchiveHref({ roundId })`, and both overlay close affordances return to the bare archive route with `buildArchiveHref({})` (`src/archive/game-archive-page.js:46-52,268,273-277,318-325`). |
 
-**Verdict:** `confirmed`
+**Verdict:** `contested`
 
-All AC, invariant, and contract rows passed for TASK-06.
-
-***
+- `§4c-2` is broken: round-detail song and player names are plain text rather than actionable affordances that can open nested modal shells without dismissing the round dialog (`src/archive/game-archive-page.js:227-244`).
