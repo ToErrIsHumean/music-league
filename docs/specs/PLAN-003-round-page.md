@@ -28,10 +28,26 @@ Status values: `pending` | `active` | `done` | `fail` | `blocked` | `skipped`
 | TASK-02 | pass | null | 2 | gpt-5.4 | high | 2026-04-17T07:13:33.774Z |
 | TASK-03 | pass | null | 1 | gpt-5.4 | high | 2026-04-17T07:22:55.406Z |
 | TASK-04 | pass | null | 1 | gpt-5.4 | high | 2026-04-17T07:34:50.352Z |
+| TASK-05 | pass | null | 1 | gpt-5.4 | high | 2026-04-17T07:45:32.317Z |
+| TASK-05 | pass | null | 2 | gpt-5.4 | high | 2026-04-17T07:52:40.965Z |
+| TASK-05 | pass | null | 3 | gpt-5.4 | high | 2026-04-17T07:57:09.456Z |
+| TASK-05 | blocked | D-001 | 3 | meta | high | 2026-04-17T07:59:36.000Z |
 
 ## Review Notes
 
 <!-- Orchestrator review notes append below. -->
+
+- META: TASK-05 blocker cleared via `D-001`; removed the tracked root
+  `node_modules` entry on `master` and reset TASK-05 to `pending` for
+  redispatch.
+
+- META: TASK-05 marked blocked — execution error after 3 attempts ([15:55:22] Reusing worktree: /home/zacha/music-league-worktrees/M3-task-05 (branch: music-league/M3-task-05) | [15:55:22] Selected TASK-05 (epoch 1, cycle 3) | [15:55:22] -> Implementer TASK-05 cycle 3)
+
+- TASK-05 cycle 3: `confirmed` -> `docs/sdd/reviews/TASK-05-epoch-1-cycle-3.md`
+
+- TASK-05 cycle 2: `confirmed` -> `docs/sdd/reviews/TASK-05-epoch-1-cycle-2.md`
+
+- TASK-05 cycle 1: `confirmed` -> `docs/sdd/reviews/TASK-05-epoch-1-cycle-1.md`
 
 - TASK-04 cycle 1: `confirmed` -> `docs/sdd/reviews/TASK-04-epoch-1-cycle-1.md`
 

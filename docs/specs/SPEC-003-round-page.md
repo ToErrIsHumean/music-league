@@ -1,9 +1,9 @@
 # SPEC: Game Browser and Round Detail Surface
 
-> **Version:** 0.1.3-draft
+> **Version:** 0.1.4-draft
 > **Milestone:** 3 — Round Page
 > **Status:** `draft`
-> **Author:** final-review 1
+> **Author:** final-review 2
 > **Depends-on:** `docs/specs/SPEC-001-core-data-model.md`, `docs/specs/SPEC-002-csv-import-pipeline.md`
 > **Invalidated-by:** none
 
@@ -575,6 +575,21 @@ TASK-07: TASK-04,TASK-06
 
 ## Appendix D: Discoveries Log
 
-_No discoveries recorded._
+### D-001 — 2026-04-17T00:00:00Z
+
+- **Trigger:** Meta-orchestrator promotion for `TASK-05` failed three times on
+  `node_modules` overlap between `master` and `music-league/M3-task-05`
+- **Nature:** `operational`
+- **Affected sections:** orchestration hygiene only; no product contract
+  sections changed
+- **Agent assessment:** The repo ignored `node_modules/`, but `master` also
+  tracked a root-level `node_modules` symlink from a prior task commit. That
+  stale tracked entry created a low-value merge surface that can block
+  promotion even when feature work is correct.
+- **Escalation required:** `no` — low-blast-radius repo hygiene fix authorized
+  and reversible
+- **Resolution:** Remove the tracked root `node_modules` entry from Git on
+  `master`, keep the real dependency directory ignored, and redispatch
+  `TASK-05` in a fresh epoch
 
 <!-- END SPEC -->
