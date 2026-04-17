@@ -67,6 +67,10 @@ const games = [
     sourceGameId: "main",
     displayName: null,
   },
+  {
+    sourceGameId: "afterparty",
+    displayName: "After Party League",
+  },
 ];
 
 const rounds = [
@@ -88,6 +92,24 @@ const rounds = [
     sequenceNumber: 2,
     occurredAt: new Date("2024-02-01T19:00:00.000Z"),
   },
+  {
+    leagueSlug: "afterparty",
+    sourceRoundId: "seed-r3",
+    name: "Wildcard Waltz",
+    description: "Seeded scored bonus round for multi-game archive coverage.",
+    playlistUrl: "https://open.spotify.com/playlist/seed-r3",
+    sequenceNumber: 1,
+    occurredAt: new Date("2024-03-07T19:00:00.000Z"),
+  },
+  {
+    leagueSlug: "afterparty",
+    sourceRoundId: "seed-r4",
+    name: "Sunset Static",
+    description: null,
+    playlistUrl: null,
+    sequenceNumber: 2,
+    occurredAt: null,
+  },
 ];
 
 // TASK-04b extends this file to upsert submissions. Keeping the planned overlap
@@ -101,6 +123,19 @@ const plannedRoundSongs = {
   ],
   "seed-r2": [
     "spotify:track:seed-song-001",
+    "spotify:track:seed-song-005",
+    "spotify:track:seed-song-006",
+    "spotify:track:seed-song-003",
+  ],
+  "seed-r3": [
+    "spotify:track:seed-song-002",
+    "spotify:track:seed-song-004",
+    "spotify:track:seed-song-005",
+    "spotify:track:seed-song-006",
+  ],
+  "seed-r4": [
+    "spotify:track:seed-song-001",
+    "spotify:track:seed-song-002",
     "spotify:track:seed-song-005",
     "spotify:track:seed-song-006",
   ],
@@ -152,101 +187,268 @@ const submissionPlan = {
       comment: "A softer closer waiting on votes.",
       submittedAt: new Date("2024-01-29T18:10:00.000Z"),
     },
+    {
+      playerSourceId: "seed-player-drew",
+      songUri: "spotify:track:seed-song-003",
+      comment: "Keeps the hooky chaos alive for a pending rematch.",
+      submittedAt: new Date("2024-01-29T18:15:00.000Z"),
+    },
+  ],
+  "seed-r3": [
+    {
+      playerSourceId: "seed-player-alice",
+      songUri: "spotify:track:seed-song-002",
+      comment: "Bonus-round favorite with enough sparkle to win twice.",
+      submittedAt: new Date("2024-03-03T18:00:00.000Z"),
+    },
+    {
+      playerSourceId: "seed-player-benny",
+      songUri: "spotify:track:seed-song-004",
+      comment: "A glossy anthem that plays bigger in the late game.",
+      submittedAt: new Date("2024-03-03T18:05:00.000Z"),
+    },
+    {
+      playerSourceId: "seed-player-casey",
+      songUri: "spotify:track:seed-song-005",
+      comment: "Melancholy drive-home pick with a huge middle eight.",
+      submittedAt: new Date("2024-03-03T18:10:00.000Z"),
+    },
+    {
+      playerSourceId: "seed-player-drew",
+      songUri: "spotify:track:seed-song-006",
+      comment: "Quietly devastating closer for the bonus table.",
+      submittedAt: new Date("2024-03-03T18:15:00.000Z"),
+    },
+  ],
+  "seed-r4": [
+    {
+      playerSourceId: "seed-player-alice",
+      songUri: "spotify:track:seed-song-001",
+      comment: "An intentionally unfinished cliffhanger of a finale.",
+      submittedAt: new Date("2024-03-14T18:00:00.000Z"),
+    },
+    {
+      playerSourceId: "seed-player-benny",
+      songUri: "spotify:track:seed-song-002",
+      comment: "Keeps the synth glow alive while votes trickle in.",
+      submittedAt: new Date("2024-03-14T18:05:00.000Z"),
+    },
+    {
+      playerSourceId: "seed-player-casey",
+      songUri: "spotify:track:seed-song-005",
+      comment: "A patient slow-burn for a date-less pending round.",
+      submittedAt: new Date("2024-03-14T18:10:00.000Z"),
+    },
+    {
+      playerSourceId: "seed-player-drew",
+      songUri: "spotify:track:seed-song-006",
+      comment: "Loose, dreamy, and still waiting on the reveal.",
+      submittedAt: new Date("2024-03-14T18:15:00.000Z"),
+    },
   ],
 };
 
-const roundOneBallots = {
-  "seed-player-alice": [
-    {
-      targetPlayerSourceId: "seed-player-benny",
-      pointsAssigned: 10,
-      comment: "Immediate hook, huge chorus.",
-      votedAt: new Date("2024-01-18T19:05:00.000Z"),
-    },
-    {
-      targetPlayerSourceId: "seed-player-casey",
-      pointsAssigned: 7,
-      comment: "Clever title, even better payoff.",
-      votedAt: new Date("2024-01-18T19:06:00.000Z"),
-    },
-    {
-      targetPlayerSourceId: "seed-player-drew",
-      pointsAssigned: 4,
-      comment: null,
-      votedAt: new Date("2024-01-18T19:07:00.000Z"),
-    },
-  ],
-  "seed-player-benny": [
-    {
-      targetPlayerSourceId: "seed-player-alice",
-      pointsAssigned: 10,
-      comment: "Bright and ridiculously replayable.",
-      votedAt: new Date("2024-01-18T19:08:00.000Z"),
-    },
-    {
-      targetPlayerSourceId: "seed-player-casey",
-      pointsAssigned: 7,
-      comment: null,
-      votedAt: new Date("2024-01-18T19:09:00.000Z"),
-    },
-    {
-      targetPlayerSourceId: "seed-player-drew",
-      pointsAssigned: 4,
-      comment: "Sticks the landing.",
-      votedAt: new Date("2024-01-18T19:10:00.000Z"),
-    },
-  ],
-  "seed-player-casey": [
-    {
-      targetPlayerSourceId: "seed-player-alice",
-      pointsAssigned: 7,
-      comment: null,
-      votedAt: new Date("2024-01-18T19:11:00.000Z"),
-    },
-    {
-      targetPlayerSourceId: "seed-player-benny",
-      pointsAssigned: 10,
-      comment: "Ridiculous earworm in the best way.",
-      votedAt: new Date("2024-01-18T19:12:00.000Z"),
-    },
-    {
-      targetPlayerSourceId: "seed-player-drew",
-      pointsAssigned: 4,
-      comment: null,
-      votedAt: new Date("2024-01-18T19:13:00.000Z"),
-    },
-  ],
-  "seed-player-drew": [
-    {
-      targetPlayerSourceId: "seed-player-alice",
-      pointsAssigned: 7,
-      comment: "Massive chorus, no notes.",
-      votedAt: new Date("2024-01-18T19:14:00.000Z"),
-    },
-    {
-      targetPlayerSourceId: "seed-player-benny",
-      pointsAssigned: 4,
-      comment: null,
-      votedAt: new Date("2024-01-18T19:15:00.000Z"),
-    },
-    {
-      targetPlayerSourceId: "seed-player-casey",
-      pointsAssigned: 10,
-      comment: "Best slow-burn reveal in the round.",
-      votedAt: new Date("2024-01-18T19:16:00.000Z"),
-    },
-  ],
+const roundBallots = {
+  "seed-r1": {
+    "seed-player-alice": [
+      {
+        targetPlayerSourceId: "seed-player-benny",
+        pointsAssigned: 10,
+        comment: "Immediate hook, huge chorus.",
+        votedAt: new Date("2024-01-18T19:05:00.000Z"),
+      },
+      {
+        targetPlayerSourceId: "seed-player-casey",
+        pointsAssigned: 7,
+        comment: "Clever title, even better payoff.",
+        votedAt: new Date("2024-01-18T19:06:00.000Z"),
+      },
+      {
+        targetPlayerSourceId: "seed-player-drew",
+        pointsAssigned: 4,
+        comment: null,
+        votedAt: new Date("2024-01-18T19:07:00.000Z"),
+      },
+    ],
+    "seed-player-benny": [
+      {
+        targetPlayerSourceId: "seed-player-alice",
+        pointsAssigned: 10,
+        comment: "Bright and ridiculously replayable.",
+        votedAt: new Date("2024-01-18T19:08:00.000Z"),
+      },
+      {
+        targetPlayerSourceId: "seed-player-casey",
+        pointsAssigned: 7,
+        comment: null,
+        votedAt: new Date("2024-01-18T19:09:00.000Z"),
+      },
+      {
+        targetPlayerSourceId: "seed-player-drew",
+        pointsAssigned: 4,
+        comment: "Sticks the landing.",
+        votedAt: new Date("2024-01-18T19:10:00.000Z"),
+      },
+    ],
+    "seed-player-casey": [
+      {
+        targetPlayerSourceId: "seed-player-alice",
+        pointsAssigned: 7,
+        comment: null,
+        votedAt: new Date("2024-01-18T19:11:00.000Z"),
+      },
+      {
+        targetPlayerSourceId: "seed-player-benny",
+        pointsAssigned: 10,
+        comment: "Ridiculous earworm in the best way.",
+        votedAt: new Date("2024-01-18T19:12:00.000Z"),
+      },
+      {
+        targetPlayerSourceId: "seed-player-drew",
+        pointsAssigned: 4,
+        comment: null,
+        votedAt: new Date("2024-01-18T19:13:00.000Z"),
+      },
+    ],
+    "seed-player-drew": [
+      {
+        targetPlayerSourceId: "seed-player-alice",
+        pointsAssigned: 7,
+        comment: "Massive chorus, no notes.",
+        votedAt: new Date("2024-01-18T19:14:00.000Z"),
+      },
+      {
+        targetPlayerSourceId: "seed-player-benny",
+        pointsAssigned: 4,
+        comment: null,
+        votedAt: new Date("2024-01-18T19:15:00.000Z"),
+      },
+      {
+        targetPlayerSourceId: "seed-player-casey",
+        pointsAssigned: 10,
+        comment: "Best slow-burn reveal in the round.",
+        votedAt: new Date("2024-01-18T19:16:00.000Z"),
+      },
+    ],
+  },
+  "seed-r3": {
+    "seed-player-alice": [
+      {
+        targetPlayerSourceId: "seed-player-benny",
+        pointsAssigned: 7,
+        comment: "Huge finish, even better on repeat.",
+        votedAt: new Date("2024-03-07T19:05:00.000Z"),
+      },
+      {
+        targetPlayerSourceId: "seed-player-casey",
+        pointsAssigned: 10,
+        comment: "Sneaks up and lands perfectly.",
+        votedAt: new Date("2024-03-07T19:06:00.000Z"),
+      },
+      {
+        targetPlayerSourceId: "seed-player-drew",
+        pointsAssigned: 4,
+        comment: null,
+        votedAt: new Date("2024-03-07T19:07:00.000Z"),
+      },
+    ],
+    "seed-player-benny": [
+      {
+        targetPlayerSourceId: "seed-player-alice",
+        pointsAssigned: 10,
+        comment: "Instant late-round classic.",
+        votedAt: new Date("2024-03-07T19:08:00.000Z"),
+      },
+      {
+        targetPlayerSourceId: "seed-player-casey",
+        pointsAssigned: 7,
+        comment: null,
+        votedAt: new Date("2024-03-07T19:09:00.000Z"),
+      },
+      {
+        targetPlayerSourceId: "seed-player-drew",
+        pointsAssigned: 4,
+        comment: "Quietly elegant.",
+        votedAt: new Date("2024-03-07T19:10:00.000Z"),
+      },
+    ],
+    "seed-player-casey": [
+      {
+        targetPlayerSourceId: "seed-player-alice",
+        pointsAssigned: 10,
+        comment: "The hook wins immediately.",
+        votedAt: new Date("2024-03-07T19:11:00.000Z"),
+      },
+      {
+        targetPlayerSourceId: "seed-player-benny",
+        pointsAssigned: 4,
+        comment: null,
+        votedAt: new Date("2024-03-07T19:12:00.000Z"),
+      },
+      {
+        targetPlayerSourceId: "seed-player-drew",
+        pointsAssigned: 7,
+        comment: "Grows on every listen.",
+        votedAt: new Date("2024-03-07T19:13:00.000Z"),
+      },
+    ],
+    "seed-player-drew": [
+      {
+        targetPlayerSourceId: "seed-player-alice",
+        pointsAssigned: 10,
+        comment: "Easy winner for me.",
+        votedAt: new Date("2024-03-07T19:14:00.000Z"),
+      },
+      {
+        targetPlayerSourceId: "seed-player-benny",
+        pointsAssigned: 7,
+        comment: null,
+        votedAt: new Date("2024-03-07T19:15:00.000Z"),
+      },
+      {
+        targetPlayerSourceId: "seed-player-casey",
+        pointsAssigned: 4,
+        comment: "Sharp writing, great restraint.",
+        votedAt: new Date("2024-03-07T19:16:00.000Z"),
+      },
+    ],
+  },
 };
 
 function validateSeedPlan() {
-  const roundSongUris = Object.values(plannedRoundSongs);
-  const seenUris = new Set(roundSongUris[0] || []);
-  const overlappingUris = (roundSongUris[1] || []).filter((uri) =>
-    seenUris.has(uri),
+  if (games.length < 2) {
+    throw new Error("seed plan must include at least two games");
+  }
+
+  if (rounds.length < 4) {
+    throw new Error("seed plan must include at least four rounds");
+  }
+
+  const songRoundCounts = new Map();
+
+  for (const roundSongUris of Object.values(plannedRoundSongs)) {
+    const uniqueRoundUris = new Set(roundSongUris);
+
+    for (const uri of uniqueRoundUris) {
+      songRoundCounts.set(uri, (songRoundCounts.get(uri) ?? 0) + 1);
+    }
+  }
+
+  const hasCrossRoundSongReuse = [...songRoundCounts.values()].some(
+    (count) => count > 1,
   );
 
-  if (overlappingUris.length === 0) {
+  if (!hasCrossRoundSongReuse) {
     throw new Error("seed plan must reuse at least one song across rounds");
+  }
+
+  if (
+    Object.keys(roundBallots).length === 0 ||
+    Object.keys(roundBallots).length >= rounds.length
+  ) {
+    throw new Error(
+      "seed plan must include both scored and pending rounds in the archive",
+    );
   }
 
   for (const [roundSourceId, submissions] of Object.entries(submissionPlan)) {
@@ -268,41 +470,53 @@ function validateSeedPlan() {
     }
   }
 
-  const roundOnePlayers = new Set(
-    submissionPlan["seed-r1"].map((submission) => submission.playerSourceId),
-  );
+  for (const [roundSourceId, ballots] of Object.entries(roundBallots)) {
+    const roundPlayers = new Set(
+      (submissionPlan[roundSourceId] || []).map(
+        (submission) => submission.playerSourceId,
+      ),
+    );
 
-  for (const [voterSourceId, ballot] of Object.entries(roundOneBallots)) {
-    if (!roundOnePlayers.has(voterSourceId)) {
-      throw new Error(`round one voter missing submission: ${voterSourceId}`);
-    }
-
-    if (ballot.length !== roundOnePlayers.size - 1) {
-      throw new Error(`round one ballot count mismatch for voter: ${voterSourceId}`);
-    }
-
-    const votedPlayers = new Set();
-
-    for (const vote of ballot) {
-      if (vote.targetPlayerSourceId === voterSourceId) {
-        throw new Error(`round one ballot includes self vote: ${voterSourceId}`);
+    for (const [voterSourceId, ballot] of Object.entries(ballots)) {
+      if (!roundPlayers.has(voterSourceId)) {
+        throw new Error(
+          `scored round voter missing submission: ${roundSourceId}/${voterSourceId}`,
+        );
       }
 
-      votedPlayers.add(vote.targetPlayerSourceId);
-    }
-
-    if (votedPlayers.size !== ballot.length) {
-      throw new Error(`round one ballot has duplicate targets: ${voterSourceId}`);
-    }
-
-    for (const playerSourceId of roundOnePlayers) {
-      if (
-        playerSourceId !== voterSourceId &&
-        !votedPlayers.has(playerSourceId)
-      ) {
+      if (ballot.length !== roundPlayers.size - 1) {
         throw new Error(
-          `round one ballot missing target ${playerSourceId} for voter: ${voterSourceId}`,
+          `scored round ballot count mismatch for voter: ${roundSourceId}/${voterSourceId}`,
         );
+      }
+
+      const votedPlayers = new Set();
+
+      for (const vote of ballot) {
+        if (vote.targetPlayerSourceId === voterSourceId) {
+          throw new Error(
+            `scored round ballot includes self vote: ${roundSourceId}/${voterSourceId}`,
+          );
+        }
+
+        votedPlayers.add(vote.targetPlayerSourceId);
+      }
+
+      if (votedPlayers.size !== ballot.length) {
+        throw new Error(
+          `scored round ballot has duplicate targets: ${roundSourceId}/${voterSourceId}`,
+        );
+      }
+
+      for (const playerSourceId of roundPlayers) {
+        if (
+          playerSourceId !== voterSourceId &&
+          !votedPlayers.has(playerSourceId)
+        ) {
+          throw new Error(
+            `scored round ballot missing target ${playerSourceId} for voter: ${roundSourceId}/${voterSourceId}`,
+          );
+        }
       }
     }
   }
@@ -486,6 +700,7 @@ async function loadSeedLookups() {
 function buildRoundVoteRows(roundSourceId, seedLookups) {
   const round = seedLookups.roundsBySourceId.get(roundSourceId);
   const roundSubmissions = submissionPlan[roundSourceId] || [];
+  const ballots = roundBallots[roundSourceId];
   const songUriByPlayerSourceId = new Map(
     roundSubmissions.map((submission) => [
       submission.playerSourceId,
@@ -497,7 +712,11 @@ function buildRoundVoteRows(roundSourceId, seedLookups) {
     throw new Error(`missing round lookup for votes: ${roundSourceId}`);
   }
 
-  return Object.entries(roundOneBallots).flatMap(([voterSourceId, ballot]) => {
+  if (!ballots) {
+    throw new Error(`missing ballot plan for votes: ${roundSourceId}`);
+  }
+
+  return Object.entries(ballots).flatMap(([voterSourceId, ballot]) => {
     const voter = seedLookups.playersBySourceId.get(voterSourceId);
 
     if (!voter) {
@@ -527,8 +746,8 @@ function buildRoundVoteRows(roundSourceId, seedLookups) {
   });
 }
 
-async function seedRoundOneVotes(seedLookups) {
-  const votes = buildRoundVoteRows("seed-r1", seedLookups);
+async function seedScoredRoundVotes(roundSourceId, seedLookups) {
+  const votes = buildRoundVoteRows(roundSourceId, seedLookups);
 
   for (const vote of votes) {
     await prisma.vote.upsert({
@@ -604,6 +823,7 @@ async function seedSubmissionsForRound(roundSourceId, seedLookups, scoreMap) {
     const player = seedLookups.playersBySourceId.get(submission.playerSourceId);
     const song = seedLookups.songsByUri.get(submission.songUri);
     const computedScore = scoreMap.get(song?.id);
+    const requiresComputedScore = Boolean(roundBallots[roundSourceId]);
 
     if (!player) {
       throw new Error(`missing player lookup: ${submission.playerSourceId}`);
@@ -613,8 +833,10 @@ async function seedSubmissionsForRound(roundSourceId, seedLookups, scoreMap) {
       throw new Error(`missing song lookup: ${submission.songUri}`);
     }
 
-    if (roundSourceId === "seed-r1" && !computedScore) {
-      throw new Error(`missing computed score for seeded round one song: ${song.id}`);
+    if (requiresComputedScore && !computedScore) {
+      throw new Error(
+        `missing computed score for seeded scored round song: ${roundSourceId}/${song.id}`,
+      );
     }
 
     await prisma.submission.upsert({
@@ -658,13 +880,18 @@ async function main() {
 
   const seedLookups = await loadSeedLookups();
 
-  await seedRoundOneVotes(seedLookups);
+  for (const roundSourceId of Object.keys(roundBallots)) {
+    await seedScoredRoundVotes(roundSourceId, seedLookups);
+  }
 
-  const roundOne = seedLookups.roundsBySourceId.get("seed-r1");
-  const roundOneScores = await computeRoundScoresAndRanks(roundOne.id);
+  for (const round of rounds) {
+    const seededRound = seedLookups.roundsBySourceId.get(round.sourceRoundId);
+    const scoreMap = roundBallots[round.sourceRoundId]
+      ? await computeRoundScoresAndRanks(seededRound.id)
+      : new Map();
 
-  await seedSubmissionsForRound("seed-r1", seedLookups, roundOneScores);
-  await seedSubmissionsForRound("seed-r2", seedLookups, new Map());
+    await seedSubmissionsForRound(round.sourceRoundId, seedLookups, scoreMap);
+  }
 }
 
 main()
