@@ -1,0 +1,4 @@
+Spotify URI,Title,Artist(s),Submitter ID,Created,Comment,Round ID,Visible To Voters
+spotify:track:1,Wake Up,Switchfoot,player-1,2026-04-03T06:56:48Z,,game-clean,Yes
+spotify:track:2,Second Song,Artist B,player-2,2026-04-03T06:57:48Z,Great pick,game-clean,No
+spotify:track:3,Third Song,Artist C,player-3,2026-04-03T06:58:48Z,Hidden gem,game-clean,Yes

@@ -1,0 +1,4 @@
+Spotify URI,Title,Artist(s),Submitter ID,Created,Comment,Round ID,Visible To Voters
+spotify:track:1,Song One,Artist One,player-1,2026-04-03T10:00:00Z,,game-77,Yes
+spotify:track:2,Song Two,Artist Two,player-2,2026-04-03T10:05:00Z,Round A holdover,game-77,No
+spotify:track:3,Song Three,Artist Three,player-3,2026-04-04T10:00:00Z,,round-b,Yes
