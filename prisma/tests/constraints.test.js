@@ -24,6 +24,13 @@ async function withRollback(run) {
 }
 
 async function createBaseRecords(tx, suffix) {
+  const game = await tx.game.create({
+    data: {
+      sourceGameId: `game-${suffix}`,
+      displayName: null,
+    },
+  });
+
   const artist = await tx.artist.create({
     data: {
       name: `Artist ${suffix}`,
@@ -42,7 +49,8 @@ async function createBaseRecords(tx, suffix) {
 
   const round = await tx.round.create({
     data: {
-      leagueSlug: "main",
+      gameId: game.id,
+      leagueSlug: game.sourceGameId,
       name: `Round ${suffix}`,
       sourceRoundId: `round-${suffix}`,
     },
@@ -56,7 +64,7 @@ async function createBaseRecords(tx, suffix) {
     },
   });
 
-  return { artist, song, round, player };
+  return { game, artist, song, round, player };
 }
 
 async function createImportBatch(tx, suffix) {
@@ -77,6 +85,10 @@ function isUniqueConstraintError(error, fields) {
     Array.isArray(error.meta?.target) &&
     fields.every((field) => error.meta.target.includes(field))
   );
+}
+
+function isConstraintViolation(error) {
+  return error && (error.code === "P2003" || error.code === "P2004");
 }
 
 test("creates one record for each Prisma model", { concurrency: false }, async () => {
@@ -190,13 +202,20 @@ test(
 );
 
 test(
-  "rejects duplicate non-null round league/source ids",
+  "rejects duplicate non-null round game/source ids",
   { concurrency: false },
   async () => {
     await withRollback(async (tx) => {
+      const game = await tx.game.create({
+        data: {
+          sourceGameId: "main",
+        },
+      });
+
       await tx.round.create({
         data: {
-          leagueSlug: "main",
+          gameId: game.id,
+          leagueSlug: game.sourceGameId,
           name: "Round ac05 first",
           sourceRoundId: "shared-round-id",
         },
@@ -205,12 +224,81 @@ test(
       await assert.rejects(
         tx.round.create({
           data: {
-            leagueSlug: "main",
+            gameId: game.id,
+            leagueSlug: game.sourceGameId,
             name: "Round ac05 second",
             sourceRoundId: "shared-round-id",
           },
         }),
-        (error) => isUniqueConstraintError(error, ["leagueSlug", "sourceRoundId"]),
+        (error) =>
+          isUniqueConstraintError(error, ["gameId", "sourceRoundId"]) ||
+          isUniqueConstraintError(error, ["leagueSlug", "sourceRoundId"]),
+      );
+    });
+  },
+);
+
+test(
+  "allows the same sourceRoundId in different games",
+  { concurrency: false },
+  async () => {
+    await withRollback(async (tx) => {
+      const firstGame = await tx.game.create({
+        data: {
+          sourceGameId: "game-ac05-a",
+        },
+      });
+      const secondGame = await tx.game.create({
+        data: {
+          sourceGameId: "game-ac05-b",
+        },
+      });
+
+      const firstRound = await tx.round.create({
+        data: {
+          gameId: firstGame.id,
+          leagueSlug: firstGame.sourceGameId,
+          name: "Round shared first",
+          sourceRoundId: "shared-round-id",
+        },
+      });
+      const secondRound = await tx.round.create({
+        data: {
+          gameId: secondGame.id,
+          leagueSlug: secondGame.sourceGameId,
+          name: "Round shared second",
+          sourceRoundId: "shared-round-id",
+        },
+      });
+
+      assert.ok(firstRound.id);
+      assert.ok(secondRound.id);
+      assert.notEqual(firstRound.gameId, secondRound.gameId);
+    });
+  },
+);
+
+test(
+  "rejects round writes when leagueSlug diverges from the owning game",
+  { concurrency: false },
+  async () => {
+    await withRollback(async (tx) => {
+      const game = await tx.game.create({
+        data: {
+          sourceGameId: "game-ac05-c",
+        },
+      });
+
+      await assert.rejects(
+        tx.round.create({
+          data: {
+            gameId: game.id,
+            leagueSlug: "mismatch",
+            name: "Round mismatch",
+            sourceRoundId: "round-mismatch",
+          },
+        }),
+        isConstraintViolation,
       );
     });
   },
@@ -221,16 +309,24 @@ test(
   { concurrency: false },
   async () => {
     await withRollback(async (tx) => {
+      const game = await tx.game.create({
+        data: {
+          sourceGameId: "main",
+        },
+      });
+
       const firstRound = await tx.round.create({
         data: {
-          leagueSlug: "main",
+          gameId: game.id,
+          leagueSlug: game.sourceGameId,
           name: "Round ac06 first",
         },
       });
 
       const secondRound = await tx.round.create({
         data: {
-          leagueSlug: "main",
+          gameId: game.id,
+          leagueSlug: game.sourceGameId,
           name: "Round ac06 second",
         },
       });

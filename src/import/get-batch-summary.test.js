@@ -59,6 +59,11 @@ async function withTestDatabase(run) {
 }
 
 async function seedMatchedReferenceData(prisma) {
+  const matchedGame = await prisma.game.create({
+    data: {
+      sourceGameId: "game-42",
+    },
+  });
   const matchedPlayer = await prisma.player.create({
     data: {
       displayName: "Alice Smith",
@@ -82,6 +87,7 @@ async function seedMatchedReferenceData(prisma) {
   });
   const matchedRound = await prisma.round.create({
     data: {
+      gameId: matchedGame.id,
       leagueSlug: "game-42",
       name: "Legacy Rediscovered",
       sourceRoundId: "game-42",
@@ -89,6 +95,7 @@ async function seedMatchedReferenceData(prisma) {
   });
 
   return {
+    matchedGame,
     matchedPlayer,
     matchedArtist,
     matchedSong,
@@ -330,8 +337,14 @@ test(
   { concurrency: false },
   async () => {
     await withTestDatabase(async (prisma) => {
+      const game = await prisma.game.create({
+        data: {
+          sourceGameId: "game-committed",
+        },
+      });
       const roundOne = await prisma.round.create({
         data: {
+          gameId: game.id,
           leagueSlug: "game-committed",
           name: "Round One",
           sourceRoundId: "round-one",
@@ -339,6 +352,7 @@ test(
       });
       const roundTwo = await prisma.round.create({
         data: {
+          gameId: game.id,
           leagueSlug: "game-committed",
           name: "Round Two",
           sourceRoundId: "round-two",

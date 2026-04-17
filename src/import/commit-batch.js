@@ -31,7 +31,8 @@ async function commitImportBatch(batchId, input = {}) {
         const voteRows = requireReadyRows(batch.voteRows, "vote", batch.id);
 
         const playerPayloads = buildPlayerPayloads(playerRows, batch.id);
-        const roundPayloads = buildRoundPayloads(roundRows, batch.id, batch.gameKey);
+        const game = await upsertGame(tx, batch);
+        const roundPayloads = buildRoundPayloads(roundRows, batch.id, game);
         const artistPayloads = buildArtistPayloads(submissionRows, batch.id);
         const songPayloads = buildSongPayloads(submissionRows, batch.id);
 
@@ -81,7 +82,7 @@ async function commitImportBatch(batchId, input = {}) {
 
         await deleteStaleVotes(tx, affectedRoundIds, votePayloads);
         await deleteStaleSubmissions(tx, affectedRoundIds, submissionPayloads);
-        await deleteStaleRounds(tx, batch.gameKey, roundPayloads);
+        await deleteStaleRounds(tx, game.id, roundPayloads);
         await recomputeRoundResults(affectedRoundIds, { prisma: tx });
 
         await tx.importBatch.update({
@@ -243,7 +244,8 @@ function buildPlayerPayloads(rows, batchId) {
 
 function buildRoundPayloads(rows, batchId, gameKey) {
   return rows.map((row) => ({
-    leagueSlug: gameKey,
+    gameId: gameKey.id,
+    leagueSlug: gameKey.sourceGameId,
     sourceRoundId: requireNonBlankString(
       row.sourceRoundId,
       "sourceRoundId",
@@ -299,6 +301,38 @@ function buildSongPayloads(rows, batchId) {
   }
 
   return [...payloadsBySpotifyUri.values()];
+}
+
+async function upsertGame(tx, batch) {
+  const sourceGameId = batch.gameKey.trim();
+  const displayName = normalizeOptionalDisplayName(batch.sourceFilename);
+  const existingGame = await tx.game.findUnique({
+    where: {
+      sourceGameId,
+    },
+  });
+
+  if (!existingGame) {
+    return tx.game.create({
+      data: {
+        sourceGameId,
+        displayName,
+      },
+    });
+  }
+
+  if (!isNonBlankString(existingGame.displayName) && displayName) {
+    return tx.game.update({
+      where: {
+        id: existingGame.id,
+      },
+      data: {
+        displayName,
+      },
+    });
+  }
+
+  return existingGame;
 }
 
 async function upsertPlayers(tx, payloads) {
@@ -457,7 +491,7 @@ async function upsertRounds(tx, payloads) {
 
   const existingRounds = await tx.round.findMany({
     where: {
-      leagueSlug: payloads[0].leagueSlug,
+      gameId: payloads[0].gameId,
       sourceRoundId: {
         in: payloads.map((payload) => payload.sourceRoundId),
       },
@@ -662,10 +696,10 @@ async function deleteStaleSubmissions(tx, affectedRoundIds, incomingSubmissionPa
   }
 }
 
-async function deleteStaleRounds(tx, gameKey, incomingRoundPayloads) {
+async function deleteStaleRounds(tx, gameId, incomingRoundPayloads) {
   const existingRounds = await tx.round.findMany({
     where: {
-      leagueSlug: gameKey,
+      gameId,
     },
     select: {
       id: true,
@@ -712,6 +746,18 @@ function getSubmissionKey(submission) {
 
 function getVoteKey(vote) {
   return `${vote.roundId}:${vote.voterId}:${vote.songId}`;
+}
+
+function normalizeOptionalDisplayName(value) {
+  if (!isNonBlankString(value)) {
+    return null;
+  }
+
+  return value.trim();
+}
+
+function isNonBlankString(value) {
+  return typeof value === "string" && value.trim() !== "";
 }
 
 function requireCanonicalId(lookup, sourceKey, recordKind, batchId, rowId) {

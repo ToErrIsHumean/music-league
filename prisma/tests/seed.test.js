@@ -9,6 +9,7 @@ const { prisma, runSeed, cleanup } = createTempPrismaDb({
 
 async function loadCounts() {
   const [
+    gameCount,
     playerCount,
     artistCount,
     songCount,
@@ -17,6 +18,7 @@ async function loadCounts() {
     voteCount,
     importBatchCount,
   ] = await Promise.all([
+    prisma.game.count(),
     prisma.player.count(),
     prisma.artist.count(),
     prisma.song.count(),
@@ -27,6 +29,7 @@ async function loadCounts() {
   ]);
 
   return {
+    gameCount,
     playerCount,
     artistCount,
     songCount,
@@ -45,6 +48,7 @@ test(
     const countsAfterFirstRun = await loadCounts();
 
     assert.deepEqual(countsAfterFirstRun, {
+      gameCount: 1,
       playerCount: 4,
       artistCount: 4,
       songCount: 6,
@@ -58,6 +62,36 @@ test(
     const countsAfterSecondRun = await loadCounts();
 
     assert.deepEqual(countsAfterSecondRun, countsAfterFirstRun);
+  },
+);
+
+test(
+  "seed rounds all point at an explicit game and preserve the mirror slug",
+  { concurrency: false },
+  async () => {
+    runSeed();
+
+    const games = await prisma.game.findMany({
+      include: {
+        rounds: {
+          select: {
+            id: true,
+            gameId: true,
+            leagueSlug: true,
+          },
+        },
+      },
+    });
+
+    assert.equal(games.length, 1);
+    assert.ok(games[0].rounds.length > 0);
+    assert.ok(
+      games[0].rounds.every(
+        (round) =>
+          round.gameId === games[0].id &&
+          round.leagueSlug === games[0].sourceGameId,
+      ),
+    );
   },
 );
 
