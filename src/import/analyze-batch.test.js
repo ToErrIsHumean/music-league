@@ -56,6 +56,11 @@ async function withTestDatabase(run) {
 }
 
 async function seedMatchedReferenceData(prisma) {
+  const matchedGame = await prisma.game.create({
+    data: {
+      sourceGameId: "game-42",
+    },
+  });
   const matchedPlayer = await prisma.player.create({
     data: {
       displayName: "Alice Smith",
@@ -79,6 +84,7 @@ async function seedMatchedReferenceData(prisma) {
   });
   const matchedRound = await prisma.round.create({
     data: {
+      gameId: matchedGame.id,
       leagueSlug: "game-42",
       name: "Legacy Rediscovered",
       sourceRoundId: "game-42",
@@ -87,6 +93,7 @@ async function seedMatchedReferenceData(prisma) {
 
   return {
     matchedArtist,
+    matchedGame,
     matchedPlayer,
     matchedRound,
     matchedSong,

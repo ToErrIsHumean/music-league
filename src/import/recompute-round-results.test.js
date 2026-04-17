@@ -42,6 +42,11 @@ async function withTestDatabase(run) {
 }
 
 async function seedRoundFixture(prisma, leagueSlug, sourceRoundId) {
+  const game = await prisma.game.create({
+    data: {
+      sourceGameId: leagueSlug,
+    },
+  });
   const [submitterOne, submitterTwo, submitterThree, voter] = await Promise.all([
     prisma.player.create({
       data: {
@@ -137,6 +142,7 @@ async function seedRoundFixture(prisma, leagueSlug, sourceRoundId) {
 
   const round = await prisma.round.create({
     data: {
+      gameId: game.id,
       leagueSlug,
       name: `${leagueSlug} Round`,
       sourceRoundId,

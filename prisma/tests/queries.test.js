@@ -1,6 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { createTempPrismaDb } = require("./helpers/temp-prisma-db");
+const { listArchiveGames } = require("../../src/archive/list-archive-games");
 
 const { prisma, cleanup } = createTempPrismaDb({
   prefix: "music-league-queries-",
@@ -11,6 +12,20 @@ const { prisma, cleanup } = createTempPrismaDb({
 function assertNonEmptyArray(value, message) {
   assert.ok(Array.isArray(value), message);
   assert.ok(value.length > 0, message);
+}
+
+async function findSeedGameId() {
+  const game = await prisma.game.findUnique({
+    where: {
+      sourceGameId: "main",
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  assert.ok(game, "expected the seeded game to exist");
+  return game.id;
 }
 
 async function findSongIdPresentInBothRounds() {
@@ -74,6 +89,26 @@ async function findVoteTarget() {
   assert.ok(vote, "expected seeded votes to exist");
   return vote;
 }
+
+test(
+  "archive query groups seeded rounds under an explicit game parent",
+  { concurrency: false },
+  async () => {
+    const gameId = await findSeedGameId();
+    const game = (await listArchiveGames(prisma)).find((entry) => entry.id === gameId);
+
+    assert.ok(game);
+    assert.equal(game.sourceGameId, "main");
+    assertNonEmptyArray(game.rounds, "expected the seeded game to include rounds");
+    assert.ok(
+      game.rounds.every(
+        (round) =>
+          round.gameId === game.id && round.leagueSlug === game.sourceGameId,
+      ),
+      "expected seeded rounds to resolve through Game and preserve the mirror slug",
+    );
+  },
+);
 
 test(
   "song modal query returns a reused seeded song with artist and submissions",
@@ -154,6 +189,12 @@ test(
         sourceRoundId: "seed-r1",
       },
       include: {
+        game: {
+          select: {
+            id: true,
+            sourceGameId: true,
+          },
+        },
         submissions: {
           orderBy: [{ rank: "asc" }, { createdAt: "asc" }],
           include: {
@@ -179,6 +220,8 @@ test(
     });
 
     assert.ok(round);
+    assert.ok(round.game);
+    assert.equal(round.leagueSlug, round.game.sourceGameId);
     assertNonEmptyArray(round.submissions, "expected seeded round submissions");
 
     const ranks = round.submissions.map((submission) => submission.rank);

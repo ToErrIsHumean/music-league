@@ -46,8 +46,20 @@ model Song {
   importVotes       ImportVoteRow[]
 }
 
+model Game {
+  id           Int      @id @default(autoincrement())
+  sourceGameId String   @unique
+  displayName  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  rounds       Round[]
+
+  @@index([sourceGameId])
+}
+
 model Round {
   id                Int                   @id @default(autoincrement())
+  gameId            Int
   leagueSlug        String                @default("main")
   name              String
   description       String?
@@ -57,13 +69,17 @@ model Round {
   sourceRoundId     String?
   createdAt         DateTime              @default(now())
   updatedAt         DateTime              @updatedAt
+  game              Game                  @relation(fields: [gameId], references: [id])
   submissions       Submission[]
   votes             Vote[]
   importRows        ImportRoundRow[]
   importSubmissions ImportSubmissionRow[]
   importVotes       ImportVoteRow[]
 
+  @@unique([gameId, sourceRoundId])
   @@unique([leagueSlug, sourceRoundId])
+  @@index([gameId, sequenceNumber])
+  @@index([gameId, occurredAt])
   @@index([leagueSlug, sequenceNumber])
 }
 

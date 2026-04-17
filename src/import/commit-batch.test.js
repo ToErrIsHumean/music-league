@@ -142,6 +142,11 @@ async function stageAndAnalyzeSnapshot(prisma, snapshot) {
 }
 
 async function seedMatchedReferenceData(prisma) {
+  const matchedGame = await prisma.game.create({
+    data: {
+      sourceGameId: "game-42",
+    },
+  });
   const matchedPlayer = await prisma.player.create({
     data: {
       displayName: "ALICE SMITH",
@@ -165,6 +170,7 @@ async function seedMatchedReferenceData(prisma) {
   });
   const matchedRound = await prisma.round.create({
     data: {
+      gameId: matchedGame.id,
       leagueSlug: "game-42",
       name: "Legacy Rediscovered",
       description: "Old description",
@@ -176,6 +182,7 @@ async function seedMatchedReferenceData(prisma) {
 
   return {
     matchedArtist,
+    matchedGame,
     matchedPlayer,
     matchedRound,
     matchedSong,
@@ -458,6 +465,13 @@ test(
             }),
             prisma.round.findUniqueOrThrow({
               where: { id: matched.matchedRound.id },
+              include: {
+                game: {
+                  select: {
+                    sourceGameId: true,
+                  },
+                },
+              },
             }),
             prisma.submission.findMany({
               where: { roundId: matched.matchedRound.id },
@@ -559,6 +573,8 @@ test(
         );
         assert.deepEqual(
           {
+            gameId: round.gameId,
+            gameSourceGameId: round.game.sourceGameId,
             leagueSlug: round.leagueSlug,
             name: round.name,
             description: round.description,
@@ -567,6 +583,8 @@ test(
             sourceRoundId: round.sourceRoundId,
           },
           {
+            gameId: matched.matchedGame.id,
+            gameSourceGameId: "game-42",
             leagueSlug: "game-42",
             name: "Rediscovered",
             description: "Find old favorites",

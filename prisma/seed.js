@@ -62,6 +62,13 @@ const songs = [
   },
 ];
 
+const games = [
+  {
+    sourceGameId: "main",
+    displayName: null,
+  },
+];
+
 const rounds = [
   {
     leagueSlug: "main",
@@ -301,6 +308,26 @@ function validateSeedPlan() {
   }
 }
 
+async function seedGames() {
+  const gamesBySourceId = new Map();
+
+  for (const game of games) {
+    const record = await prisma.game.upsert({
+      where: {
+        sourceGameId: game.sourceGameId,
+      },
+      update: {
+        displayName: game.displayName,
+      },
+      create: game,
+    });
+
+    gamesBySourceId.set(record.sourceGameId, record);
+  }
+
+  return gamesBySourceId;
+}
+
 async function seedPlayers() {
   for (const player of players) {
     const normalizedName = normalize(player.displayName);
@@ -369,23 +396,35 @@ async function seedSongs(artistMap) {
   }
 }
 
-async function seedRounds() {
+async function seedRounds(gamesBySourceId) {
   for (const round of rounds) {
+    const game = gamesBySourceId.get(round.leagueSlug);
+
+    if (!game) {
+      throw new Error(`missing game for seeded round: ${round.leagueSlug}`);
+    }
+
     await prisma.round.upsert({
       where: {
-        leagueSlug_sourceRoundId: {
-          leagueSlug: round.leagueSlug,
+        gameId_sourceRoundId: {
+          gameId: game.id,
           sourceRoundId: round.sourceRoundId,
         },
       },
       update: {
+        gameId: game.id,
+        leagueSlug: game.sourceGameId,
         name: round.name,
         description: round.description,
         playlistUrl: round.playlistUrl,
         sequenceNumber: round.sequenceNumber,
         occurredAt: round.occurredAt,
       },
-      create: round,
+      create: {
+        ...round,
+        gameId: game.id,
+        leagueSlug: game.sourceGameId,
+      },
     });
   }
 }
@@ -611,10 +650,11 @@ async function seedSubmissionsForRound(roundSourceId, seedLookups, scoreMap) {
 
 async function main() {
   validateSeedPlan();
+  const gamesBySourceId = await seedGames();
   await seedPlayers();
   const artistMap = await seedArtists();
   await seedSongs(artistMap);
-  await seedRounds();
+  await seedRounds(gamesBySourceId);
 
   const seedLookups = await loadSeedLookups();
 
