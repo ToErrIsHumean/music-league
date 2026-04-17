@@ -14,20 +14,6 @@ function assertNonEmptyArray(value, message) {
   assert.ok(value.length > 0, message);
 }
 
-async function findSeedGameId() {
-  const game = await prisma.game.findUnique({
-    where: {
-      sourceGameId: "main",
-    },
-    select: {
-      id: true,
-    },
-  });
-
-  assert.ok(game, "expected the seeded game to exist");
-  return game.id;
-}
-
 async function findSongIdPresentInBothRounds() {
   const song = await prisma.song.findFirst({
     where: {
@@ -91,19 +77,26 @@ async function findVoteTarget() {
 }
 
 test(
-  "archive query groups seeded rounds under an explicit game parent",
+  "archive query groups seeded rounds under explicit game parents across the seeded archive",
   { concurrency: false },
   async () => {
-    const gameId = await findSeedGameId();
-    const game = (await listArchiveGames(prisma)).find((entry) => entry.id === gameId);
+    const archiveGames = await listArchiveGames(prisma);
 
-    assert.ok(game);
-    assert.equal(game.sourceGameId, "main");
-    assertNonEmptyArray(game.rounds, "expected the seeded game to include rounds");
+    assert.equal(archiveGames.length, 2);
+    assert.deepEqual(
+      archiveGames.map((game) => game.sourceGameId),
+      ["afterparty", "main"],
+    );
     assert.ok(
-      game.rounds.every(
-        (round) =>
-          round.gameId === game.id && round.leagueSlug === game.sourceGameId,
+      archiveGames.every((game) => game.rounds.length >= 2),
+      "expected the seeded archive to include multiple rounds per game group",
+    );
+    assert.ok(
+      archiveGames.every((game) =>
+        game.rounds.every(
+          (round) =>
+            round.gameId === game.id && round.leagueSlug === game.sourceGameId,
+        ),
       ),
       "expected seeded rounds to resolve through Game and preserve the mirror slug",
     );

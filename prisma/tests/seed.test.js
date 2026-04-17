@@ -48,13 +48,13 @@ test(
     const countsAfterFirstRun = await loadCounts();
 
     assert.deepEqual(countsAfterFirstRun, {
-      gameCount: 1,
+      gameCount: 2,
       playerCount: 4,
       artistCount: 4,
       songCount: 6,
-      roundCount: 2,
-      submissionCount: 7,
-      voteCount: 12,
+      roundCount: 4,
+      submissionCount: 16,
+      voteCount: 24,
       importBatchCount: 0,
     });
 
@@ -83,13 +83,15 @@ test(
       },
     });
 
-    assert.equal(games.length, 1);
-    assert.ok(games[0].rounds.length > 0);
+    assert.equal(games.length, 2);
+    assert.ok(games.every((game) => game.rounds.length >= 2));
     assert.ok(
-      games[0].rounds.every(
-        (round) =>
-          round.gameId === games[0].id &&
-          round.leagueSlug === games[0].sourceGameId,
+      games.every((game) =>
+        game.rounds.every(
+          (round) =>
+            round.gameId === game.id &&
+            round.leagueSlug === game.sourceGameId,
+        ),
       ),
     );
   },
@@ -138,7 +140,8 @@ test(
     runSeed();
 
     const rounds = await prisma.round.findMany({
-      include: {
+      select: {
+        gameId: true,
         submissions: {
           select: {
             score: true,
@@ -146,10 +149,9 @@ test(
           },
         },
       },
-      orderBy: {
-        sequenceNumber: "asc",
-      },
     });
+
+    assert.equal(new Set(rounds.map((round) => round.gameId)).size, 2);
 
     assert.ok(
       rounds.some(
