@@ -6,9 +6,12 @@
     "seed": "node prisma/seed.js"
   },
   "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
     "test": "npm run test:unit",
     "test:unit": "node --test src/lib/normalize.test.js src/import/parse-bundle.test.js",
-    "test:integration": "node --test prisma/tests/constraints.test.js prisma/tests/migration.test.js prisma/tests/queries.test.js prisma/tests/seed.test.js src/import/analyze-batch.test.js src/import/commit-batch.test.js src/import/get-batch-summary.test.js src/import/list-batch-issues.test.js src/import/list-batches.test.js src/import/recompute-round-results.test.js src/import/stage-batch.test.js src/import/workflow-integration.test.js",
+    "test:integration": "node --test prisma/tests/archive-page.test.js prisma/tests/constraints.test.js prisma/tests/migration.test.js prisma/tests/queries.test.js prisma/tests/seed.test.js src/import/analyze-batch.test.js src/import/commit-batch.test.js src/import/get-batch-summary.test.js src/import/list-batch-issues.test.js src/import/list-batches.test.js src/import/recompute-round-results.test.js src/import/stage-batch.test.js src/import/workflow-integration.test.js",
     "test:all": "npm run test:unit && npm run test:integration"
   },
   "keywords": [],
@@ -17,6 +20,9 @@
   "description": "",
   "dependencies": {
     "@prisma/client": "^6.19.0",
-    "prisma": "^6.19.0"
+    "next": "^16.2.4",
+    "prisma": "^6.19.0",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5"
   }
 }
