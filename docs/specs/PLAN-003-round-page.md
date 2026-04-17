@@ -11,7 +11,7 @@
 | TASK-03 | Preserve import compatibility through the Game transition | `done` | TASK-01 |
 | TASK-04 | Build archive loader utilities and URL-state helpers | `done` | TASK-01, TASK-02, TASK-03 |
 | TASK-05 | Ship the archive route and round summary browser | `done` | TASK-04 |
-| TASK-06 | Implement round detail overlay and highlights | `pending` | TASK-04, TASK-05 |
+| TASK-06 | Implement round detail overlay and highlights | `done` | TASK-04, TASK-05 |
 | TASK-07 | Add round-scoped song/player modal shells and final polish | `pending` | TASK-04, TASK-06 |
 
 Status values: `pending` | `active` | `done` | `fail` | `blocked` | `skipped`
@@ -33,10 +33,16 @@ Status values: `pending` | `active` | `done` | `fail` | `blocked` | `skipped`
 | TASK-05 | pass | null | 3 | gpt-5.4 | high | 2026-04-17T07:57:09.456Z |
 | TASK-05 | blocked | D-001 | 3 | meta | high | 2026-04-17T07:59:36.000Z |
 | TASK-05 | pass | null | 1 | gpt-5.4 | high | 2026-04-17T08:04:30.228Z |
+| TASK-06 | pass | null | 1 | gpt-5.4 | high | 2026-04-17T08:17:04.978Z |
+| TASK-06 | pass | null | 2 | gpt-5.4 | high | 2026-04-17T08:26:47.216Z |
 
 ## Review Notes
 
 <!-- Orchestrator review notes append below. -->
+
+- TASK-06 cycle 2: `confirmed` -> `docs/sdd/reviews/TASK-06-epoch-1-cycle-2.md`
+
+- TASK-06 cycle 1: `contested` -> `docs/sdd/reviews/TASK-06-epoch-1-cycle-1.md`
 
 - TASK-05 cycle 1: `deferred` -> `docs/sdd/reviews/TASK-05-epoch-2-cycle-1.md`
 
