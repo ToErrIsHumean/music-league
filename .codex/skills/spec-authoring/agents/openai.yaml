@@ -1,0 +1,4 @@
+interface:
+  display_name: "Spec Authoring"
+  short_description: "Stage and harden specs from FSDs."
+  default_prompt: "Use $spec-authoring to turn an FSD and current repo evidence into a staged, resumable SPEC with narrow HITL escalation."

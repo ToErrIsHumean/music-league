@@ -1,28 +1,11 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const os = require("node:os");
-const path = require("node:path");
-const { execFileSync } = require("node:child_process");
+const { createTempPrismaDb } = require("./helpers/temp-prisma-db");
 
-const repoRoot = path.resolve(__dirname, "..", "..");
-const prismaCommand = process.platform === "win32" ? "npx.cmd" : "npx";
-const tempDir = fs.mkdtempSync(
-  path.join(os.tmpdir(), "music-league-prisma-constraints-"),
-);
-const databasePath = path.join(tempDir, "constraints.sqlite");
-
-process.env.DATABASE_URL = `file:${databasePath}`;
-
-execFileSync(prismaCommand, ["prisma", "migrate", "deploy"], {
-  cwd: repoRoot,
-  env: process.env,
-  stdio: "pipe",
+const { prisma, cleanup } = createTempPrismaDb({
+  prefix: "music-league-prisma-constraints-",
+  filename: "constraints.sqlite",
 });
-
-const { PrismaClient } = require("@prisma/client");
-
-const prisma = new PrismaClient();
 const rollbackSignal = Symbol("rollback");
 
 async function withRollback(run) {
@@ -261,6 +244,5 @@ test(
 );
 
 test.after(async () => {
-  await prisma.$disconnect();
-  fs.rmSync(tempDir, { recursive: true, force: true });
+  await cleanup();
 });

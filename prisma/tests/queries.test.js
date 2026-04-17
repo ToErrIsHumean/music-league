@@ -1,68 +1,17 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
+const { createTempPrismaDb } = require("./helpers/temp-prisma-db");
 
-function loadDatabaseUrlFromEnv() {
-  if (process.env.DATABASE_URL) {
-    return;
-  }
-
-  const envPath = path.resolve(__dirname, "..", "..", ".env");
-
-  if (!fs.existsSync(envPath)) {
-    return;
-  }
-
-  const envFile = fs.readFileSync(envPath, "utf8");
-
-  for (const line of envFile.split(/\r?\n/)) {
-    const trimmed = line.trim();
-
-    if (!trimmed || trimmed.startsWith("#")) {
-      continue;
-    }
-
-    const separatorIndex = trimmed.indexOf("=");
-
-    if (separatorIndex === -1) {
-      continue;
-    }
-
-    const key = trimmed.slice(0, separatorIndex).trim();
-
-    if (key !== "DATABASE_URL") {
-      continue;
-    }
-
-    let value = trimmed.slice(separatorIndex + 1).trim();
-
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.slice(1, -1);
-    }
-
-    process.env.DATABASE_URL = value;
-    return;
-  }
-}
+const { prisma, cleanup } = createTempPrismaDb({
+  prefix: "music-league-queries-",
+  filename: "queries.sqlite",
+  seed: true,
+});
 
 function assertNonEmptyArray(value, message) {
   assert.ok(Array.isArray(value), message);
   assert.ok(value.length > 0, message);
 }
-
-loadDatabaseUrlFromEnv();
-assert.ok(
-  process.env.DATABASE_URL,
-  "DATABASE_URL must point to a migrated, seeded database",
-);
-
-const { PrismaClient } = require("@prisma/client");
-
-const prisma = new PrismaClient();
 
 async function findSongIdPresentInBothRounds() {
   const song = await prisma.song.findFirst({
@@ -369,5 +318,5 @@ test(
 );
 
 test.after(async () => {
-  await prisma.$disconnect();
+  await cleanup();
 });

@@ -1,35 +1,11 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const os = require("node:os");
-const path = require("node:path");
-const { execFileSync } = require("node:child_process");
+const { createTempPrismaDb } = require("./helpers/temp-prisma-db");
 
-const repoRoot = path.resolve(__dirname, "..", "..");
-const prismaCommand = process.platform === "win32" ? "npx.cmd" : "npx";
-const nodeCommand = process.execPath;
-const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "music-league-seed-"));
-const databasePath = path.join(tempDir, "seed.sqlite");
-
-process.env.DATABASE_URL = `file:${databasePath}`;
-
-execFileSync(prismaCommand, ["prisma", "migrate", "deploy"], {
-  cwd: repoRoot,
-  env: process.env,
-  stdio: "pipe",
+const { prisma, runSeed, cleanup } = createTempPrismaDb({
+  prefix: "music-league-seed-",
+  filename: "seed.sqlite",
 });
-
-const { PrismaClient } = require("@prisma/client");
-
-const prisma = new PrismaClient();
-
-function runSeed() {
-  execFileSync(nodeCommand, ["prisma/seed.js"], {
-    cwd: repoRoot,
-    env: process.env,
-    stdio: "pipe",
-  });
-}
 
 async function loadCounts() {
   const [
@@ -89,6 +65,8 @@ test(
   "seed data reuses at least one song across submissions in different rounds or players",
   { concurrency: false },
   async () => {
+    runSeed();
+
     const songs = await prisma.song.findMany({
       include: {
         submissions: {
@@ -123,6 +101,8 @@ test(
   "seed data includes both fully scored and unscored rounds",
   { concurrency: false },
   async () => {
+    runSeed();
+
     const rounds = await prisma.round.findMany({
       include: {
         submissions: {
@@ -162,6 +142,8 @@ test(
   "seed votes cover a scored round with variable points and comments",
   { concurrency: false },
   async () => {
+    runSeed();
+
     const votes = await prisma.vote.findMany({
       select: {
         roundId: true,
@@ -178,6 +160,5 @@ test(
 );
 
 test.after(async () => {
-  await prisma.$disconnect();
-  fs.rmSync(tempDir, { recursive: true, force: true });
+  await cleanup();
 });
