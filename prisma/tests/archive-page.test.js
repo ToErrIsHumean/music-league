@@ -14,6 +14,17 @@ const { prisma, cleanup } = createTempPrismaDb({
   seed: true,
 });
 
+async function findRoundIdBySourceId(sourceRoundId) {
+  const round = await prisma.round.findFirst({
+    where: { sourceRoundId },
+    select: { id: true },
+  });
+
+  assert.ok(round, `expected seeded round ${sourceRoundId} to exist`);
+
+  return round.id;
+}
+
 test.after(async () => {
   await cleanup();
 });
@@ -30,6 +41,7 @@ test(
       ["After Party League", "main"],
     );
     assert.equal(props.openRoundId, null);
+    assert.equal(props.openRound, null);
     assert.equal(props.notFoundNotice, null);
     assert.match(markup, /After Party League/);
     assert.match(markup, /main/);
@@ -64,9 +76,88 @@ test(
     const markup = renderToStaticMarkup(React.createElement(GameArchivePage, props));
 
     assert.equal(props.openRoundId, null);
+    assert.equal(props.openRound, null);
     assert.equal(props.notFoundNotice, "Round not found.");
     assert.match(markup, /Round not found\./);
     assert.match(markup, /After Party League/);
     assert.match(markup, /main/);
+  },
+);
+
+test(
+  "archive page direct entry opens the round detail overlay with highlights and ordered submissions",
+  { concurrency: false },
+  async () => {
+    const roundId = await findRoundIdBySourceId("seed-r1");
+    const props = await buildGameArchivePageProps({
+      prisma,
+      searchParams: Promise.resolve({
+        round: String(roundId),
+      }),
+    });
+    const markup = renderToStaticMarkup(React.createElement(GameArchivePage, props));
+
+    assert.equal(props.openRoundId, roundId);
+    assert.ok(props.openRound, "expected direct entry to resolve an open round");
+    assert.equal(props.openRound.game.displayLabel, "main");
+    assert.equal(props.notFoundNotice, null);
+    assert.match(markup, /role=\"dialog\"/);
+    assert.match(markup, /Round detail/);
+    assert.match(markup, /From main/);
+    assert.match(markup, /Opening Night/);
+    assert.equal((markup.match(/class=\"archive-highlight-card/g) ?? []).length, 3);
+
+    const submissionMarkup = markup.slice(markup.indexOf('class="archive-submission-list"'));
+    const orderedPlayers = props.openRound.submissions.map(
+      (submission) => `Submitted by ${submission.player.displayName}`,
+    );
+
+    for (let index = 1; index < orderedPlayers.length; index += 1) {
+      assert.ok(
+        submissionMarkup.indexOf(orderedPlayers[index - 1]) <
+          submissionMarkup.indexOf(orderedPlayers[index]),
+        "expected submission titles to render in round detail order",
+      );
+    }
+  },
+);
+
+test(
+  "round detail submission links open a nested song shell without dismissing the round dialog",
+  { concurrency: false },
+  async () => {
+    const roundId = await findRoundIdBySourceId("seed-r1");
+    const baseProps = await buildGameArchivePageProps({
+      prisma,
+      searchParams: Promise.resolve({
+        round: String(roundId),
+      }),
+    });
+    const targetSubmission = baseProps.openRound.submissions[0];
+    const props = await buildGameArchivePageProps({
+      prisma,
+      searchParams: Promise.resolve({
+        round: String(roundId),
+        song: String(targetSubmission.song.id),
+      }),
+    });
+    const markup = renderToStaticMarkup(React.createElement(GameArchivePage, props));
+
+    assert.deepEqual(props.nestedEntity, {
+      kind: "song",
+      id: targetSubmission.song.id,
+    });
+    assert.ok(props.openRound, "expected nested modal state to preserve the round detail");
+    assert.ok(props.openSongModal, "expected song modal content to load");
+    assert.equal(props.openPlayerModal, null);
+    assert.equal((markup.match(/role=\"dialog\"/g) ?? []).length, 2);
+    assert.match(markup, new RegExp(`href=\"/\\?round=${roundId}&amp;song=${targetSubmission.song.id}\"`));
+    assert.match(
+      markup,
+      new RegExp(`href=\"/\\?round=${roundId}&amp;player=${targetSubmission.player.id}\"`),
+    );
+    assert.match(markup, /Song detail/);
+    assert.match(markup, /Back to round/);
+    assert.match(markup, /Round detail/);
   },
 );
