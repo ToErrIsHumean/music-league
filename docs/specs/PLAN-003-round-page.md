@@ -10,7 +10,7 @@
 | TASK-02 | Expand fixtures to a real multi-game archive | `done` | TASK-01 |
 | TASK-03 | Preserve import compatibility through the Game transition | `done` | TASK-01 |
 | TASK-04 | Build archive loader utilities and URL-state helpers | `done` | TASK-01, TASK-02, TASK-03 |
-| TASK-05 | Ship the archive route and round summary browser | `pending` | TASK-04 |
+| TASK-05 | Ship the archive route and round summary browser | `done` | TASK-04 |
 | TASK-06 | Implement round detail overlay and highlights | `pending` | TASK-04, TASK-05 |
 | TASK-07 | Add round-scoped song/player modal shells and final polish | `pending` | TASK-04, TASK-06 |
 
@@ -32,10 +32,13 @@ Status values: `pending` | `active` | `done` | `fail` | `blocked` | `skipped`
 | TASK-05 | pass | null | 2 | gpt-5.4 | high | 2026-04-17T07:52:40.965Z |
 | TASK-05 | pass | null | 3 | gpt-5.4 | high | 2026-04-17T07:57:09.456Z |
 | TASK-05 | blocked | D-001 | 3 | meta | high | 2026-04-17T07:59:36.000Z |
+| TASK-05 | pass | null | 1 | gpt-5.4 | high | 2026-04-17T08:04:30.228Z |
 
 ## Review Notes
 
 <!-- Orchestrator review notes append below. -->
+
+- TASK-05 cycle 1: `deferred` -> `docs/sdd/reviews/TASK-05-epoch-2-cycle-1.md`
 
 - META: TASK-05 blocker cleared via `D-001`; removed the tracked root
   `node_modules` entry on `master` and reset TASK-05 to `pending` for
