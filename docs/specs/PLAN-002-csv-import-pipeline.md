@@ -14,7 +14,7 @@
 | TASK-06 | Implement summary and history reads | `done` | TASK-01, TASK-02, TASK-03, TASK-04 |
 | TASK-07 | Implement round-result recompute | `done` | TASK-01 |
 | TASK-08 | Implement transactional commit orchestration | `done` | TASK-01, TASK-02, TASK-03, TASK-04, TASK-07 |
-| TASK-09 | Add integration tests for clean, failed, and replayed imports | `pending` | TASK-01, TASK-02, TASK-03, TASK-04, TASK-05, TASK-06, TASK-07, TASK-08 |
+| TASK-09 | Add integration tests for clean, failed, and replayed imports | `done` | TASK-01, TASK-02, TASK-03, TASK-04, TASK-05, TASK-06, TASK-07, TASK-08 |
 
 Status values: `pending` | `active` | `done` | `fail` | `blocked` | `skipped`
 
@@ -49,6 +49,8 @@ human-created signal for TASK-01 cycle 1
 | TASK-06 | pass | null | 1 | gpt-5.4 | high | 2026-04-17T00:53:08.175Z |
 | TASK-07 | pass | null | 1 | gpt-5.4 | high | 2026-04-17T01:00:19.945Z |
 | TASK-08 | pass | null | 1 | gpt-5.4 | xhigh | 2026-04-17T01:17:11.109Z |
+| TASK-09 | pass | null | 1 | gpt-5.4 | xhigh | 2026-04-17T01:32:56.646Z |
+| TASK-09 | pass | null | 2 | gpt-5.4 | xhigh | 2026-04-17T01:42:45.853Z |
 
 ## Review Notes
 
@@ -76,3 +78,7 @@ human-created signal for TASK-01 cycle 1
 - TASK-07 cycle 1: `confirmed` -> `docs/sdd/reviews/TASK-07-epoch-1-cycle-1.md`
 
 - TASK-08 cycle 1: `confirmed` -> `docs/sdd/reviews/TASK-08-epoch-1-cycle-1.md`
+
+- TASK-09 cycle 1: `contested` -> `docs/sdd/reviews/TASK-09-epoch-1-cycle-1.md`
+
+- TASK-09 cycle 2: `confirmed` -> `docs/sdd/reviews/TASK-09-epoch-1-cycle-2.md`
