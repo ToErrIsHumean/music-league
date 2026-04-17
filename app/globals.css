@@ -1,0 +1,222 @@
+:root {
+  --paper: #f7f0e1;
+  --paper-strong: #fefaf2;
+  --sand: #e4d4bb;
+  --ink: #1f1b18;
+  --muted: #685a4d;
+  --accent: #a43f2f;
+  --accent-soft: rgba(164, 63, 47, 0.14);
+  --panel: rgba(255, 250, 242, 0.82);
+  --shadow: rgba(50, 33, 18, 0.12);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background:
+    radial-gradient(circle at top, rgba(164, 63, 47, 0.12), transparent 42%),
+    linear-gradient(180deg, #fbf5ea 0%, #efe3d0 100%);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: var(--ink);
+  font-family: "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.archive-page-shell {
+  width: min(1120px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 48px 0 72px;
+}
+
+.archive-hero,
+.archive-game-section,
+.archive-empty-state,
+.archive-notice {
+  backdrop-filter: blur(10px);
+  background: var(--panel);
+  border: 1px solid rgba(104, 90, 77, 0.12);
+  border-radius: 28px;
+  box-shadow: 0 18px 40px var(--shadow);
+}
+
+.archive-hero {
+  padding: 32px;
+  margin-bottom: 24px;
+}
+
+.archive-hero-kicker,
+.archive-game-kicker,
+.archive-round-kicker,
+.archive-empty-kicker {
+  margin: 0 0 10px;
+  color: var(--accent);
+  font-size: 0.79rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.archive-hero-title,
+.archive-game-title,
+.archive-round-title,
+.archive-empty-title {
+  margin: 0;
+  font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", serif;
+  letter-spacing: -0.03em;
+}
+
+.archive-hero-title {
+  font-size: clamp(2.6rem, 6vw, 4.6rem);
+  line-height: 0.95;
+  max-width: 9ch;
+}
+
+.archive-hero-body,
+.archive-game-meta,
+.archive-empty-body {
+  margin: 14px 0 0;
+  max-width: 42rem;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.archive-notice {
+  margin-bottom: 24px;
+  padding: 16px 20px;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.archive-game-grid {
+  display: grid;
+  gap: 22px;
+}
+
+.archive-game-section {
+  padding: 24px;
+}
+
+.archive-game-header {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 18px;
+}
+
+.archive-game-title {
+  font-size: clamp(1.8rem, 3vw, 2.3rem);
+}
+
+.archive-round-list {
+  list-style: none;
+  display: grid;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+}
+
+.archive-round-item {
+  margin: 0;
+}
+
+.archive-round-card {
+  display: grid;
+  gap: 18px;
+  padding: 18px;
+  border-radius: 22px;
+  background: var(--paper-strong);
+  border: 1px solid rgba(104, 90, 77, 0.16);
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    border-color 180ms ease;
+}
+
+.archive-round-card:hover,
+.archive-round-card:focus-visible {
+  transform: translateY(-2px);
+  border-color: rgba(164, 63, 47, 0.32);
+  box-shadow: 0 14px 28px rgba(50, 33, 18, 0.1);
+  outline: none;
+}
+
+.archive-round-card.is-open {
+  border-color: rgba(164, 63, 47, 0.52);
+  box-shadow: 0 18px 32px rgba(164, 63, 47, 0.16);
+}
+
+.archive-round-copy {
+  display: grid;
+  gap: 8px;
+}
+
+.archive-round-title {
+  font-size: clamp(1.35rem, 2.4vw, 1.7rem);
+}
+
+.archive-round-signals {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+}
+
+.archive-signal {
+  padding: 9px 12px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--ink);
+  font-size: 0.93rem;
+  font-weight: 600;
+}
+
+.archive-empty-state {
+  padding: 36px 32px;
+}
+
+.archive-reset-button {
+  margin-top: 18px;
+  padding: 12px 18px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff8f0;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+}
+
+@media (max-width: 720px) {
+  .archive-page-shell {
+    width: min(100% - 24px, 1120px);
+    padding: 24px 0 48px;
+  }
+
+  .archive-hero,
+  .archive-game-section,
+  .archive-empty-state,
+  .archive-notice {
+    border-radius: 22px;
+  }
+
+  .archive-hero,
+  .archive-game-section,
+  .archive-empty-state {
+    padding: 20px;
+  }
+
+  .archive-round-card {
+    padding: 16px;
+  }
+}
