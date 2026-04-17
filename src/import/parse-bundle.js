@@ -121,6 +121,13 @@ const FILE_SPECS = {
   },
 };
 
+const SOURCE_KEY_FIELD_NAMES = {
+  competitors: ["ID"],
+  rounds: ["ID"],
+  submissions: ["Round ID", "Submitter ID", "Spotify URI"],
+  votes: ["Round ID", "Voter ID", "Spotify URI"],
+};
+
 const ISO_8601_TIMESTAMP_PATTERN =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
 const INVALID_ROW = Symbol("invalid-row");
@@ -145,6 +152,11 @@ function parseMusicLeagueBundle(input) {
       rowCount: 0,
       rows: [],
     };
+    Object.defineProperty(fileResult, "sourceKeyRows", {
+      value: [],
+      enumerable: false,
+      writable: true,
+    });
 
     parsedBundle.files[fileKind] = fileResult;
 
@@ -219,6 +231,12 @@ function parseMusicLeagueBundle(input) {
       for (const header of spec.requiredHeaders) {
         canonicalValues[header] = record.values[resolvedHeaders.get(header)] ?? "";
       }
+
+      fileResult.sourceKeyRows.push({
+        sourceRowNumber: record.sourceRowNumber,
+        rowPreview: record.rowPreview,
+        ...pickSourceKeyValues(fileKind, canonicalValues),
+      });
 
       const typedRecord = spec.buildRow(
         {
@@ -576,6 +594,16 @@ function nullableString(value) {
 
 function normalizeHeader(header) {
   return String(header).toLowerCase().replace(/\s+/g, "");
+}
+
+function pickSourceKeyValues(fileKind, values) {
+  const sourceKeyValues = {};
+
+  for (const header of SOURCE_KEY_FIELD_NAMES[fileKind] ?? []) {
+    sourceKeyValues[header] = values[header] ?? "";
+  }
+
+  return sourceKeyValues;
 }
 
 function createIssue({
