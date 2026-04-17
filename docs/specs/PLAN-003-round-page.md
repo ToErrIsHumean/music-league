@@ -12,7 +12,7 @@
 | TASK-04 | Build archive loader utilities and URL-state helpers | `done` | TASK-01, TASK-02, TASK-03 |
 | TASK-05 | Ship the archive route and round summary browser | `done` | TASK-04 |
 | TASK-06 | Implement round detail overlay and highlights | `done` | TASK-04, TASK-05 |
-| TASK-07 | Add round-scoped song/player modal shells and final polish | `pending` | TASK-04, TASK-06 |
+| TASK-07 | Add round-scoped song/player modal shells and final polish | `done` | TASK-04, TASK-06 |
 
 Status values: `pending` | `active` | `done` | `fail` | `blocked` | `skipped`
 
@@ -35,10 +35,13 @@ Status values: `pending` | `active` | `done` | `fail` | `blocked` | `skipped`
 | TASK-05 | pass | null | 1 | gpt-5.4 | high | 2026-04-17T08:04:30.228Z |
 | TASK-06 | pass | null | 1 | gpt-5.4 | high | 2026-04-17T08:17:04.978Z |
 | TASK-06 | pass | null | 2 | gpt-5.4 | high | 2026-04-17T08:26:47.216Z |
+| TASK-07 | pass | null | 1 | gpt-5.4 | high | 2026-04-17T08:32:00.496Z |
 
 ## Review Notes
 
 <!-- Orchestrator review notes append below. -->
+
+- TASK-07 cycle 1: `deferred` -> `docs/sdd/reviews/TASK-07-epoch-1-cycle-1.md`
 
 - TASK-06 cycle 2: `confirmed` -> `docs/sdd/reviews/TASK-06-epoch-1-cycle-2.md`
 
