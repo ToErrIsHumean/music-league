@@ -267,7 +267,7 @@ test(
         now: () => committedAt,
       });
 
-      const [committedSummary, committedHistory, counts, round, submissions, votes] =
+      const [committedSummary, committedHistory, counts, game, round, submissions, votes] =
         await Promise.all([
           getImportBatchSummary(staged.batchId, { prisma }),
           listImportBatches({
@@ -275,10 +275,22 @@ test(
             prisma,
           }),
           getCanonicalCounts(prisma),
+          prisma.game.findUniqueOrThrow({
+            where: {
+              sourceGameId: "game-clean",
+            },
+          }),
           prisma.round.findFirstOrThrow({
             where: {
               leagueSlug: "game-clean",
               sourceRoundId: "game-clean",
+            },
+            include: {
+              game: {
+                select: {
+                  sourceGameId: true,
+                },
+              },
             },
           }),
           prisma.submission.findMany({
@@ -369,6 +381,17 @@ test(
         submissions: 3,
         votes: 2,
       });
+      assert.deepEqual(
+        {
+          sourceGameId: game.sourceGameId,
+          displayName: game.displayName,
+        },
+        {
+          sourceGameId: "game-clean",
+          displayName: "clean-bundle",
+        },
+      );
+      assert.equal(round.game.sourceGameId, round.leagueSlug);
       assert.deepEqual(
         Object.fromEntries(
           submissions.map((submission) => [
@@ -643,11 +666,23 @@ test(
         now: () => secondCommittedAt,
       });
 
-      const [rounds, submissions, votes, counts, history, summary] =
+      const [games, rounds, submissions, votes, counts, history, summary] =
         await Promise.all([
+          prisma.game.findMany({
+            orderBy: {
+              sourceGameId: "asc",
+            },
+          }),
           prisma.round.findMany({
             where: {
               leagueSlug: "game-77",
+            },
+            include: {
+              game: {
+                select: {
+                  sourceGameId: true,
+                },
+              },
             },
             orderBy: {
               sourceRoundId: "asc",
@@ -727,13 +762,27 @@ test(
         votes: 2,
       });
       assert.deepEqual(
+        games.map((game) => ({
+          sourceGameId: game.sourceGameId,
+          displayName: game.displayName,
+        })),
+        [
+          {
+            sourceGameId: "game-77",
+            displayName: "replay-snapshot-one",
+          },
+        ],
+      );
+      assert.deepEqual(
         rounds.map((round) => ({
+          gameSourceGameId: round.game.sourceGameId,
           sourceRoundId: round.sourceRoundId,
           name: round.name,
           description: round.description,
         })),
         [
           {
+            gameSourceGameId: "game-77",
             sourceRoundId: "game-77",
             name: "Round A Remix",
             description: "Refreshed round",

@@ -443,10 +443,13 @@ test(
           affectedRoundIds: [matched.matchedRound.id],
         });
 
-        const [batch, players, artists, songs, round, submissions, votes] =
+        const [batch, game, players, artists, songs, round, submissions, votes] =
           await Promise.all([
             prisma.importBatch.findUniqueOrThrow({
               where: { id: staged.batchId },
+            }),
+            prisma.game.findUniqueOrThrow({
+              where: { id: matched.matchedGame.id },
             }),
             prisma.player.findMany({
               orderBy: {
@@ -522,6 +525,16 @@ test(
         assert.equal(batch.submissionsUpsertedCount, 2);
         assert.equal(batch.votesUpsertedCount, 2);
         assert.equal(batch.committedAt?.toISOString(), committedAt.toISOString());
+        assert.deepEqual(
+          {
+            sourceGameId: game.sourceGameId,
+            displayName: game.displayName,
+          },
+          {
+            sourceGameId: "game-42",
+            displayName: path.basename(bundlePath),
+          },
+        );
 
         assert.deepEqual(
           players.map((player) => ({
@@ -686,66 +699,81 @@ test(
             now: () => secondCommittedAt,
           });
 
-          const rounds = await prisma.round.findMany({
-            where: {
-              leagueSlug: "game-77",
-            },
-            orderBy: {
-              sourceRoundId: "asc",
-            },
-          });
-          const submissions = await prisma.submission.findMany({
-            include: {
-              round: {
-                select: {
-                  leagueSlug: true,
-                  sourceRoundId: true,
-                  name: true,
+          const [games, rounds, submissions, votes, batch, counts] =
+            await Promise.all([
+              prisma.game.findMany({
+                orderBy: {
+                  sourceGameId: "asc",
                 },
-              },
-              player: {
-                select: {
-                  sourcePlayerId: true,
+              }),
+              prisma.round.findMany({
+                where: {
+                  leagueSlug: "game-77",
                 },
-              },
-              song: {
-                select: {
-                  spotifyUri: true,
-                  title: true,
+                include: {
+                  game: {
+                    select: {
+                      sourceGameId: true,
+                    },
+                  },
                 },
-              },
-            },
-            orderBy: {
-              id: "asc",
-            },
-          });
-          const votes = await prisma.vote.findMany({
-            include: {
-              round: {
-                select: {
-                  leagueSlug: true,
-                  sourceRoundId: true,
+                orderBy: {
+                  sourceRoundId: "asc",
                 },
-              },
-              voter: {
-                select: {
-                  sourcePlayerId: true,
+              }),
+              prisma.submission.findMany({
+                include: {
+                  round: {
+                    select: {
+                      leagueSlug: true,
+                      sourceRoundId: true,
+                      name: true,
+                    },
+                  },
+                  player: {
+                    select: {
+                      sourcePlayerId: true,
+                    },
+                  },
+                  song: {
+                    select: {
+                      spotifyUri: true,
+                      title: true,
+                    },
+                  },
                 },
-              },
-              song: {
-                select: {
-                  spotifyUri: true,
+                orderBy: {
+                  id: "asc",
                 },
-              },
-            },
-            orderBy: {
-              id: "asc",
-            },
-          });
-          const batch = await prisma.importBatch.findUniqueOrThrow({
-            where: { id: second.staged.batchId },
-          });
-          const counts = await getCanonicalCounts(prisma);
+              }),
+              prisma.vote.findMany({
+                include: {
+                  round: {
+                    select: {
+                      leagueSlug: true,
+                      sourceRoundId: true,
+                    },
+                  },
+                  voter: {
+                    select: {
+                      sourcePlayerId: true,
+                    },
+                  },
+                  song: {
+                    select: {
+                      spotifyUri: true,
+                    },
+                  },
+                },
+                orderBy: {
+                  id: "asc",
+                },
+              }),
+              prisma.importBatch.findUniqueOrThrow({
+                where: { id: second.staged.batchId },
+              }),
+              getCanonicalCounts(prisma),
+            ]);
 
           assert.deepEqual(secondResult, {
             batchId: second.staged.batchId,
@@ -763,6 +791,18 @@ test(
 
           assert.equal(batch.status, "committed");
           assert.equal(batch.committedAt?.toISOString(), secondCommittedAt.toISOString());
+          assert.deepEqual(
+            games.map((game) => ({
+              sourceGameId: game.sourceGameId,
+              displayName: game.displayName,
+            })),
+            [
+              {
+                sourceGameId: "game-77",
+                displayName: path.basename(first.bundlePath),
+              },
+            ],
+          );
           assert.deepEqual(counts, {
             players: 3,
             rounds: 1,
@@ -773,6 +813,7 @@ test(
           });
           assert.deepEqual(
             rounds.map((round) => ({
+              gameSourceGameId: round.game.sourceGameId,
               leagueSlug: round.leagueSlug,
               sourceRoundId: round.sourceRoundId,
               name: round.name,
@@ -780,6 +821,7 @@ test(
             })),
             [
               {
+                gameSourceGameId: "game-77",
                 leagueSlug: "game-77",
                 sourceRoundId: "game-77",
                 name: "Round A Remix",
