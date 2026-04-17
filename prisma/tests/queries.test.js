@@ -1,7 +1,13 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { createTempPrismaDb } = require("./helpers/temp-prisma-db");
-const { listArchiveGames } = require("../../src/archive/list-archive-games");
+const {
+  buildArchiveHref,
+  getPlayerRoundModal,
+  getRoundDetail,
+  getSongRoundModal,
+  listArchiveGames,
+} = require("../../src/archive/archive-utils");
 
 const { prisma, cleanup } = createTempPrismaDb({
   prefix: "music-league-queries-",
@@ -14,53 +20,32 @@ function assertNonEmptyArray(value, message) {
   assert.ok(value.length > 0, message);
 }
 
-async function findSongIdPresentInBothRounds() {
-  const song = await prisma.song.findFirst({
+async function findRoundIdBySourceId(sourceRoundId) {
+  const round = await prisma.round.findFirst({
     where: {
-      AND: [
-        {
-          submissions: {
-            some: {
-              round: {
-                sourceRoundId: "seed-r1",
-              },
-            },
-          },
-        },
-        {
-          submissions: {
-            some: {
-              round: {
-                sourceRoundId: "seed-r2",
-              },
-            },
-          },
-        },
-      ],
+      sourceRoundId,
     },
     select: {
       id: true,
     },
   });
 
-  assert.ok(song, "expected a seeded song reused across both rounds");
-  return song.id;
+  assert.ok(round, `expected seeded round ${sourceRoundId} to exist`);
+  return round.id;
 }
 
-async function findPlayerIdWithSubmissions() {
-  const player = await prisma.player.findFirst({
+async function findSongIdBySpotifyUri(spotifyUri) {
+  const song = await prisma.song.findUnique({
     where: {
-      submissions: {
-        some: {},
-      },
+      spotifyUri,
     },
     select: {
       id: true,
     },
   });
 
-  assert.ok(player, "expected a seeded player with submissions");
-  return player.id;
+  assert.ok(song, `expected seeded song ${spotifyUri} to exist`);
+  return song.id;
 }
 
 async function findVoteTarget() {
@@ -77,154 +62,204 @@ async function findVoteTarget() {
 }
 
 test(
-  "archive query groups seeded rounds under explicit game parents across the seeded archive",
+  "archive loader returns ordered round summaries with fallback labels",
   { concurrency: false },
   async () => {
-    const archiveGames = await listArchiveGames(prisma);
+    await prisma.game.create({
+      data: {
+        sourceGameId: "archived-game-id-123456789",
+        displayName: "   ",
+        rounds: {
+          create: {
+            leagueSlug: "archived-game-id-123456789",
+            sourceRoundId: "seed-r-extra",
+            name: "Machine Dreams",
+            occurredAt: new Date("2024-04-11T19:00:00.000Z"),
+          },
+        },
+      },
+    });
 
-    assert.equal(archiveGames.length, 2);
+    const archiveGames = await listArchiveGames({ prisma });
+
     assert.deepEqual(
       archiveGames.map((game) => game.sourceGameId),
-      ["afterparty", "main"],
+      ["archived-game-id-123456789", "afterparty", "main"],
     );
-    assert.ok(
-      archiveGames.every((game) => game.rounds.length >= 2),
-      "expected the seeded archive to include multiple rounds per game group",
+    assert.deepEqual(
+      archiveGames.map((game) => game.displayLabel),
+      ["Game archived", "After Party League", "main"],
     );
-    assert.ok(
-      archiveGames.every((game) =>
-        game.rounds.every(
-          (round) =>
-            round.gameId === game.id && round.leagueSlug === game.sourceGameId,
-        ),
-      ),
-      "expected seeded rounds to resolve through Game and preserve the mirror slug",
+    assert.deepEqual(
+      archiveGames[1].rounds.map((round) => round.name),
+      ["Wildcard Waltz", "Sunset Static"],
+    );
+    assert.deepEqual(
+      archiveGames[2].rounds.map((round) => round.name),
+      ["Opening Night", "Second Spin"],
+    );
+    assert.deepEqual(
+      archiveGames[2].rounds.map((round) => ({
+        submissionCount: round.submissionCount,
+        winnerLabel: round.winnerLabel,
+        statusLabel: round.statusLabel,
+      })),
+      [
+        {
+          submissionCount: 4,
+          winnerLabel: "Tied winners",
+          statusLabel: "scored",
+        },
+        {
+          submissionCount: 4,
+          winnerLabel: null,
+          statusLabel: "pending",
+        },
+      ],
     );
   },
 );
 
 test(
-  "song modal query returns a reused seeded song with artist and submissions",
+  "round detail loader returns deterministic highlights and ordered submissions",
   { concurrency: false },
   async () => {
-    const songId = await findSongIdPresentInBothRounds();
-    const song = await prisma.song.findUnique({
-      where: { id: songId },
-      include: {
-        artist: true,
-        submissions: {
-          include: {
-            player: true,
-            round: {
-              select: {
-                id: true,
-                name: true,
-              },
-            },
-          },
-        },
-      },
-    });
-
-    assert.ok(song);
-    assert.ok(song.artist);
-    assertNonEmptyArray(song.submissions, "expected seeded song submissions");
-    assert.ok(
-      new Set(song.submissions.map((submission) => submission.round.id)).size >= 2,
-      "expected song modal fixture to include both seeded rounds",
-    );
-  },
-);
-
-test(
-  "player modal query returns seeded submissions with song, artist, and round",
-  { concurrency: false },
-  async () => {
-    const playerId = await findPlayerIdWithSubmissions();
-    const player = await prisma.player.findUnique({
-      where: { id: playerId },
-      include: {
-        submissions: {
-          include: {
-            song: {
-              include: {
-                artist: true,
-              },
-            },
-            round: {
-              select: {
-                id: true,
-                name: true,
-              },
-            },
-          },
-        },
-      },
-    });
-
-    assert.ok(player);
-    assertNonEmptyArray(player.submissions, "expected seeded player submissions");
-    assert.ok(
-      player.submissions.every(
-        (submission) => submission.song && submission.song.artist && submission.round,
-      ),
-      "expected player modal includes to resolve song, artist, and round",
-    );
-  },
-);
-
-test(
-  "round page query returns seeded scored submissions in rank order",
-  { concurrency: false },
-  async () => {
-    const round = await prisma.round.findFirst({
-      where: {
-        sourceRoundId: "seed-r1",
-      },
-      include: {
-        game: {
-          select: {
-            id: true,
-            sourceGameId: true,
-          },
-        },
-        submissions: {
-          orderBy: [{ rank: "asc" }, { createdAt: "asc" }],
-          include: {
-            player: {
-              select: {
-                id: true,
-                displayName: true,
-              },
-            },
-            song: {
-              include: {
-                artist: {
-                  select: {
-                    id: true,
-                    name: true,
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-    });
+    const roundId = await findRoundIdBySourceId("seed-r1");
+    const round = await getRoundDetail(roundId, { prisma });
 
     assert.ok(round);
-    assert.ok(round.game);
-    assert.equal(round.leagueSlug, round.game.sourceGameId);
-    assertNonEmptyArray(round.submissions, "expected seeded round submissions");
-
-    const ranks = round.submissions.map((submission) => submission.rank);
+    assert.equal(round.game.displayLabel, "main");
     assert.deepEqual(
-      ranks,
-      [...ranks].sort((left, right) => left - right),
-      "expected round page submissions ordered by rank ascending",
+      round.highlights.map((highlight) => highlight.kind),
+      ["winner", "lowest", "anomaly"],
+    );
+    assert.equal(round.highlights[2].label, "Tie for first");
+    assert.match(round.highlights[2].value, /24 points/);
+    assert.deepEqual(
+      round.submissions.map((submission) => submission.rank),
+      [1, 1, 1, 2],
+    );
+    assert.ok(
+      round.submissions.every(
+        (submission) =>
+          submission.song.artistName.length > 0 &&
+          submission.player.displayName.length > 0,
+      ),
+      "expected round detail submissions to include song and player labels",
     );
   },
 );
+
+test(
+  "round detail loader preserves pending rounds and returns null when a round is missing",
+  { concurrency: false },
+  async () => {
+    const roundId = await findRoundIdBySourceId("seed-r2");
+    const round = await getRoundDetail(roundId, { prisma });
+
+    assert.ok(round);
+    assert.deepEqual(
+      round.highlights.map((highlight) => highlight.kind),
+      ["anomaly"],
+    );
+    assert.ok(
+      round.submissions.every(
+        (submission) => submission.score === null && submission.rank === null,
+      ),
+      "expected pending round detail to preserve unscored submissions",
+    );
+    assert.match(round.highlights[0].value, /Awaiting votes/);
+    assert.equal(await getRoundDetail(999999, { prisma }), null);
+  },
+);
+
+test(
+  "song modal loader stays scoped to the open round",
+  { concurrency: false },
+  async () => {
+    const roundOneId = await findRoundIdBySourceId("seed-r1");
+    const roundThreeId = await findRoundIdBySourceId("seed-r3");
+    const songId = await findSongIdBySpotifyUri("spotify:track:seed-song-005");
+
+    assert.deepEqual(
+      await getSongRoundModal(roundThreeId, songId, { prisma }),
+      {
+        roundId: roundThreeId,
+        songId,
+        title: "The Long Way Home",
+        artistName: "Solar Static",
+        submitterName: "Casey Chorus",
+        score: 21,
+        rank: 2,
+      },
+    );
+    assert.equal(await getSongRoundModal(roundOneId, songId, { prisma }), null);
+  },
+);
+
+test(
+  "player modal loader stays scoped to the open round",
+  { concurrency: false },
+  async () => {
+    const roundOneId = await findRoundIdBySourceId("seed-r1");
+    const roundThreeId = await findRoundIdBySourceId("seed-r3");
+    const player = await prisma.player.create({
+      data: {
+        displayName: "Elena Echo",
+        normalizedName: "elenaecho",
+        sourcePlayerId: "task-04-player-elena",
+      },
+    });
+    const artist = await prisma.artist.create({
+      data: {
+        name: "Aurora Static",
+        normalizedName: "aurorastatic",
+      },
+    });
+    const song = await prisma.song.create({
+      data: {
+        title: "Late Bloom",
+        normalizedTitle: "latebloom",
+        artistId: artist.id,
+        spotifyUri: "spotify:track:task-04-player-scope",
+      },
+    });
+
+    await prisma.submission.create({
+      data: {
+        roundId: roundThreeId,
+        playerId: player.id,
+        songId: song.id,
+        comment: "Scoped modal fixture for TASK-04.",
+      },
+    });
+
+    assert.deepEqual(
+      await getPlayerRoundModal(roundThreeId, player.id, { prisma }),
+      {
+        roundId: roundThreeId,
+        playerId: player.id,
+        displayName: "Elena Echo",
+        songTitle: "Late Bloom",
+        artistName: "Aurora Static",
+        score: null,
+        rank: null,
+      },
+    );
+    assert.equal(await getPlayerRoundModal(roundOneId, player.id, { prisma }), null);
+  },
+);
+
+test("archive href helper canonicalizes round-first URL state", () => {
+  assert.equal(buildArchiveHref({}), "/");
+  assert.equal(buildArchiveHref({ songId: 2, playerId: 3 }), "/");
+  assert.equal(
+    buildArchiveHref({ roundId: 5, songId: 2, playerId: 3 }),
+    "/?round=5&song=2",
+  );
+  assert.equal(buildArchiveHref({ roundId: 5, playerId: 3 }), "/?round=5&player=3");
+  assert.equal(buildArchiveHref({ roundId: -1, playerId: 3 }), "/");
+});
 
 test(
   "overview artist aggregation query returns seeded submissions for app-layer grouping",
