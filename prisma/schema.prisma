@@ -8,69 +8,78 @@ datasource db {
 }
 
 model Player {
-  id             Int          @id @default(autoincrement())
-  displayName    String
-  normalizedName String       @unique
-  sourcePlayerId String?      @unique
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-  submissions    Submission[]
-  votes          Vote[]
+  id                Int                   @id @default(autoincrement())
+  displayName       String
+  normalizedName    String                @unique
+  sourcePlayerId    String?               @unique
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  submissions       Submission[]
+  votes             Vote[]
+  importRows        ImportPlayerRow[]
+  importSubmissions ImportSubmissionRow[]
+  importVotes       ImportVoteRow[]
 }
 
 model Artist {
-  id             Int      @id @default(autoincrement())
-  name           String
-  normalizedName String   @unique
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  songs          Song[]
+  id                Int                   @id @default(autoincrement())
+  name              String
+  normalizedName    String                @unique
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  songs             Song[]
+  importSubmissions ImportSubmissionRow[]
 }
 
 model Song {
-  id              Int          @id @default(autoincrement())
-  title           String
-  normalizedTitle String
-  artistId        Int
-  spotifyUri      String       @unique
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
-  artist          Artist       @relation(fields: [artistId], references: [id])
-  submissions     Submission[]
-  votes           Vote[]
+  id                Int                   @id @default(autoincrement())
+  title             String
+  normalizedTitle   String
+  artistId          Int
+  spotifyUri        String                @unique
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  artist            Artist                @relation(fields: [artistId], references: [id])
+  submissions       Submission[]
+  votes             Vote[]
+  importSubmissions ImportSubmissionRow[]
+  importVotes       ImportVoteRow[]
 }
 
 model Round {
-  id             Int          @id @default(autoincrement())
-  leagueSlug     String       @default("main")
-  name           String
-  description    String?
-  playlistUrl    String?
-  sequenceNumber Int?
-  occurredAt     DateTime?
-  sourceRoundId  String?
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-  submissions    Submission[]
-  votes          Vote[]
+  id                Int                   @id @default(autoincrement())
+  leagueSlug        String                @default("main")
+  name              String
+  description       String?
+  playlistUrl       String?
+  sequenceNumber    Int?
+  occurredAt        DateTime?
+  sourceRoundId     String?
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  submissions       Submission[]
+  votes             Vote[]
+  importRows        ImportRoundRow[]
+  importSubmissions ImportSubmissionRow[]
+  importVotes       ImportVoteRow[]
 
-  @@index([leagueSlug, sequenceNumber])
   @@unique([leagueSlug, sourceRoundId])
+  @@index([leagueSlug, sequenceNumber])
 }
 
 model Submission {
-  id              Int          @id @default(autoincrement())
+  id              Int       @id @default(autoincrement())
   roundId         Int
   playerId        Int
   songId          Int
   score           Int?
   rank            Int?
   comment         String?
-  visibleToVoters Boolean      @default(false)
+  visibleToVoters Boolean   @default(false)
   submittedAt     DateTime?
   sourceImportId  Int?
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   round        Round        @relation(fields: [roundId], references: [id])
   player       Player       @relation(fields: [playerId], references: [id])
@@ -84,7 +93,7 @@ model Submission {
 }
 
 model Vote {
-  id             Int          @id @default(autoincrement())
+  id             Int       @id @default(autoincrement())
   roundId        Int
   voterId        Int
   songId         Int
@@ -92,8 +101,8 @@ model Vote {
   comment        String?
   votedAt        DateTime?
   sourceImportId Int?
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   round        Round        @relation(fields: [roundId], references: [id])
   voter        Player       @relation(fields: [voterId], references: [id])
@@ -107,14 +116,161 @@ model Vote {
 }
 
 model ImportBatch {
-  id             Int          @id @default(autoincrement())
-  sourceType     String
-  sourceFilename String?
-  rowCount       Int          @default(0)
-  status         String
-  notes          String?
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-  submissions    Submission[]
-  votes          Vote[]
+  id                       Int                   @id @default(autoincrement())
+  sourceType               String
+  sourceFilename           String?
+  gameKey                  String?
+  status                   String
+  rowCount                 Int                   @default(0)
+  issueCount               Int                   @default(0)
+  createdPlayerCount       Int                   @default(0)
+  createdRoundCount        Int                   @default(0)
+  createdArtistCount       Int                   @default(0)
+  createdSongCount         Int                   @default(0)
+  submissionsUpsertedCount Int                   @default(0)
+  votesUpsertedCount       Int                   @default(0)
+  committedAt              DateTime?
+  failureStage             String?
+  failureSummary           String?
+  createdAt                DateTime              @default(now())
+  updatedAt                DateTime              @updatedAt
+  sourceFiles              ImportSourceFile[]
+  playerRows               ImportPlayerRow[]
+  roundRows                ImportRoundRow[]
+  submissionRows           ImportSubmissionRow[]
+  voteRows                 ImportVoteRow[]
+  issues                   ImportIssue[]
+  submissions              Submission[]
+  votes                    Vote[]
+
+  @@index([gameKey])
+}
+
+model ImportSourceFile {
+  id            Int         @id @default(autoincrement())
+  importBatchId Int
+  fileKind      String
+  filename      String
+  rowCount      Int
+  createdAt     DateTime    @default(now())
+  importBatch   ImportBatch @relation(fields: [importBatchId], references: [id])
+
+  @@unique([importBatchId, fileKind])
+  @@index([importBatchId])
+}
+
+model ImportPlayerRow {
+  id              Int         @id @default(autoincrement())
+  importBatchId   Int
+  sourceRowNumber Int
+  sourcePlayerId  String
+  rawName         String
+  normalizedName  String
+  recordStatus    String
+  matchedPlayerId Int?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  importBatch     ImportBatch @relation(fields: [importBatchId], references: [id])
+  matchedPlayer   Player?     @relation(fields: [matchedPlayerId], references: [id])
+
+  @@unique([importBatchId, sourcePlayerId])
+  @@unique([importBatchId, sourceRowNumber])
+  @@index([importBatchId, recordStatus])
+}
+
+model ImportRoundRow {
+  id              Int         @id @default(autoincrement())
+  importBatchId   Int
+  sourceRowNumber Int
+  sourceRoundId   String
+  rawName         String
+  rawDescription  String?
+  rawPlaylistUrl  String?
+  rawOccurredAt   DateTime?
+  recordStatus    String
+  matchedRoundId  Int?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  importBatch     ImportBatch @relation(fields: [importBatchId], references: [id])
+  matchedRound    Round?      @relation(fields: [matchedRoundId], references: [id])
+
+  @@unique([importBatchId, sourceRoundId])
+  @@unique([importBatchId, sourceRowNumber])
+  @@index([importBatchId, recordStatus])
+}
+
+model ImportSubmissionRow {
+  id                 Int         @id @default(autoincrement())
+  importBatchId      Int
+  sourceRowNumber    Int
+  sourceRoundId      String
+  sourceSubmitterId  String
+  spotifyUri         String
+  rawTitle           String
+  rawArtist          String
+  rawSubmittedAt     DateTime?
+  rawComment         String?
+  rawVisibleToVoters Boolean?
+  recordStatus       String
+  matchedArtistId    Int?
+  matchedSongId      Int?
+  matchedPlayerId    Int?
+  matchedRoundId     Int?
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+  importBatch        ImportBatch @relation(fields: [importBatchId], references: [id])
+  matchedArtist      Artist?     @relation(fields: [matchedArtistId], references: [id])
+  matchedSong        Song?       @relation(fields: [matchedSongId], references: [id])
+  matchedPlayer      Player?     @relation(fields: [matchedPlayerId], references: [id])
+  matchedRound       Round?      @relation(fields: [matchedRoundId], references: [id])
+
+  @@unique([importBatchId, sourceRowNumber])
+  @@index([importBatchId, recordStatus])
+  @@index([importBatchId, sourceRoundId])
+  @@index([importBatchId, sourceSubmitterId])
+  @@index([importBatchId, spotifyUri])
+}
+
+model ImportVoteRow {
+  id                Int         @id @default(autoincrement())
+  importBatchId     Int
+  sourceRowNumber   Int
+  sourceRoundId     String
+  sourceVoterId     String
+  spotifyUri        String
+  rawPointsAssigned Int
+  rawComment        String?
+  rawVotedAt        DateTime?
+  recordStatus      String
+  matchedSongId     Int?
+  matchedVoterId    Int?
+  matchedRoundId    Int?
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  importBatch       ImportBatch @relation(fields: [importBatchId], references: [id])
+  matchedSong       Song?       @relation(fields: [matchedSongId], references: [id])
+  matchedVoter      Player?     @relation(fields: [matchedVoterId], references: [id])
+  matchedRound      Round?      @relation(fields: [matchedRoundId], references: [id])
+
+  @@unique([importBatchId, sourceRowNumber])
+  @@index([importBatchId, recordStatus])
+  @@index([importBatchId, sourceRoundId])
+  @@index([importBatchId, sourceVoterId])
+  @@index([importBatchId, spotifyUri])
+}
+
+model ImportIssue {
+  id              Int         @id @default(autoincrement())
+  importBatchId   Int
+  sourceFileKind  String
+  sourceRowNumber Int?
+  recordKind      String
+  issueCode       String
+  blocking        Boolean     @default(true)
+  message         String
+  rowPreviewJson  String?
+  createdAt       DateTime    @default(now())
+  importBatch     ImportBatch @relation(fields: [importBatchId], references: [id])
+
+  @@index([importBatchId, sourceFileKind])
 }
