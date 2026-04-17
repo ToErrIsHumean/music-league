@@ -31,7 +31,7 @@ async function commitImportBatch(batchId, input = {}) {
         const voteRows = requireReadyRows(batch.voteRows, "vote", batch.id);
 
         const playerPayloads = buildPlayerPayloads(playerRows, batch.id);
-        const game = await upsertGame(tx, batch);
+        const game = await upsertGameForBatch(tx, batch);
         const roundPayloads = buildRoundPayloads(roundRows, batch.id, game);
         const artistPayloads = buildArtistPayloads(submissionRows, batch.id);
         const songPayloads = buildSongPayloads(submissionRows, batch.id);
@@ -242,10 +242,10 @@ function buildPlayerPayloads(rows, batchId) {
   }));
 }
 
-function buildRoundPayloads(rows, batchId, gameKey) {
+function buildRoundPayloads(rows, batchId, game) {
   return rows.map((row) => ({
-    gameId: gameKey.id,
-    leagueSlug: gameKey.sourceGameId,
+    gameId: game.id,
+    leagueSlug: game.sourceGameId,
     sourceRoundId: requireNonBlankString(
       row.sourceRoundId,
       "sourceRoundId",
@@ -303,7 +303,7 @@ function buildSongPayloads(rows, batchId) {
   return [...payloadsBySpotifyUri.values()];
 }
 
-async function upsertGame(tx, batch) {
+async function upsertGameForBatch(tx, batch) {
   const sourceGameId = batch.gameKey.trim();
   const displayName = normalizeOptionalDisplayName(batch.sourceFilename);
   const existingGame = await tx.game.findUnique({
