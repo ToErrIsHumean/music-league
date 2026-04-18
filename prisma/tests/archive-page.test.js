@@ -161,3 +161,108 @@ test(
     assert.match(markup, /Round detail/);
   },
 );
+
+test(
+  "player flows keep control of nested selection and resolve player submissions inside the player modal state",
+  { concurrency: false },
+  async () => {
+    const roundId = await findRoundIdBySourceId("seed-r1");
+    const baseProps = await buildGameArchivePageProps({
+      prisma,
+      searchParams: Promise.resolve({
+        round: String(roundId),
+      }),
+    });
+    const targetSubmission = baseProps.openRound.submissions[0];
+    const playerHistorySubmission = await prisma.submission.findFirst({
+      where: {
+        playerId: targetSubmission.player.id,
+        round: {
+          gameId: baseProps.openRound.game.id,
+        },
+        id: {
+          not: targetSubmission.id,
+        },
+      },
+      select: {
+        id: true,
+      },
+      orderBy: {
+        id: "asc",
+      },
+    });
+
+    assert.ok(playerHistorySubmission, "expected a second same-game submission for the target player");
+
+    const props = await buildGameArchivePageProps({
+      prisma,
+      searchParams: Promise.resolve({
+        round: String(roundId),
+        player: String(targetSubmission.player.id),
+        playerSubmission: String(playerHistorySubmission.id),
+        song: String(targetSubmission.song.id),
+      }),
+    });
+
+    assert.deepEqual(props.nestedEntity, {
+      kind: "player",
+      id: targetSubmission.player.id,
+    });
+    assert.equal(props.openSongModal, null);
+    assert.ok(props.openPlayerModal, "expected player modal content to load");
+    assert.equal(props.openPlayerModal.activeSubmissionId, playerHistorySubmission.id);
+    assert.equal(props.openPlayerModal.activeSubmission?.submissionId, playerHistorySubmission.id);
+  },
+);
+
+test(
+  "invalid player submissions fall back to the player summary without reopening the round song shell",
+  { concurrency: false },
+  async () => {
+    const roundId = await findRoundIdBySourceId("seed-r1");
+    const baseProps = await buildGameArchivePageProps({
+      prisma,
+      searchParams: Promise.resolve({
+        round: String(roundId),
+      }),
+    });
+    const targetSubmission = baseProps.openRound.submissions[0];
+    const foreignSubmission = await prisma.submission.findFirst({
+      where: {
+        playerId: {
+          not: targetSubmission.player.id,
+        },
+        round: {
+          gameId: baseProps.openRound.game.id,
+        },
+      },
+      select: {
+        id: true,
+      },
+      orderBy: {
+        id: "asc",
+      },
+    });
+
+    assert.ok(foreignSubmission, "expected a different player's submission for fallback coverage");
+
+    const props = await buildGameArchivePageProps({
+      prisma,
+      searchParams: Promise.resolve({
+        round: String(roundId),
+        player: String(targetSubmission.player.id),
+        playerSubmission: String(foreignSubmission.id),
+        song: String(targetSubmission.song.id),
+      }),
+    });
+
+    assert.deepEqual(props.nestedEntity, {
+      kind: "player",
+      id: targetSubmission.player.id,
+    });
+    assert.equal(props.openSongModal, null);
+    assert.ok(props.openPlayerModal, "expected player modal content to remain open");
+    assert.equal(props.openPlayerModal.activeSubmissionId, null);
+    assert.equal(props.openPlayerModal.activeSubmission, null);
+  },
+);

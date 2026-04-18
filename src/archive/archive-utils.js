@@ -1023,15 +1023,21 @@ function buildArchiveHref(input = {}) {
   }
 
   const songId = normalizePositiveInteger(input.songId);
-  const playerId = songId === null ? normalizePositiveInteger(input.playerId) : null;
+  const playerId = normalizePositiveInteger(input.playerId);
+  const playerSubmissionId =
+    playerId === null ? null : normalizePositiveInteger(input.playerSubmissionId);
   const params = new URLSearchParams();
 
   params.set("round", String(roundId));
 
-  if (songId !== null) {
-    params.set("song", String(songId));
-  } else if (playerId !== null) {
+  if (playerId !== null) {
     params.set("player", String(playerId));
+
+    if (playerSubmissionId !== null) {
+      params.set("playerSubmission", String(playerSubmissionId));
+    }
+  } else if (songId !== null) {
+    params.set("song", String(songId));
   }
 
   return `/?${params.toString()}`;

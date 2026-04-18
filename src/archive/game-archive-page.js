@@ -1,6 +1,7 @@
 const React = require("react");
 const {
   buildArchiveHref,
+  getPlayerModalSubmission,
   getPlayerRoundModal,
   getRoundDetail,
   getSongRoundModal,
@@ -54,7 +55,51 @@ async function resolveNestedSelection(searchParams, roundSelection, input) {
     };
   }
 
+  const requestedPlayerId = normalizeQueryInteger(searchParams?.player);
+  const requestedPlayerSubmissionId = normalizeQueryInteger(searchParams?.playerSubmission);
   const requestedSongId = normalizeQueryInteger(searchParams?.song);
+
+  if (requestedPlayerId !== null) {
+    const openPlayerModal = await getPlayerRoundModal(
+      roundSelection.openRound.id,
+      requestedPlayerId,
+      input,
+    );
+
+    if (!openPlayerModal) {
+      return {
+        nestedEntity: null,
+        openSongModal: null,
+        openPlayerModal: null,
+      };
+    }
+
+    let activeSubmissionId = null;
+    let activeSubmission = null;
+
+    if (requestedPlayerSubmissionId !== null) {
+      activeSubmission = await getPlayerModalSubmission(
+        roundSelection.openRound.id,
+        requestedPlayerId,
+        requestedPlayerSubmissionId,
+        input,
+      );
+      activeSubmissionId = activeSubmission?.submissionId ?? null;
+    }
+
+    return {
+      nestedEntity: {
+        kind: "player",
+        id: openPlayerModal.playerId,
+      },
+      openSongModal: null,
+      openPlayerModal: {
+        ...openPlayerModal,
+        activeSubmissionId,
+        activeSubmission,
+      },
+    };
+  }
 
   if (requestedSongId !== null) {
     const openSongModal = await getSongRoundModal(roundSelection.openRound.id, requestedSongId, input);
@@ -68,27 +113,6 @@ async function resolveNestedSelection(searchParams, roundSelection, input) {
         : null,
       openSongModal,
       openPlayerModal: null,
-    };
-  }
-
-  const requestedPlayerId = normalizeQueryInteger(searchParams?.player);
-
-  if (requestedPlayerId !== null) {
-    const openPlayerModal = await getPlayerRoundModal(
-      roundSelection.openRound.id,
-      requestedPlayerId,
-      input,
-    );
-
-    return {
-      nestedEntity: openPlayerModal
-        ? {
-            kind: "player",
-            id: openPlayerModal.playerId,
-          }
-        : null,
-      openSongModal: null,
-      openPlayerModal,
     };
   }
 

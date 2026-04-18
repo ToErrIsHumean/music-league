@@ -757,9 +757,15 @@ test("archive href helper canonicalizes round-first URL state", () => {
   assert.equal(buildArchiveHref({ songId: 2, playerId: 3 }), "/");
   assert.equal(
     buildArchiveHref({ roundId: 5, songId: 2, playerId: 3 }),
-    "/?round=5&song=2",
+    "/?round=5&player=3",
   );
   assert.equal(buildArchiveHref({ roundId: 5, playerId: 3 }), "/?round=5&player=3");
+  assert.equal(
+    buildArchiveHref({ roundId: 5, playerId: 3, playerSubmissionId: 9 }),
+    "/?round=5&player=3&playerSubmission=9",
+  );
+  assert.equal(buildArchiveHref({ roundId: 5, playerSubmissionId: 9 }), "/?round=5");
+  assert.equal(buildArchiveHref({ roundId: 5, songId: 2 }), "/?round=5&song=2");
   assert.equal(buildArchiveHref({ roundId: -1, playerId: 3 }), "/");
 });
 
