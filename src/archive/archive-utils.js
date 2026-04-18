@@ -45,6 +45,34 @@ function compareSubmissionOrder(left, right) {
   return compareByCreatedAtAscending(left, right);
 }
 
+function comparePlayerHistoryOrder(left, right) {
+  const occurredAtComparison = compareNullableDescending(
+    left.round.occurredAt,
+    right.round.occurredAt,
+  );
+
+  if (occurredAtComparison !== 0) {
+    return occurredAtComparison;
+  }
+
+  const sequenceComparison = compareNullableDescending(
+    left.round.sequenceNumber,
+    right.round.sequenceNumber,
+  );
+
+  if (sequenceComparison !== 0) {
+    return sequenceComparison;
+  }
+
+  const createdAtComparison = compareNullableDescending(left.createdAt, right.createdAt);
+
+  if (createdAtComparison !== 0) {
+    return createdAtComparison;
+  }
+
+  return right.id - left.id;
+}
+
 function resolveArchiveInput(input = {}) {
   if (isPrismaClientLike(input)) {
     return {
@@ -69,6 +97,290 @@ function normalizePositiveInteger(value) {
 
 function toIsoString(value) {
   return value instanceof Date ? value.toISOString() : null;
+}
+
+function isScoredSubmission(submission) {
+  return submission.score !== null && submission.rank !== null;
+}
+
+function average(values) {
+  if (values.length === 0) {
+    return 0;
+  }
+
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function calculateScoreStdDev(scores) {
+  if (scores.length < 2) {
+    return 0;
+  }
+
+  const mean = average(scores);
+  const variance = average(scores.map((score) => (score - mean) ** 2));
+
+  return Math.sqrt(variance);
+}
+
+function buildPlayerHistoryRow(submission) {
+  return {
+    submissionId: submission.id,
+    roundId: submission.round.id,
+    roundName: submission.round.name,
+    occurredAt: toIsoString(submission.round.occurredAt),
+    song: {
+      id: submission.song.id,
+      title: submission.song.title,
+      artistName: submission.song.artist.name,
+    },
+    score: submission.score,
+    rank: submission.rank,
+    comment: submission.comment,
+  };
+}
+
+function buildGameMetricsByPlayer(gameSubmissions) {
+  const scoredSubmissions = gameSubmissions.filter(isScoredSubmission);
+  const scoredRoundSizes = new Map();
+
+  for (const submission of scoredSubmissions) {
+    scoredRoundSizes.set(submission.roundId, (scoredRoundSizes.get(submission.roundId) ?? 0) + 1);
+  }
+
+  const submissionsByPlayer = new Map();
+
+  for (const submission of scoredSubmissions) {
+    const scoredRoundSize = scoredRoundSizes.get(submission.roundId) ?? 0;
+    const finishPercentile = (submission.rank - 1) / Math.max(scoredRoundSize - 1, 1);
+    const playerSubmissions = submissionsByPlayer.get(submission.playerId) ?? [];
+
+    playerSubmissions.push({
+      finishPercentile,
+      rank: submission.rank,
+      score: submission.score,
+    });
+    submissionsByPlayer.set(submission.playerId, playerSubmissions);
+  }
+
+  const metricsByPlayer = new Map();
+
+  for (const [playerId, playerSubmissions] of submissionsByPlayer.entries()) {
+    const wins = playerSubmissions.filter((submission) => submission.rank === 1).length;
+    const scores = playerSubmissions.map((submission) => submission.score);
+    const finishPercentiles = playerSubmissions.map((submission) => submission.finishPercentile);
+
+    metricsByPlayer.set(playerId, {
+      scoredCount: playerSubmissions.length,
+      wins,
+      averageFinishPercentile: average(finishPercentiles),
+      scoreStdDev: calculateScoreStdDev(scores),
+      winRate: wins / playerSubmissions.length,
+    });
+  }
+
+  return metricsByPlayer;
+}
+
+function buildGameBaselines(metricsByPlayer) {
+  const playerMetrics = [...metricsByPlayer.values()];
+
+  return {
+    playerCount: playerMetrics.length,
+    averageFinishPercentile: average(
+      playerMetrics.map((metrics) => metrics.averageFinishPercentile),
+    ),
+    scoreStdDev: average(playerMetrics.map((metrics) => metrics.scoreStdDev)),
+    winRate: average(playerMetrics.map((metrics) => metrics.winRate)),
+  };
+}
+
+function selectPlayerNotablePicks(scoredHistory) {
+  if (scoredHistory.length === 0) {
+    return {
+      best: null,
+      worst: null,
+    };
+  }
+
+  const best = [...scoredHistory].sort((left, right) => {
+    const rankComparison = compareNullableAscending(left.rank, right.rank);
+
+    if (rankComparison !== 0) {
+      return rankComparison;
+    }
+
+    const scoreComparison = compareNullableDescending(left.score, right.score);
+
+    if (scoreComparison !== 0) {
+      return scoreComparison;
+    }
+
+    const occurredAtComparison = compareNullableDescending(left.occurredAt, right.occurredAt);
+
+    if (occurredAtComparison !== 0) {
+      return occurredAtComparison;
+    }
+
+    return right.submissionId - left.submissionId;
+  })[0];
+
+  if (scoredHistory.length === 1) {
+    return {
+      best,
+      worst: null,
+    };
+  }
+
+  const worst = [...scoredHistory]
+    .sort((left, right) => {
+      const rankComparison = compareNullableDescending(left.rank, right.rank);
+
+      if (rankComparison !== 0) {
+        return rankComparison;
+      }
+
+      const scoreComparison = compareNullableAscending(left.score, right.score);
+
+      if (scoreComparison !== 0) {
+        return scoreComparison;
+      }
+
+      const occurredAtComparison = compareNullableDescending(left.occurredAt, right.occurredAt);
+
+      if (occurredAtComparison !== 0) {
+        return occurredAtComparison;
+      }
+
+      return right.submissionId - left.submissionId;
+    })
+    .find((submission) => submission.submissionId !== best.submissionId);
+
+  return {
+    best,
+    worst: worst ?? null,
+  };
+}
+
+function derivePlayerTrait(input) {
+  const { playerMetrics, gameBaselines } = input;
+
+  if (playerMetrics.scoredCount === 0) {
+    return null;
+  }
+
+  const candidates = [
+    {
+      kind: "win-rate",
+      line: "Wins more rounds than anyone likes to admit.",
+      eligible: playerMetrics.wins >= 2,
+      dominanceDelta: playerMetrics.winRate - gameBaselines.winRate,
+      priority: 0,
+    },
+    {
+      kind: "variance",
+      line: "Could be first, could be last. You never know.",
+      eligible: playerMetrics.scoredCount >= 2,
+      dominanceDelta: playerMetrics.scoreStdDev - gameBaselines.scoreStdDev,
+      priority: 1,
+    },
+    {
+      kind: "top-finish",
+      line: "Consistently near the top - plays it safe, plays it well.",
+      eligible: true,
+      dominanceDelta:
+        gameBaselines.averageFinishPercentile - playerMetrics.averageFinishPercentile,
+      priority: 2,
+    },
+    {
+      kind: "low-finish",
+      line: "Bravely marches to their own drummer.",
+      eligible: true,
+      dominanceDelta:
+        playerMetrics.averageFinishPercentile - gameBaselines.averageFinishPercentile,
+      priority: 3,
+    },
+  ];
+
+  const dominantCandidate = candidates
+    .filter((candidate) => candidate.eligible && candidate.dominanceDelta > 0)
+    .sort((left, right) => {
+      if (left.dominanceDelta !== right.dominanceDelta) {
+        return right.dominanceDelta - left.dominanceDelta;
+      }
+
+      return left.priority - right.priority;
+    })[0];
+
+  if (dominantCandidate) {
+    return {
+      kind: dominantCandidate.kind,
+      line: dominantCandidate.line,
+    };
+  }
+
+  const fallbackCandidate =
+    playerMetrics.averageFinishPercentile <= gameBaselines.averageFinishPercentile
+      ? candidates.find((candidate) => candidate.kind === "top-finish")
+      : candidates.find((candidate) => candidate.kind === "low-finish");
+
+  return fallbackCandidate
+    ? {
+        kind: fallbackCandidate.kind,
+        line: fallbackCandidate.line,
+      }
+    : null;
+}
+
+async function getOriginPlayerContext(originRoundId, playerId, prisma) {
+  const originSubmission = await prisma.submission.findFirst({
+    where: {
+      roundId: originRoundId,
+      playerId,
+    },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    select: {
+      roundId: true,
+      score: true,
+      rank: true,
+      round: {
+        select: {
+          gameId: true,
+        },
+      },
+      player: {
+        select: {
+          id: true,
+          displayName: true,
+        },
+      },
+      song: {
+        select: {
+          title: true,
+          artist: {
+            select: {
+              name: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  if (!originSubmission) {
+    return null;
+  }
+
+  return {
+    originRoundId,
+    originGameId: originSubmission.round.gameId,
+    playerId: originSubmission.player.id,
+    displayName: originSubmission.player.displayName,
+    legacyRoundId: originSubmission.roundId,
+    legacySongTitle: originSubmission.song.title,
+    legacyArtistName: originSubmission.song.artist.name,
+    legacyScore: originSubmission.score,
+    legacyRank: originSubmission.rank,
+  };
 }
 
 function resolveGameDisplayLabel(game) {
@@ -517,22 +829,153 @@ async function getPlayerRoundModal(roundId, playerId, input = {}) {
   const { prisma, ownsPrismaClient } = resolveArchiveInput(input);
 
   try {
-    const submission = await prisma.submission.findFirst({
+    const originContext = await getOriginPlayerContext(roundId, playerId, prisma);
+
+    if (!originContext) {
+      return null;
+    }
+
+    const [playerSubmissions, gameSubmissions] = await Promise.all([
+      prisma.submission.findMany({
+        where: {
+          playerId,
+          round: {
+            gameId: originContext.originGameId,
+          },
+        },
+        select: {
+          id: true,
+          score: true,
+          rank: true,
+          comment: true,
+          createdAt: true,
+          round: {
+            select: {
+              id: true,
+              name: true,
+              occurredAt: true,
+              sequenceNumber: true,
+            },
+          },
+          song: {
+            select: {
+              id: true,
+              title: true,
+              artist: {
+                select: {
+                  name: true,
+                },
+              },
+            },
+          },
+        },
+      }),
+      prisma.submission.findMany({
+        where: {
+          round: {
+            gameId: originContext.originGameId,
+          },
+        },
+        select: {
+          playerId: true,
+          roundId: true,
+          score: true,
+          rank: true,
+        },
+      }),
+    ]);
+
+    const history = [...playerSubmissions]
+      .sort(comparePlayerHistoryOrder)
+      .map(buildPlayerHistoryRow);
+    const scoredHistory = history.filter(isScoredSubmission);
+
+    if (scoredHistory.length === 0) {
+      return {
+        originRoundId: originContext.originRoundId,
+        originGameId: originContext.originGameId,
+        playerId: originContext.playerId,
+        displayName: originContext.displayName,
+        traitLine: null,
+        traitKind: null,
+        notablePicks: {
+          best: null,
+          worst: null,
+        },
+        history,
+        roundId: originContext.legacyRoundId,
+        songTitle: originContext.legacySongTitle,
+        artistName: originContext.legacyArtistName,
+        score: originContext.legacyScore,
+        rank: originContext.legacyRank,
+      };
+    }
+
+    const metricsByPlayer = buildGameMetricsByPlayer(gameSubmissions);
+    const playerMetrics = metricsByPlayer.get(playerId) ?? {
+      scoredCount: 0,
+      wins: 0,
+      averageFinishPercentile: 0,
+      scoreStdDev: 0,
+      winRate: 0,
+    };
+    const trait = derivePlayerTrait({
+      playerMetrics,
+      gameBaselines: buildGameBaselines(metricsByPlayer),
+    });
+
+    return {
+      originRoundId: originContext.originRoundId,
+      originGameId: originContext.originGameId,
+      playerId: originContext.playerId,
+      displayName: originContext.displayName,
+      traitLine: trait?.line ?? null,
+      traitKind: trait?.kind ?? null,
+      notablePicks: selectPlayerNotablePicks(scoredHistory),
+      history,
+      roundId: originContext.legacyRoundId,
+      songTitle: originContext.legacySongTitle,
+      artistName: originContext.legacyArtistName,
+      score: originContext.legacyScore,
+      rank: originContext.legacyRank,
+    };
+  } finally {
+    if (ownsPrismaClient) {
+      await prisma.$disconnect();
+    }
+  }
+}
+
+async function getPlayerModalSubmission(originRoundId, playerId, submissionId, input = {}) {
+  const { prisma, ownsPrismaClient } = resolveArchiveInput(input);
+
+  try {
+    const originContext = await getOriginPlayerContext(originRoundId, playerId, prisma);
+
+    if (!originContext) {
+      return null;
+    }
+
+    const submission = await prisma.submission.findUnique({
       where: {
-        roundId,
-        playerId,
+        id: submissionId,
       },
-      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       select: {
-        roundId: true,
-        player: {
+        id: true,
+        playerId: true,
+        score: true,
+        rank: true,
+        comment: true,
+        round: {
           select: {
             id: true,
-            displayName: true,
+            gameId: true,
+            name: true,
           },
         },
         song: {
           select: {
+            id: true,
             title: true,
             artist: {
               select: {
@@ -541,23 +984,29 @@ async function getPlayerRoundModal(roundId, playerId, input = {}) {
             },
           },
         },
-        score: true,
-        rank: true,
       },
     });
 
-    if (!submission) {
+    if (
+      !submission ||
+      submission.playerId !== playerId ||
+      submission.round.gameId !== originContext.originGameId
+    ) {
       return null;
     }
 
     return {
-      roundId: submission.roundId,
-      playerId: submission.player.id,
-      displayName: submission.player.displayName,
-      songTitle: submission.song.title,
+      originRoundId,
+      playerId,
+      submissionId: submission.id,
+      playerName: originContext.displayName,
+      roundId: submission.round.id,
+      roundName: submission.round.name,
+      title: submission.song.title,
       artistName: submission.song.artist.name,
       score: submission.score,
       rank: submission.rank,
+      comment: submission.comment,
     };
   } finally {
     if (ownsPrismaClient) {
@@ -590,8 +1039,11 @@ function buildArchiveHref(input = {}) {
 
 module.exports = {
   buildArchiveHref,
+  derivePlayerTrait,
+  getPlayerModalSubmission,
   getPlayerRoundModal,
   getRoundDetail,
   getSongRoundModal,
   listArchiveGames,
+  selectPlayerNotablePicks,
 };
