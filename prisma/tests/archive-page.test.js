@@ -163,6 +163,44 @@ test(
 );
 
 test(
+  "round-scoped song URLs keep milestone 3 close behavior outside player flow",
+  { concurrency: false },
+  async () => {
+    const roundId = await findRoundIdBySourceId("seed-r1");
+    const baseProps = await buildGameArchivePageProps({
+      prisma,
+      searchParams: Promise.resolve({
+        round: String(roundId),
+      }),
+    });
+    const targetSubmission = baseProps.openRound.submissions[0];
+    const props = await buildGameArchivePageProps({
+      prisma,
+      searchParams: Promise.resolve({
+        round: String(roundId),
+        song: String(targetSubmission.song.id),
+      }),
+    });
+    const markup = renderToStaticMarkup(React.createElement(GameArchivePage, props));
+    const songShellMarkup = markup.slice(markup.lastIndexOf('data-nested-kind="song"'));
+    const closeHrefMatches = songShellMarkup.match(
+      new RegExp(`href=\"/\\?round=${roundId}\"`, "g"),
+    );
+
+    assert.deepEqual(props.nestedEntity, {
+      kind: "song",
+      id: targetSubmission.song.id,
+    });
+    assert.ok(props.openSongModal, "expected the legacy round-scoped song shell to stay open");
+    assert.equal(props.openPlayerModal, null);
+    assert.deepEqual(closeHrefMatches, [`href="/?round=${roundId}"`, `href="/?round=${roundId}"`]);
+    assert.ok(!songShellMarkup.includes("playerSubmission="));
+    assert.ok(!songShellMarkup.includes(`player=${targetSubmission.player.id}`));
+    assert.match(songShellMarkup, /Back to round/);
+  },
+);
+
+test(
   "player flows keep control of nested selection and resolve player submissions inside the player modal state",
   { concurrency: false },
   async () => {

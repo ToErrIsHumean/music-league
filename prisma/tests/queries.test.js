@@ -19,6 +19,7 @@ const { prisma, cleanup } = createTempPrismaDb({
 });
 
 let task01FixtureCounter = 0;
+let task04CoverageFixtureCounter = 0;
 
 function assertNonEmptyArray(value, message) {
   assert.ok(Array.isArray(value), message);
@@ -296,6 +297,287 @@ async function createTask01Fixture() {
   };
 }
 
+async function createTask04CoverageFixture() {
+  task04CoverageFixtureCounter += 1;
+
+  const suffix = `task-04-coverage-${task04CoverageFixtureCounter}`;
+  const game = await prisma.game.create({
+    data: {
+      sourceGameId: `${suffix}-game`,
+      displayName: `Task 04 Coverage ${task04CoverageFixtureCounter}`,
+    },
+  });
+  const artist = await prisma.artist.create({
+    data: {
+      name: `Task 04 Coverage Artist ${task04CoverageFixtureCounter}`,
+      normalizedName: `task04coverageartist${task04CoverageFixtureCounter}`,
+    },
+  });
+  const [originRound, laterRound, finalRound, pendingRound] = await Promise.all([
+    prisma.round.create({
+      data: {
+        gameId: game.id,
+        leagueSlug: game.sourceGameId,
+        sourceRoundId: `${suffix}-r1`,
+        name: `Task 04 Origin ${task04CoverageFixtureCounter}`,
+        sequenceNumber: 1,
+        occurredAt: new Date("2024-04-01T19:00:00.000Z"),
+      },
+    }),
+    prisma.round.create({
+      data: {
+        gameId: game.id,
+        leagueSlug: game.sourceGameId,
+        sourceRoundId: `${suffix}-r2`,
+        name: `Task 04 Later ${task04CoverageFixtureCounter}`,
+        sequenceNumber: 2,
+        occurredAt: new Date("2024-04-08T19:00:00.000Z"),
+      },
+    }),
+    prisma.round.create({
+      data: {
+        gameId: game.id,
+        leagueSlug: game.sourceGameId,
+        sourceRoundId: `${suffix}-r3`,
+        name: `Task 04 Finale ${task04CoverageFixtureCounter}`,
+        sequenceNumber: 3,
+        occurredAt: new Date("2024-04-15T19:00:00.000Z"),
+      },
+    }),
+    prisma.round.create({
+      data: {
+        gameId: game.id,
+        leagueSlug: game.sourceGameId,
+        sourceRoundId: `${suffix}-r4`,
+        name: `Task 04 Pending ${task04CoverageFixtureCounter}`,
+        sequenceNumber: 4,
+        occurredAt: new Date("2024-04-22T19:00:00.000Z"),
+      },
+    }),
+  ]);
+  const [winRatePlayer, variancePlayer, topFinishPlayer, lowFinishPlayer, zeroPlayer] =
+    await Promise.all([
+      prisma.player.create({
+        data: {
+          displayName: `Win Rate Riley ${task04CoverageFixtureCounter}`,
+          normalizedName: `winrateriley${task04CoverageFixtureCounter}`,
+          sourcePlayerId: `${suffix}-win-rate`,
+        },
+      }),
+      prisma.player.create({
+        data: {
+          displayName: `Variance Vega ${task04CoverageFixtureCounter}`,
+          normalizedName: `variancevega${task04CoverageFixtureCounter}`,
+          sourcePlayerId: `${suffix}-variance`,
+        },
+      }),
+      prisma.player.create({
+        data: {
+          displayName: `Topline Tess ${task04CoverageFixtureCounter}`,
+          normalizedName: `toplinetess${task04CoverageFixtureCounter}`,
+          sourcePlayerId: `${suffix}-top-finish`,
+        },
+      }),
+      prisma.player.create({
+        data: {
+          displayName: `Lowlight Lou ${task04CoverageFixtureCounter}`,
+          normalizedName: `lowlightlou${task04CoverageFixtureCounter}`,
+          sourcePlayerId: `${suffix}-low-finish`,
+        },
+      }),
+      prisma.player.create({
+        data: {
+          displayName: `Zero Zara ${task04CoverageFixtureCounter}`,
+          normalizedName: `zerozara${task04CoverageFixtureCounter}`,
+          sourcePlayerId: `${suffix}-zero`,
+        },
+      }),
+    ]);
+
+  const songs = {};
+  const songTitles = [
+    "Win Rate Origin",
+    "Win Rate Later",
+    "Win Rate Finale",
+    "Variance Origin",
+    "Variance Later",
+    "Variance Finale",
+    "Top Finish Origin",
+    "Low Finish Origin",
+    "Low Finish Later",
+    "Low Finish Finale",
+    "Zero Origin",
+    "Zero Pending",
+  ];
+
+  for (const [index, title] of songTitles.entries()) {
+    const song = await prisma.song.create({
+      data: {
+        title: `${title} ${task04CoverageFixtureCounter}`,
+        normalizedTitle: `${title.replace(/\s+/g, "").toLowerCase()}${task04CoverageFixtureCounter}`,
+        artistId: artist.id,
+        spotifyUri: `spotify:track:${suffix}-${index + 1}`,
+      },
+    });
+
+    songs[title] = song;
+  }
+
+  const winRateOrigin = await prisma.submission.create({
+    data: {
+      roundId: originRound.id,
+      playerId: winRatePlayer.id,
+      songId: songs["Win Rate Origin"].id,
+      score: 20,
+      rank: 1,
+      comment: "Starts with a win.",
+      createdAt: new Date("2024-03-29T18:00:00.000Z"),
+    },
+  });
+  const varianceOrigin = await prisma.submission.create({
+    data: {
+      roundId: originRound.id,
+      playerId: variancePlayer.id,
+      songId: songs["Variance Origin"].id,
+      score: 14,
+      rank: 3,
+      comment: "The volatility starts low.",
+      createdAt: new Date("2024-03-29T18:05:00.000Z"),
+    },
+  });
+  const topFinishOrigin = await prisma.submission.create({
+    data: {
+      roundId: originRound.id,
+      playerId: topFinishPlayer.id,
+      songId: songs["Top Finish Origin"].id,
+      score: 18,
+      rank: 2,
+      comment: "Single scored runner-up.",
+      createdAt: new Date("2024-03-29T18:10:00.000Z"),
+    },
+  });
+  const lowFinishOrigin = await prisma.submission.create({
+    data: {
+      roundId: originRound.id,
+      playerId: lowFinishPlayer.id,
+      songId: songs["Low Finish Origin"].id,
+      score: 8,
+      rank: 4,
+      comment: "Starts at the bottom.",
+      createdAt: new Date("2024-03-29T18:15:00.000Z"),
+    },
+  });
+  const zeroOrigin = await prisma.submission.create({
+    data: {
+      roundId: originRound.id,
+      playerId: zeroPlayer.id,
+      songId: songs["Zero Origin"].id,
+      score: null,
+      rank: null,
+      comment: "Waiting on votes.",
+      createdAt: new Date("2024-03-29T18:20:00.000Z"),
+    },
+  });
+  const winRateLater = await prisma.submission.create({
+    data: {
+      roundId: laterRound.id,
+      playerId: winRatePlayer.id,
+      songId: songs["Win Rate Later"].id,
+      score: 20,
+      rank: 1,
+      comment: "Wins again with the same score.",
+      createdAt: new Date("2024-04-05T18:00:00.000Z"),
+    },
+  });
+  const varianceLater = await prisma.submission.create({
+    data: {
+      roundId: laterRound.id,
+      playerId: variancePlayer.id,
+      songId: songs["Variance Later"].id,
+      score: 16,
+      rank: 2,
+      comment: "A stable middle finish.",
+      createdAt: new Date("2024-04-05T18:05:00.000Z"),
+    },
+  });
+  const lowFinishLater = await prisma.submission.create({
+    data: {
+      roundId: laterRound.id,
+      playerId: lowFinishPlayer.id,
+      songId: songs["Low Finish Later"].id,
+      score: 10,
+      rank: 3,
+      comment: "Still trailing the scored field.",
+      createdAt: new Date("2024-04-05T18:10:00.000Z"),
+    },
+  });
+  const winRateFinal = await prisma.submission.create({
+    data: {
+      roundId: finalRound.id,
+      playerId: winRatePlayer.id,
+      songId: songs["Win Rate Finale"].id,
+      score: 20,
+      rank: 2,
+      comment: "A rare slip without losing the scoring profile.",
+      createdAt: new Date("2024-04-12T18:00:00.000Z"),
+    },
+  });
+  const varianceFinal = await prisma.submission.create({
+    data: {
+      roundId: finalRound.id,
+      playerId: variancePlayer.id,
+      songId: songs["Variance Finale"].id,
+      score: 24,
+      rank: 1,
+      comment: "The ceiling shows up here.",
+      createdAt: new Date("2024-04-12T18:05:00.000Z"),
+    },
+  });
+  const lowFinishFinal = await prisma.submission.create({
+    data: {
+      roundId: finalRound.id,
+      playerId: lowFinishPlayer.id,
+      songId: songs["Low Finish Finale"].id,
+      score: 9,
+      rank: 3,
+      comment: "And the floor stays familiar.",
+      createdAt: new Date("2024-04-12T18:10:00.000Z"),
+    },
+  });
+  const zeroPending = await prisma.submission.create({
+    data: {
+      roundId: pendingRound.id,
+      playerId: zeroPlayer.id,
+      songId: songs["Zero Pending"].id,
+      score: null,
+      rank: null,
+      comment: "Still no score to work from.",
+      createdAt: new Date("2024-04-19T18:00:00.000Z"),
+    },
+  });
+
+  return {
+    originRoundId: originRound.id,
+    winRatePlayerId: winRatePlayer.id,
+    variancePlayerId: variancePlayer.id,
+    topFinishPlayerId: topFinishPlayer.id,
+    lowFinishPlayerId: lowFinishPlayer.id,
+    zeroPlayerId: zeroPlayer.id,
+    winRateLaterSubmissionId: winRateLater.id,
+    winRateFinalSubmissionId: winRateFinal.id,
+    topFinishOriginSubmissionId: topFinishOrigin.id,
+    zeroOriginSubmissionId: zeroOrigin.id,
+    zeroPendingSubmissionId: zeroPending.id,
+    scoredHistoryCounts: {
+      winRate: 3,
+      variance: 3,
+      topFinish: 1,
+      lowFinish: 3,
+      zero: 0,
+    },
+  };
+}
+
 async function findVoteTarget() {
   const vote = await prisma.vote.findFirst({
     select: {
@@ -551,6 +833,28 @@ test("derivePlayerTrait follows the dominance and fallback rules", () => {
   assert.deepEqual(
     derivePlayerTrait({
       playerMetrics: {
+        scoredCount: 3,
+        wins: 1,
+        averageFinishPercentile: 0.35,
+        scoreStdDev: 0.8,
+        winRate: 1 / 3,
+      },
+      gameBaselines: {
+        playerCount: 4,
+        averageFinishPercentile: 0.45,
+        scoreStdDev: 0.35,
+        winRate: 0.25,
+      },
+    }),
+    {
+      kind: "variance",
+      line: "Could be first, could be last. You never know.",
+    },
+  );
+
+  assert.deepEqual(
+    derivePlayerTrait({
+      playerMetrics: {
         scoredCount: 1,
         wins: 0,
         averageFinishPercentile: 0.25,
@@ -692,6 +996,80 @@ test(
       [fixture.zeroLaterSubmissionId, fixture.zeroOriginSubmissionId],
     );
     assert.equal(await getPlayerRoundModal(fixture.originRoundId, fixture.outsiderId, { prisma }), null);
+  },
+);
+
+test(
+  "player modal integration coverage spans zero/single/multi-scored players, every trait branch, and notable-pick tiebreaks",
+  { concurrency: false },
+  async () => {
+    const fixture = await createTask04CoverageFixture();
+    const [winRateModal, varianceModal, topFinishModal, lowFinishModal, zeroModal] =
+      await Promise.all([
+        getPlayerRoundModal(fixture.originRoundId, fixture.winRatePlayerId, { prisma }),
+        getPlayerRoundModal(fixture.originRoundId, fixture.variancePlayerId, { prisma }),
+        getPlayerRoundModal(fixture.originRoundId, fixture.topFinishPlayerId, { prisma }),
+        getPlayerRoundModal(fixture.originRoundId, fixture.lowFinishPlayerId, { prisma }),
+        getPlayerRoundModal(fixture.originRoundId, fixture.zeroPlayerId, { prisma }),
+      ]);
+
+    assert.ok(winRateModal);
+    assert.equal(winRateModal.traitKind, "win-rate");
+    assert.equal(
+      winRateModal.traitLine,
+      "Wins more rounds than anyone likes to admit.",
+    );
+    assert.equal(winRateModal.history.length, fixture.scoredHistoryCounts.winRate);
+    assert.equal(
+      winRateModal.notablePicks.best?.submissionId,
+      fixture.winRateLaterSubmissionId,
+    );
+    assert.equal(
+      winRateModal.notablePicks.worst?.submissionId,
+      fixture.winRateFinalSubmissionId,
+    );
+
+    assert.ok(varianceModal);
+    assert.equal(varianceModal.traitKind, "variance");
+    assert.equal(
+      varianceModal.traitLine,
+      "Could be first, could be last. You never know.",
+    );
+    assert.equal(varianceModal.history.length, fixture.scoredHistoryCounts.variance);
+
+    assert.ok(topFinishModal);
+    assert.equal(topFinishModal.traitKind, "top-finish");
+    assert.equal(
+      topFinishModal.traitLine,
+      "Consistently near the top - plays it safe, plays it well.",
+    );
+    assert.equal(topFinishModal.history.length, fixture.scoredHistoryCounts.topFinish);
+    assert.equal(
+      topFinishModal.notablePicks.best?.submissionId,
+      fixture.topFinishOriginSubmissionId,
+    );
+    assert.equal(topFinishModal.notablePicks.worst, null);
+
+    assert.ok(lowFinishModal);
+    assert.equal(lowFinishModal.traitKind, "low-finish");
+    assert.equal(
+      lowFinishModal.traitLine,
+      "Bravely marches to their own drummer.",
+    );
+    assert.equal(lowFinishModal.history.length, fixture.scoredHistoryCounts.lowFinish);
+
+    assert.ok(zeroModal);
+    assert.equal(zeroModal.traitKind, null);
+    assert.equal(zeroModal.traitLine, null);
+    assert.equal(zeroModal.history.length, 2);
+    assert.deepEqual(zeroModal.notablePicks, {
+      best: null,
+      worst: null,
+    });
+    assert.deepEqual(
+      zeroModal.history.map((submission) => submission.submissionId),
+      [fixture.zeroPendingSubmissionId, fixture.zeroOriginSubmissionId],
+    );
   },
 );
 
