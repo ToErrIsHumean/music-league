@@ -16,7 +16,7 @@ Authoring rules:
 **Status:** Draft | Accepted | Retroactively compiled draft
 **Accepted on:** [YYYY-MM-DD or omit until accepted]
 **Consuming role:** [Planner -> SPEC-NNN authorship | Architect -> SPEC | Product state maintenance]
-**Source basis:** See §4
+**Source basis:** See §7
 **Confidence:** High | Medium | Low
 
 ---
@@ -96,7 +96,65 @@ Feature authoring cues:
 
 ---
 
-## 4. Provenance
+## 4. Cross-cutting Invariants
+
+- **INV-[short-id]:** [Non-negotiable rule that must remain true across the
+  milestone.]
+- **INV-[short-id]:** [Another invariant spanning multiple features or
+  workflows.]
+
+<!--
+Invariant authoring cues:
+- Use this section for milestone-wide rules, not per-feature details.
+- Good invariants usually describe what must never happen or what must remain
+  legible, bounded, or separated throughout implementation.
+- If the milestone does not have meaningful cross-cutting invariants, replace
+  with a short note rather than inventing filler.
+-->
+
+---
+
+## 5. Gate Criteria
+
+- [Ship/no-ship check that demonstrates a key guarantee of the milestone.]
+- [Another pass/fail check that operationalizes one or more invariants.]
+
+<!--
+Gate authoring cues:
+- Gate criteria are milestone-level pass/fail checks, not implementation tasks.
+- They should operationalize the invariants and major feature outcomes into a
+  small set of concrete readiness checks.
+- If a gate is better expressed as a feature requirement, keep it in §2 instead
+  of duplicating it here.
+-->
+
+---
+
+## 6. Touched Boundaries
+
+- **[Boundary name]** — [What boundary is in scope and why it matters for this
+  milestone.]
+  Primary surfaces: `[path]`, `[path]`
+
+- **[Boundary name]** — [Another in-scope boundary.]
+  Primary surfaces: `[path]`, `[path]`
+
+<!--
+Touched-boundary authoring cues:
+- Keep this section concise and high-signal.
+- The goal is to tell the architect where to investigate and what not to
+  ignore, not to pre-solve the architecture.
+- Name the boundary, give a short reason it is in scope, and point to the
+  primary repo surfaces.
+- Avoid implementation prescriptions, pseudo-task breakdowns, or long prose
+  explanations here.
+- If a surface is explicitly out of scope but easy to confuse with an in-scope
+  boundary, it can be worth naming briefly elsewhere in the FSD.
+-->
+
+---
+
+## 7. Provenance
 
 - Planning session / era reconstructed: [date or label]
 - Source documents consulted:
@@ -107,7 +165,7 @@ Feature authoring cues:
 
 ---
 
-## 5. Uncertainty and Open Questions
+## 8. Uncertainty and Open Questions
 
 - [Unresolved question or ambiguity], including why it is unresolved and what
   downstream doc should decide it.
@@ -134,8 +192,3 @@ communication or shared interaction patterns.]
 ### Domain Vocabulary
 
 [Use when terms are overloaded, newly renamed, or easy to misread.]
-
-### Gate Criteria
-
-[Use when the milestone has explicit ship or no-ship criteria beyond normal
-feature completion.]
