@@ -451,6 +451,208 @@ a {
   gap: 10px;
 }
 
+.archive-player-shell {
+  width: min(560px, 100%);
+  max-height: min(88vh, 720px);
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+}
+
+.archive-player-shell .archive-nested-shell-header {
+  flex-shrink: 0;
+  margin-bottom: 0;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(104, 90, 77, 0.16);
+}
+
+.archive-player-shell .archive-nested-shell-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding-top: 16px;
+}
+
+.archive-player-summary-view,
+.archive-player-song-view {
+  display: grid;
+  gap: 16px;
+  min-height: 0;
+}
+
+.archive-player-summary-view {
+  height: 100%;
+}
+
+.archive-player-summary-top,
+.archive-player-picks-section,
+.archive-player-song-card,
+.archive-player-song-field {
+  display: grid;
+  gap: 10px;
+}
+
+.archive-player-trait-line {
+  margin: 0;
+  padding: 15px 16px;
+  border-radius: 20px;
+  background: rgba(164, 63, 47, 0.12);
+  color: var(--ink);
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.archive-player-trait-line[data-trait-kind="variance"] {
+  background: rgba(213, 181, 98, 0.2);
+}
+
+.archive-player-trait-line[data-trait-kind="top-finish"] {
+  background: rgba(135, 111, 50, 0.14);
+}
+
+.archive-player-trait-line[data-trait-kind="low-finish"] {
+  background: rgba(104, 90, 77, 0.14);
+}
+
+.archive-player-pick-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.archive-player-pick-card,
+.archive-player-history-card,
+.archive-player-song-card {
+  padding: 16px;
+  border-radius: 20px;
+  border: 1px solid rgba(104, 90, 77, 0.16);
+}
+
+.archive-player-pick-card {
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.archive-player-pick-best {
+  background: rgba(213, 181, 98, 0.2);
+}
+
+.archive-player-pick-worst {
+  background: rgba(104, 90, 77, 0.1);
+}
+
+.archive-player-pick-label,
+.archive-player-song-label,
+.archive-player-history-artist,
+.archive-player-history-comment,
+.archive-player-song-artist,
+.archive-player-song-round,
+.archive-player-song-comment {
+  margin: 0;
+}
+
+.archive-player-pick-label,
+.archive-player-song-label {
+  color: var(--accent);
+  font-size: 0.79rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.archive-player-pick-song,
+.archive-player-history-song,
+.archive-player-pick-round,
+.archive-player-history-round,
+.archive-player-song-back {
+  color: inherit;
+  text-decoration: none;
+}
+
+.archive-player-pick-song,
+.archive-player-history-song,
+.archive-player-song-title {
+  margin: 0;
+  font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", serif;
+  font-size: 1.16rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.archive-player-pick-artist,
+.archive-player-song-artist,
+.archive-player-song-round,
+.archive-player-song-comment,
+.archive-player-history-artist,
+.archive-player-history-comment {
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.archive-player-pick-round,
+.archive-player-history-round {
+  color: var(--accent);
+  font-size: 0.94rem;
+  font-weight: 700;
+}
+
+.archive-player-pick-meta,
+.archive-player-history-meta,
+.archive-player-song-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.archive-player-history-section {
+  display: grid;
+  gap: 12px;
+  min-height: 0;
+  padding-top: 2px;
+  border-top: 1px solid rgba(104, 90, 77, 0.12);
+}
+
+.archive-player-history-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.archive-player-history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 4px 0 0;
+  display: grid;
+  gap: 12px;
+  overflow: auto;
+}
+
+.archive-player-history-main {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.archive-player-history-copy {
+  display: grid;
+  gap: 6px;
+}
+
+.archive-player-history-card,
+.archive-player-song-card {
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.archive-player-song-back {
+  display: inline-flex;
+  align-self: flex-start;
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: rgba(164, 63, 47, 0.1);
+  color: var(--accent);
+  font-weight: 700;
+}
+
 .archive-reset-button {
   margin-top: 18px;
   padding: 12px 18px;
@@ -508,5 +710,21 @@ a {
 
   .archive-highlight-list {
     grid-template-columns: 1fr;
+  }
+
+  .archive-player-shell {
+    width: 100%;
+    max-height: min(88vh, 620px);
+    padding: 18px;
+  }
+
+  .archive-player-pick-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .archive-player-history-header,
+  .archive-player-history-main {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }

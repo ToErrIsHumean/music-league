@@ -216,6 +216,144 @@ test(
 );
 
 test(
+  "direct player entry renders summary picks and cross-round history links inside the nested player shell",
+  { concurrency: false },
+  async () => {
+    const roundId = await findRoundIdBySourceId("seed-r1");
+    const baseProps = await buildGameArchivePageProps({
+      prisma,
+      searchParams: Promise.resolve({
+        round: String(roundId),
+      }),
+    });
+    const targetSubmission = baseProps.openRound.submissions[0];
+    const playerHistorySubmission = await prisma.submission.findFirst({
+      where: {
+        playerId: targetSubmission.player.id,
+        round: {
+          gameId: baseProps.openRound.game.id,
+        },
+        id: {
+          not: targetSubmission.id,
+        },
+      },
+      select: {
+        id: true,
+        round: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+      orderBy: {
+        id: "asc",
+      },
+    });
+
+    assert.ok(playerHistorySubmission, "expected a second same-game submission for history coverage");
+
+    const props = await buildGameArchivePageProps({
+      prisma,
+      searchParams: Promise.resolve({
+        round: String(roundId),
+        player: String(targetSubmission.player.id),
+      }),
+    });
+    const markup = renderToStaticMarkup(React.createElement(GameArchivePage, props));
+
+    assert.ok(props.openPlayerModal, "expected direct player entry to load player detail");
+    assert.equal(props.openPlayerModal.activeSubmissionId, null);
+    assert.equal((markup.match(/role=\"dialog\"/g) ?? []).length, 2);
+    assert.match(markup, /Player detail/);
+    assert.match(markup, /Full history/);
+    assert.match(
+      markup,
+      new RegExp(
+        `href=\"/\\?round=${roundId}&amp;player=${targetSubmission.player.id}&amp;playerSubmission=${playerHistorySubmission.id}\"`,
+      ),
+    );
+    assert.match(markup, new RegExp(`href=\"/\\?round=${playerHistorySubmission.round.id}\"`));
+    assert.match(markup, new RegExp(playerHistorySubmission.round.name));
+    assert.ok(!markup.includes("Round-scoped submission"));
+
+    if (props.openPlayerModal.notablePicks.best) {
+      assert.match(markup, /Best Pick/);
+    }
+
+    if (props.openPlayerModal.notablePicks.worst) {
+      assert.match(markup, /Worst Pick/);
+    }
+  },
+);
+
+test(
+  "player submission selection swaps in the player-scoped song view without deeper push links",
+  { concurrency: false },
+  async () => {
+    const roundId = await findRoundIdBySourceId("seed-r1");
+    const baseProps = await buildGameArchivePageProps({
+      prisma,
+      searchParams: Promise.resolve({
+        round: String(roundId),
+      }),
+    });
+    const targetSubmission = baseProps.openRound.submissions[0];
+    const playerHistorySubmission = await prisma.submission.findFirst({
+      where: {
+        playerId: targetSubmission.player.id,
+        round: {
+          gameId: baseProps.openRound.game.id,
+        },
+        id: {
+          not: targetSubmission.id,
+        },
+      },
+      select: {
+        id: true,
+        round: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        song: {
+          select: {
+            title: true,
+          },
+        },
+      },
+      orderBy: {
+        id: "asc",
+      },
+    });
+
+    assert.ok(playerHistorySubmission, "expected a second same-game submission for song-view coverage");
+
+    const props = await buildGameArchivePageProps({
+      prisma,
+      searchParams: Promise.resolve({
+        round: String(roundId),
+        player: String(targetSubmission.player.id),
+        playerSubmission: String(playerHistorySubmission.id),
+      }),
+    });
+    const markup = renderToStaticMarkup(React.createElement(GameArchivePage, props));
+    const playerShellMarkup = markup.slice(
+      markup.lastIndexOf('class="archive-nested-shell archive-player-shell"'),
+    );
+
+    assert.ok(props.openPlayerModal?.activeSubmission, "expected a player-scoped song view to load");
+    assert.match(markup, new RegExp(`Back to ${targetSubmission.player.displayName} summary`));
+    assert.ok(markup.includes(playerHistorySubmission.song.title));
+    assert.ok(markup.includes(playerHistorySubmission.round.name));
+    assert.ok(!playerShellMarkup.includes(`href="/?round=${playerHistorySubmission.round.id}"`));
+    assert.ok(!playerShellMarkup.includes("playerSubmission="));
+    assert.equal((playerShellMarkup.match(/href=\"/g) ?? []).length, 2);
+  },
+);
+
+test(
   "invalid player submissions fall back to the player summary without reopening the round song shell",
   { concurrency: false },
   async () => {
