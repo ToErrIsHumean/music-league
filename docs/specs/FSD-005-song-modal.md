@@ -80,6 +80,10 @@ Requirements:
 - Cues may use only canonical archive signals available for the song:
   exact-song history and same-artist history. Do not infer familiarity from
   genre, album, decade, mood, title similarity, or other non-key metadata.
+- In v1, artist identity for same-artist history is the normalized exported
+  artist display string represented by the canonical `Artist` row. Combined
+  labels such as "Artist A & Artist B" are one display label, not parsed
+  collaborator facts.
 - No prior song-level or artist-level history means debut. Prior artist history
   without exact-song history means familiar-through-artist. Prior exact-song
   history may mean brought-back.
@@ -133,8 +137,10 @@ Requirements:
   coincidence inside the current round.
 - Existing round-origin taps may remain a first-ship entry path, but they must
   hydrate archive-wide song memory.
-- If the same canonical song appears multiple times in one round, the tap still
-  resolves to one canonical surface; duplication belongs in evidence rows.
+- Within the supported import model, the same canonical song does not appear
+  multiple times in one round. Song-detail contracts should not add product,
+  fixture, or copy branches for same-song/same-round duplicates unless a future
+  data-corruption spec explicitly opens that case.
 - Header identity remains song plus artist. Origin-round context is provenance,
   not a competing song definition.
 - Stable first-ship blocks are identity, verdict summary, evidence shortcuts,

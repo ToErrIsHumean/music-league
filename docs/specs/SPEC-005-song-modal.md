@@ -89,11 +89,11 @@ product-level rather than route-prescriptive.
   footprint, but it must not be interleaved into the exact-song submission
   history as if those rows were appearances of the opened song.
 - **INV-11:** Origin anchoring for the first-ship `round + song` route state is
-  deterministic and shared by inline cues and modal payloads. M5 assumes there
-  are no intentional same-song duplicates inside one round; if anomalous
-  same-round duplicates exist, the earliest deterministic submission may be
-  used as the representative origin and duplicate rows may be collapsed for
-  this song-memory surface.
+  deterministic and shared by inline cues and modal payloads. Pre-M6 CP-06
+  narrows this to the supported import model: a canonical song appears at most
+  once per round, and same-song/same-round duplicate handling is not future
+  product, fixture, or acceptance-criteria scope unless a later
+  data-corruption spec explicitly opens it.
 - **INV-12:** Familiarity is historical archive memory, not same-round
   co-occurrence. For an origin-round cue or modal, other submissions in the
   same round must not by themselves make a song `Known artist` or
@@ -155,9 +155,9 @@ Validation / error handling:
 - Player-history song links use
   `buildArchiveHref({ roundId: evidenceRoundId, songId })` so the canonical
   song detail foregrounds the clicked evidence row's game/round context.
-- If anomalous same-round duplicate submissions exist for the same canonical
-  `songId`, first-ship route state foregrounds the deterministic representative
-  origin from §4d-3 rather than adding a submission-scoped song URL.
+- Supported import data has at most one submission per canonical `songId` in a
+  round; route contracts should not add submission-scoped song URLs to
+  distinguish same-song/same-round duplicates.
 - Closing canonical song detail returns to `buildArchiveHref({ roundId })` for
   the origin round that opened it.
 - Round links inside song history use `buildArchiveHref({ roundId:
@@ -204,10 +204,9 @@ Seed / integration data required for M5:
   - at least 1 stale or unresolvable origin-song URL case
 ```
 
-**Contract note:** Do not add same-round duplicate fixtures for M5. If existing
-or imported data contains multiple submissions for the same canonical song in a
-single round, representative-origin behavior in §4d-3 is sufficient; do not
-weaken the existing uniqueness constraint for M5.
+**Contract note:** Do not add same-round duplicate fixtures for M5 or later
+pre-M6 work. The supported product model treats same-canonical-song/same-round
+duplicates as a non-case; do not weaken the existing uniqueness constraint.
 
 ### 4c. Component Contracts
 
@@ -243,9 +242,8 @@ interface RoundSubmissionRow {
   navigation target.
 - A row with missing rank, score, or comment still shows the cue when song and
   artist history are available.
-- If anomalous same-round duplicates are present in source data, duplicate
-  song rows may share one representative cue verdict for the route-visible
-  `round + song` state.
+- Supported source data has at most one row for a canonical song in a round;
+  cue contracts must not require duplicate-row disambiguation.
 
 #### §4c-2. `ArchiveSongModal`
 
@@ -390,9 +388,11 @@ interface SongFamiliarityVerdict {
 - `debut`: neither prior exact-song nor prior same-artist history exists.
 - Exact-song history wins over artist-only history when both are true.
 - Classification uses canonical `Song.id` for exact-song history and
-  canonical `Artist.id` for same-artist history. It must not use title
-  coincidence, genre, album, decade, mood, fuzzy matching, or external
-  metadata.
+  canonical `Artist.id` for same-artist history. In v1, `Artist.id` represents
+  the normalized exported artist display string; a combined multi-artist export
+  label is one artist label and must not be decomposed into collaborator-level
+  truth. Classification must not use title coincidence, genre, album, decade,
+  mood, fuzzy matching, or external metadata.
 - Artist-only prior counts used for `known-artist` exclude submissions for the
   opened canonical `Song.id`; exact-song evidence is represented by the
   exact-song counts and history rows instead.
@@ -457,13 +457,11 @@ async function getSongMemoryModal(
 - Return `null` only when `originRoundId` itself cannot resolve.
 - Return `unavailable` when the round resolves but the requested song cannot
   resolve to a usable origin context for this first-ship route.
-- If anomalous multiple submissions in the origin round use the same canonical
-  song, choose the earliest origin submission by `Submission.createdAt`
-  ascending with nulls last, then `Submission.id` ascending as the deterministic
-  representative origin. This same anchor is the route-visible origin used by
-  round-row cues and player-history links that target that `round + song`
-  state; duplicate same-round rows may be collapsed for this song-memory
-  surface.
+- Pre-M6 CP-06/INV-16 amendment: supported imported rounds contain at most one
+  submission for a canonical `Song.id`. The song-memory contract must not add
+  product branches, fixtures, or acceptance pressure for same-song/same-round
+  duplicates; any older deterministic representative-origin language is a
+  defensive compatibility fallback only.
 - Hydrate exact-song history across the archive for the canonical `Song.id`.
 - Hydrate same-artist history across the archive for the canonical `Artist.id`
   without including non-canonical similarity matches.
@@ -475,9 +473,6 @@ async function getSongMemoryModal(
   same-round artist co-occurrences cannot be counted as historical prior
   evidence.
 - Preserve each cross-round and cross-game submission as a distinct history row.
-  Same-round duplicate submissions for the opened canonical song may be
-  represented by the deterministic origin row rather than by separate duplicate
-  rows.
 - `historyGroups.rows` contain exact-song submissions only. Same-artist
   submissions for other songs may contribute to `familiarity` and
   `summary.artistFootprint`, but they must not appear in the opened song's
@@ -516,9 +511,8 @@ async function getRoundDetail(roundId: number, input?: { prisma?: PrismaClient }
   or instantiate the full modal payload for each row.
 - The same canonical song and origin submission must receive the same semantic
   classification that `getSongMemoryModal()` renders in the modal.
-- If anomalous same-round duplicate submissions exist, cue hydration must use
-  the deterministic representative origin from §4d-3 so the cue and modal do
-  not diverge.
+- Cue hydration can assume at most one submission for a canonical song in the
+  origin round under the supported import model.
 - Same-round same-artist co-occurrence must be handled by the shared
   familiarity derivation rather than by per-row UI heuristics.
 
@@ -540,6 +534,10 @@ function buildArchiveHref(input?: {
 - New or changed song links in round detail and player history use
   `roundId + songId`.
 - New M5 code must not emit `playerSubmission` for song detail navigation.
+- Pre-M6 CP-06 amendment: all new post-M5 song links from round, player,
+  overview, and search-readiness surfaces target canonical song memory by
+  `Song.id` unless the surface is explicitly labeled as a local evidence
+  preview.
 - If `playerId` and `songId` are both supplied by new M5 code, prefer omitting
   `playerId` at the call site. The helper may retain its M4 precedence for
   backward compatibility, but M5 tests must assert canonical song links are
@@ -616,7 +614,7 @@ one internal boundary, either `src/archive/archive-utils.js` or an adjacent
 |---|---|---|
 | AC-01 | Round detail renders at most one compact familiarity cue per submission row, using `New to us`, `Known artist`, or `Brought back` from the shared classification model | `manual` + `test` |
 | AC-02 | Familiarity derivation distinguishes true debut, same-artist/new-song, and prior exact-song history using only canonical `Song.id` and `Artist.id`; exact-song history wins when both apply, and same-round co-occurrence alone does not create prior familiarity | `test` |
-| AC-03 | The same canonical song opened from round detail and from player history receives the same semantic familiarity kind and modal verdict for the same route-visible origin context, including anomalous same-round duplicates that resolve through the deterministic representative origin | `test` |
+| AC-03 | The same canonical song opened from round detail and from player history receives the same semantic familiarity kind and modal verdict for the same route-visible origin context | `test` |
 | AC-04 | Any new in-app song tap from round detail or player history opens canonical archive-wide song detail rather than the old current-round row shell or M4 player-scoped song subview | `manual` + `test` |
 | AC-05 | On open, the modal shows song title, artist, and a concise familiarity verdict above the fold, plus known first submitter, most recent submitter, exact-song submission count, artist footprint, and best exact-song finish when those facts exist | `manual` |
 | AC-06 | Submission history renders as provenance evidence, newest first within game groups, preserving current/origin game foregrounding and broader archive grouping when the song spans games | `test` + `manual` |
@@ -678,11 +676,12 @@ TASK-06: TASK-01,TASK-02,TASK-03,TASK-04,TASK-05
   submission cases.
 - [ ] Alternate song subviews spawned from song detail.
 - [ ] Submission-scoped song URLs solely to distinguish same-round duplicate
-  origin anchors - first ship uses the deterministic `round + song` anchor.
+  origin anchors - supported imports have at most one canonical song submission
+  per round, so `round + song` is sufficient.
 - [ ] Preservation of same-song duplicate submissions within one round as
-  separate song-memory evidence rows - HITL direction on 2026-04-24 says this
-  case will not occur in product data and may be deduplicated if encountered.
-  Disposition: dropped. Reason: product decision. Trace: §7 and OQ-08.
+  separate song-memory evidence rows - same-canonical-song/same-round
+  duplicates are outside the supported product model.
+  Disposition: dropped. Reason: product model. Trace: §7 and OQ-08.
 
 ## 8. Open Questions
 
@@ -700,9 +699,9 @@ TASK-06: TASK-01,TASK-02,TASK-03,TASK-04,TASK-05
 - **OQ-08:** How should same-round duplicate song submissions interact with a
   `round + song` URL that cannot identify the clicked submission? -
   **Resolution:** `resolved -> §3 INV-11, §4a-1, §4b-2, §4d-3, §4d-4, §7`
-  (HITL direction on 2026-04-24 says same-round duplicates will not occur in
-  product data and may be deduplicated if encountered; use the deterministic
-  representative origin for cue/modal agreement)
+  (Pre-M6 CP-06/INV-16 supersedes duplicate handling as future product scope:
+  same-canonical-song/same-round duplicates do not occur in supported product
+  data, so `round + song` remains sufficient)
 
 ---
 

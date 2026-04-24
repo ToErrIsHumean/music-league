@@ -347,6 +347,9 @@ type RoundScopedEntityModalProps =
 - Content is intentionally minimal and current-round scoped in Milestone 3.
 - The shell is the compatibility bridge for the fuller Song Modal and Player
   Modal milestones rather than a separate long-term interaction model.
+- Pre-M6 CP-06 amendment: new or changed song links from round detail target
+  canonical song memory by `Song.id`. The open round is origin context for
+  return navigation and evidence foregrounding, not a separate song identity.
 - Close returns to the same round dialog URL state.
 
 ### 4d. Internal Boundaries
@@ -538,6 +541,9 @@ buildArchiveHref(input: {
 - Produces canonical archive URLs on `/`.
 - If `roundId` is nullish, omit `songId` and `playerId`.
 - If both `songId` and `playerId` are provided, prefer `songId`.
+- Pre-M6 CP-06 amendment: `songId` means the canonical `Song.id` destination
+  for song memory; local round evidence previews must be explicitly labeled as
+  previews if any future surface keeps them.
 - Output ordering is stable: `round`, then `song`, then `player`.
 
 ### 4e. Dependencies
