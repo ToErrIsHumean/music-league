@@ -20,6 +20,22 @@ function compareNullableAscending(left, right) {
   return left < right ? -1 : left > right ? 1 : 0;
 }
 
+function compareNullableDescending(left, right) {
+  if (left === null && right === null) {
+    return 0;
+  }
+
+  if (left === null) {
+    return 1;
+  }
+
+  if (right === null) {
+    return -1;
+  }
+
+  return left > right ? -1 : left < right ? 1 : 0;
+}
+
 function normalizeDateSortValue(value) {
   if (value === null || value === undefined) {
     return null;
@@ -71,8 +87,49 @@ function compareSongMemoryHistoryOrder(left, right) {
   return left.id - right.id;
 }
 
+function compareSongMemoryHistoryRecencyOrder(left, right) {
+  const roundOccurredAtComparison = compareNullableDescending(
+    normalizeDateSortValue(left.roundOccurredAt),
+    normalizeDateSortValue(right.roundOccurredAt),
+  );
+
+  if (roundOccurredAtComparison !== 0) {
+    return roundOccurredAtComparison;
+  }
+
+  const roundSequenceComparison = compareNullableDescending(
+    left.roundSequenceNumber ?? null,
+    right.roundSequenceNumber ?? null,
+  );
+
+  if (roundSequenceComparison !== 0) {
+    return roundSequenceComparison;
+  }
+
+  const roundIdComparison = right.roundId - left.roundId;
+
+  if (roundIdComparison !== 0) {
+    return roundIdComparison;
+  }
+
+  const createdAtComparison = compareNullableDescending(
+    normalizeDateSortValue(left.createdAt),
+    normalizeDateSortValue(right.createdAt),
+  );
+
+  if (createdAtComparison !== 0) {
+    return createdAtComparison;
+  }
+
+  return right.id - left.id;
+}
+
 function sortSongMemoryHistory(submissions) {
   return [...submissions].sort(compareSongMemoryHistoryOrder);
+}
+
+function sortSongMemoryHistoryNewestFirst(submissions) {
+  return [...submissions].sort(compareSongMemoryHistoryRecencyOrder);
 }
 
 function deriveSongFamiliarity(input) {
@@ -226,6 +283,8 @@ function buildThroughSubmitters(submissions) {
 
 module.exports = {
   compareSongMemoryHistoryOrder,
+  compareSongMemoryHistoryRecencyOrder,
   deriveSongFamiliarity,
   sortSongMemoryHistory,
+  sortSongMemoryHistoryNewestFirst,
 };

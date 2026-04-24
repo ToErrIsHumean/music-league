@@ -1,11 +1,58 @@
 const { PrismaClient } = require("@prisma/client");
 const {
   compareSongMemoryHistoryOrder,
+  compareSongMemoryHistoryRecencyOrder,
   deriveSongFamiliarity,
   sortSongMemoryHistory,
+  sortSongMemoryHistoryNewestFirst,
 } = require("./song-memory");
 
 const SHORT_GAME_ID_MAX_LENGTH = 16;
+const SONG_RECALL_COMMENT_MAX_LENGTH = 140;
+const SONG_MEMORY_MODAL_SUBMISSION_SELECT = {
+  id: true,
+  roundId: true,
+  songId: true,
+  playerId: true,
+  score: true,
+  rank: true,
+  comment: true,
+  createdAt: true,
+  round: {
+    select: {
+      id: true,
+      name: true,
+      occurredAt: true,
+      sequenceNumber: true,
+      game: {
+        select: {
+          id: true,
+          sourceGameId: true,
+          displayName: true,
+        },
+      },
+    },
+  },
+  song: {
+    select: {
+      id: true,
+      title: true,
+      artistId: true,
+      artist: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+    },
+  },
+  player: {
+    select: {
+      id: true,
+      displayName: true,
+    },
+  },
+};
 
 function compareNullableAscending(left, right) {
   if (left === null && right === null) {
@@ -154,6 +201,208 @@ function buildSongMemoryEvidenceRow(submission) {
     playerName: submission.player.displayName,
     createdAt: submission.createdAt,
     roundOccurredAt: submission.round.occurredAt,
+  };
+}
+
+function buildSongMemorySortRecord(submission) {
+  return {
+    ...buildSongMemoryEvidenceRow(submission),
+    submission,
+  };
+}
+
+function buildSongHistoryRow(submission, originSubmissionId) {
+  return {
+    submissionId: submission.id,
+    gameId: submission.round.game.id,
+    gameLabel: resolveGameDisplayLabel(submission.round.game),
+    roundId: submission.round.id,
+    roundName: submission.round.name,
+    occurredAt: toIsoString(submission.round.occurredAt),
+    submitter: {
+      id: submission.player.id,
+      displayName: submission.player.displayName,
+    },
+    result: {
+      rank: submission.rank,
+      score: submission.score,
+    },
+    comment: submission.comment,
+    isOrigin: submission.id === originSubmissionId,
+  };
+}
+
+function buildSongHistoryGroups(descendingRecords, originGameId, originSubmissionId) {
+  const groupsByGameId = new Map();
+
+  for (const record of descendingRecords) {
+    const row = buildSongHistoryRow(record.submission, originSubmissionId);
+    const group = groupsByGameId.get(row.gameId) ?? {
+      gameId: row.gameId,
+      gameLabel: row.gameLabel,
+      isOriginGame: row.gameId === originGameId,
+      rows: [],
+    };
+
+    group.rows.push(row);
+    groupsByGameId.set(row.gameId, group);
+  }
+
+  const groups = Array.from(groupsByGameId.values());
+
+  return [
+    ...groups.filter((group) => group.isOriginGame),
+    ...groups.filter((group) => !group.isOriginGame),
+  ];
+}
+
+function buildSongEvidenceShortcuts(ascendingRecords, descendingRecords) {
+  const firstAppearance = ascendingRecords[0] ?? null;
+  const mostRecentAppearance = descendingRecords[0] ?? null;
+
+  if (
+    firstAppearance === null ||
+    mostRecentAppearance === null ||
+    firstAppearance.id === mostRecentAppearance.id
+  ) {
+    return [];
+  }
+
+  return [
+    {
+      kind: "first-appearance",
+      label: "First appearance",
+      submissionId: firstAppearance.id,
+    },
+    {
+      kind: "most-recent-appearance",
+      label: "Most recent appearance",
+      submissionId: mostRecentAppearance.id,
+    },
+  ];
+}
+
+function compareNullableNumberDescending(left, right) {
+  if (left === null && right === null) {
+    return 0;
+  }
+
+  if (left === null) {
+    return 1;
+  }
+
+  if (right === null) {
+    return -1;
+  }
+
+  return right - left;
+}
+
+function selectBestExactSongFinish(descendingRecords) {
+  const rankedRecords = descendingRecords.filter((record) => record.submission.rank !== null);
+
+  if (rankedRecords.length === 0) {
+    return null;
+  }
+
+  const bestRecord = [...rankedRecords].sort((left, right) => {
+    const rankComparison = left.submission.rank - right.submission.rank;
+
+    if (rankComparison !== 0) {
+      return rankComparison;
+    }
+
+    const scoreComparison = compareNullableNumberDescending(
+      left.submission.score,
+      right.submission.score,
+    );
+
+    if (scoreComparison !== 0) {
+      return scoreComparison;
+    }
+
+    return compareSongMemoryHistoryRecencyOrder(left, right);
+  })[0];
+
+  return {
+    rank: bestRecord.submission.rank,
+    score: bestRecord.submission.score,
+    submissionId: bestRecord.submission.id,
+  };
+}
+
+function selectRecallComment(descendingRecords) {
+  const commentRecord = descendingRecords.find((record) => {
+    const comment = record.submission.comment;
+
+    return typeof comment === "string" && comment.trim().length > 0;
+  });
+
+  if (!commentRecord) {
+    return null;
+  }
+
+  const normalizedComment = commentRecord.submission.comment.trim().replace(/\s+/g, " ");
+  const excerpt =
+    normalizedComment.length <= SONG_RECALL_COMMENT_MAX_LENGTH
+      ? normalizedComment
+      : `${normalizedComment.slice(0, SONG_RECALL_COMMENT_MAX_LENGTH - 3).trimEnd()}...`;
+
+  return {
+    submissionId: commentRecord.submission.id,
+    text: excerpt,
+  };
+}
+
+function buildSongArtistFootprint(artistSubmissions, openedSongId) {
+  const otherSongRecords = sortSongMemoryHistoryNewestFirst(
+    artistSubmissions
+      .filter((submission) => submission.songId !== openedSongId)
+      .map(buildSongMemorySortRecord),
+  );
+  const songIds = new Set();
+  const submittersById = new Map();
+
+  for (const record of otherSongRecords) {
+    songIds.add(record.songId);
+
+    if (!submittersById.has(record.playerId)) {
+      submittersById.set(record.playerId, {
+        id: record.playerId,
+        displayName: record.playerName,
+      });
+    }
+  }
+
+  return {
+    songCount: songIds.size,
+    submitterCount: submittersById.size,
+    submissionCount: otherSongRecords.length,
+    notableSubmitters: Array.from(submittersById.values()),
+  };
+}
+
+function buildSongMemorySummary({ ascendingRecords, descendingRecords, artistSubmissions, songId }) {
+  const firstRecord = ascendingRecords[0] ?? null;
+  const mostRecentRecord = descendingRecords[0] ?? null;
+
+  return {
+    firstSubmitter: firstRecord
+      ? {
+          id: firstRecord.submission.player.id,
+          displayName: firstRecord.submission.player.displayName,
+        }
+      : null,
+    mostRecentSubmitter: mostRecentRecord
+      ? {
+          id: mostRecentRecord.submission.player.id,
+          displayName: mostRecentRecord.submission.player.displayName,
+        }
+      : null,
+    exactSongSubmissionCount: ascendingRecords.length,
+    bestExactSongFinish: selectBestExactSongFinish(descendingRecords),
+    artistFootprint: buildSongArtistFootprint(artistSubmissions, songId),
+    recallComment: selectRecallComment(descendingRecords),
   };
 }
 
@@ -981,6 +1230,122 @@ async function getSongRoundModal(roundId, songId, input = {}) {
   }
 }
 
+async function getSongMemoryModal(originRoundId, songId, input = {}) {
+  const { prisma, ownsPrismaClient } = resolveArchiveInput(input);
+  const normalizedOriginRoundId = normalizePositiveInteger(originRoundId);
+  const requestedSongId = normalizePositiveInteger(songId);
+
+  try {
+    if (normalizedOriginRoundId === null) {
+      return null;
+    }
+
+    const originRound = await prisma.round.findUnique({
+      where: {
+        id: normalizedOriginRoundId,
+      },
+      select: {
+        id: true,
+        game: {
+          select: {
+            id: true,
+            sourceGameId: true,
+            displayName: true,
+          },
+        },
+      },
+    });
+
+    if (!originRound) {
+      return null;
+    }
+
+    const closeHref = buildArchiveHref({ roundId: originRound.id });
+    const originSubmissions =
+      requestedSongId === null
+        ? []
+        : await prisma.submission.findMany({
+            where: {
+              roundId: originRound.id,
+              songId: requestedSongId,
+            },
+            select: SONG_MEMORY_MODAL_SUBMISSION_SELECT,
+          });
+
+    if (originSubmissions.length === 0) {
+      return {
+        unavailable: true,
+        originRoundId: originRound.id,
+        requestedSongId,
+        closeHref,
+      };
+    }
+
+    const originSubmission = [...originSubmissions].sort(compareByCreatedAtAscending)[0];
+    const evidenceSubmissions = await prisma.submission.findMany({
+      where: {
+        OR: [
+          {
+            songId: originSubmission.song.id,
+          },
+          {
+            song: {
+              artistId: originSubmission.song.artist.id,
+            },
+          },
+        ],
+      },
+      select: SONG_MEMORY_MODAL_SUBMISSION_SELECT,
+    });
+    const exactSongSubmissions = evidenceSubmissions.filter(
+      (submission) => submission.songId === originSubmission.song.id,
+    );
+    const artistSubmissions = evidenceSubmissions.filter(
+      (submission) => submission.song.artistId === originSubmission.song.artist.id,
+    );
+    const ascendingRecords = sortSongMemoryHistory(
+      exactSongSubmissions.map(buildSongMemorySortRecord),
+    );
+    const descendingRecords = sortSongMemoryHistoryNewestFirst(
+      exactSongSubmissions.map(buildSongMemorySortRecord),
+    );
+
+    return {
+      originRoundId: originRound.id,
+      song: {
+        id: originSubmission.song.id,
+        title: originSubmission.song.title,
+        artistName: originSubmission.song.artist.name,
+      },
+      familiarity: deriveSongFamiliarity({
+        songId: originSubmission.song.id,
+        artistId: originSubmission.song.artist.id,
+        originRoundId: originRound.id,
+        originSubmissionId: originSubmission.id,
+        exactSongSubmissions: exactSongSubmissions.map(buildSongMemoryEvidenceRow),
+        artistSubmissions: artistSubmissions.map(buildSongMemoryEvidenceRow),
+      }),
+      summary: buildSongMemorySummary({
+        ascendingRecords,
+        descendingRecords,
+        artistSubmissions,
+        songId: originSubmission.song.id,
+      }),
+      shortcuts: buildSongEvidenceShortcuts(ascendingRecords, descendingRecords),
+      historyGroups: buildSongHistoryGroups(
+        descendingRecords,
+        originRound.game.id,
+        originSubmission.id,
+      ),
+      closeHref,
+    };
+  } finally {
+    if (ownsPrismaClient) {
+      await prisma.$disconnect();
+    }
+  }
+}
+
 async function getPlayerRoundModal(roundId, playerId, input = {}) {
   const { prisma, ownsPrismaClient } = resolveArchiveInput(input);
 
@@ -1221,6 +1586,7 @@ module.exports = {
   getPlayerModalSubmission,
   getPlayerRoundModal,
   getRoundDetail,
+  getSongMemoryModal,
   getSongRoundModal,
   listArchiveGames,
   selectPlayerNotablePicks,
