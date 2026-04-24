@@ -7,7 +7,7 @@
 | Task | Title | Status | Depends-on |
 | ---- | ----- | ------ | ---------- |
 | TASK-01 | Add shared song familiarity derivation | `done` | — |
-| TASK-02 | Hydrate round-detail familiarity cues | `pending` | TASK-01 |
+| TASK-02 | Hydrate round-detail familiarity cues | `done` | TASK-01 |
 | TASK-03 | Build canonical song memory payload | `pending` | TASK-01 |
 | TASK-04 | Wire and render canonical song detail | `pending` | TASK-03 |
 | TASK-05 | Converge player-history song taps on canonical song detail | `pending` | TASK-04 |
@@ -33,9 +33,18 @@ elevated override.
 | Task | Signal | Discovery | Cycle | Model | Reasoning-Effort | Timestamp |
 | ---- | ------ | --------- | ----- | ----- | ---------------- | --------- |
 | TASK-01 | pass | null | 1 | gpt-5.5 | high | 2026-04-24T08:20:25.658Z |
+| TASK-02 | pass | null | 1 | gpt-5.5 | high | 2026-04-24T08:32:56.833Z |
+| TASK-02 | pass | null | 2 | gpt-5.5 | high | 2026-04-24T08:47:12.830Z |
+| TASK-02 | pass | null | 3 | gpt-5.5 | high | 2026-04-24T08:53:27.744Z |
 
 ## Review Notes
 
 <!-- Orchestrator review notes append below. -->
+
+- TASK-02 cycle 3: `confirmed` -> `docs/sdd/reviews/TASK-02-epoch-1-cycle-3.md`
+
+- TASK-02 cycle 2: `contested` -> `docs/sdd/reviews/TASK-02-epoch-1-cycle-2.md`
+
+- TASK-02 cycle 1: `contested` -> `docs/sdd/reviews/TASK-02-epoch-1-cycle-1.md`
 
 - TASK-01 cycle 1: `confirmed` -> `docs/sdd/reviews/TASK-01-epoch-1-cycle-1.md`
