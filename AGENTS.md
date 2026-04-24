@@ -14,6 +14,16 @@ If you are asked to work on a `TASK-NN`, load:
 The plan is dispatch-only. Contracts, invariants, and acceptance criteria live
 in the spec.
 
+If you are asked to design, implement, or review product behavior rather than
+pure tooling, also load:
+
+1. `docs/reference/MUSIC_LEAGUE_GAME_MODEL.md`
+2. `docs/reference/FEATURE_ALIGNMENT_CHECKLIST.md`
+
+Use those files to check whether feature semantics still match how Music League
+works before relying on local intuition about leagues, rounds, submissions,
+votes, scores, playlists, or archive memory.
+
 ## Dispatchable Specs
 
 Dispatchable implementation specs in this repo should conform to
