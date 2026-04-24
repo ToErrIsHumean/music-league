@@ -19,6 +19,7 @@ const { prisma, cleanup } = createTempPrismaDb({
 });
 
 let task01FixtureCounter = 0;
+let task02FixtureCounter = 0;
 let task04CoverageFixtureCounter = 0;
 
 function assertNonEmptyArray(value, message) {
@@ -294,6 +295,158 @@ async function createTask01Fixture() {
     aceForeignSubmissionId: aceForeign.id,
     zeroOriginSubmissionId: zeroOrigin.id,
     zeroLaterSubmissionId: zeroLater.id,
+  };
+}
+
+async function createTask02SameRoundArtistFixture() {
+  task02FixtureCounter += 1;
+
+  const suffix = `task-02-fixture-${task02FixtureCounter}`;
+  const game = await prisma.game.create({
+    data: {
+      sourceGameId: suffix,
+      displayName: `Task 02 Fixture ${task02FixtureCounter}`,
+    },
+  });
+  const artist = await prisma.artist.create({
+    data: {
+      name: `Task 02 Artist ${task02FixtureCounter}`,
+      normalizedName: `task-02-artist-${task02FixtureCounter}`,
+    },
+  });
+  const firstPlayer = await prisma.player.create({
+    data: {
+      displayName: `Task 02 First Player ${task02FixtureCounter}`,
+      normalizedName: `task-02-first-player-${task02FixtureCounter}`,
+      sourcePlayerId: `task-02-first-player-${task02FixtureCounter}`,
+    },
+  });
+  const secondPlayer = await prisma.player.create({
+    data: {
+      displayName: `Task 02 Second Player ${task02FixtureCounter}`,
+      normalizedName: `task-02-second-player-${task02FixtureCounter}`,
+      sourcePlayerId: `task-02-second-player-${task02FixtureCounter}`,
+    },
+  });
+  const firstSong = await prisma.song.create({
+    data: {
+      title: `Task 02 First Song ${task02FixtureCounter}`,
+      normalizedTitle: `task-02-first-song-${task02FixtureCounter}`,
+      spotifyUri: `spotify:track:task-02-first-${task02FixtureCounter}`,
+      artistId: artist.id,
+    },
+  });
+  const secondSong = await prisma.song.create({
+    data: {
+      title: `Task 02 Second Song ${task02FixtureCounter}`,
+      normalizedTitle: `task-02-second-song-${task02FixtureCounter}`,
+      spotifyUri: `spotify:track:task-02-second-${task02FixtureCounter}`,
+      artistId: artist.id,
+    },
+  });
+  const round = await prisma.round.create({
+    data: {
+      gameId: game.id,
+      leagueSlug: game.sourceGameId,
+      sourceRoundId: suffix,
+      name: `Task 02 Same Round ${task02FixtureCounter}`,
+      sequenceNumber: 1,
+      occurredAt: new Date("2024-04-01T19:00:00.000Z"),
+    },
+  });
+
+  await prisma.submission.create({
+    data: {
+      roundId: round.id,
+      playerId: firstPlayer.id,
+      songId: firstSong.id,
+      createdAt: new Date("2024-04-01T18:00:00.000Z"),
+    },
+  });
+  await prisma.submission.create({
+    data: {
+      roundId: round.id,
+      playerId: secondPlayer.id,
+      songId: secondSong.id,
+      createdAt: new Date("2024-04-01T18:05:00.000Z"),
+    },
+  });
+
+  return {
+    roundId: round.id,
+  };
+}
+
+async function createTask02DuplicateSongFixture() {
+  task02FixtureCounter += 1;
+
+  const suffix = `task-02-duplicate-${task02FixtureCounter}`;
+  const game = await prisma.game.create({
+    data: {
+      sourceGameId: suffix,
+      displayName: `Task 02 Duplicate Fixture ${task02FixtureCounter}`,
+    },
+  });
+  const artist = await prisma.artist.create({
+    data: {
+      name: `Task 02 Duplicate Artist ${task02FixtureCounter}`,
+      normalizedName: `task-02-duplicate-artist-${task02FixtureCounter}`,
+    },
+  });
+  const firstPlayer = await prisma.player.create({
+    data: {
+      displayName: `Task 02 Duplicate First ${task02FixtureCounter}`,
+      normalizedName: `task-02-duplicate-first-${task02FixtureCounter}`,
+      sourcePlayerId: `task-02-duplicate-first-${task02FixtureCounter}`,
+    },
+  });
+  const secondPlayer = await prisma.player.create({
+    data: {
+      displayName: `Task 02 Duplicate Second ${task02FixtureCounter}`,
+      normalizedName: `task-02-duplicate-second-${task02FixtureCounter}`,
+      sourcePlayerId: `task-02-duplicate-second-${task02FixtureCounter}`,
+    },
+  });
+  const song = await prisma.song.create({
+    data: {
+      title: `Task 02 Duplicate Song ${task02FixtureCounter}`,
+      normalizedTitle: `task-02-duplicate-song-${task02FixtureCounter}`,
+      spotifyUri: `spotify:track:task-02-duplicate-${task02FixtureCounter}`,
+      artistId: artist.id,
+    },
+  });
+  const round = await prisma.round.create({
+    data: {
+      gameId: game.id,
+      leagueSlug: game.sourceGameId,
+      sourceRoundId: suffix,
+      name: `Task 02 Duplicate Round ${task02FixtureCounter}`,
+      sequenceNumber: 1,
+      occurredAt: new Date("2024-04-08T19:00:00.000Z"),
+    },
+  });
+
+  await prisma.submission.create({
+    data: {
+      roundId: round.id,
+      playerId: firstPlayer.id,
+      songId: song.id,
+      createdAt: new Date("2024-04-08T18:05:00.000Z"),
+    },
+  });
+  await prisma.submission.create({
+    data: {
+      roundId: round.id,
+      playerId: secondPlayer.id,
+      songId: song.id,
+      createdAt: new Date("2024-04-08T18:10:00.000Z"),
+    },
+  });
+
+  return {
+    roundId: round.id,
+    songId: song.id,
+    representativeSubmitterName: firstPlayer.displayName,
   };
 }
 
@@ -673,9 +826,10 @@ test(
       round.submissions.every(
         (submission) =>
           submission.song.artistName.length > 0 &&
+          submission.song.familiarity.label === "New to us" &&
           submission.player.displayName.length > 0,
       ),
-      "expected round detail submissions to include song and player labels",
+      "expected round detail submissions to include song, familiarity, and player labels",
     );
   },
 );
@@ -698,8 +852,34 @@ test(
       ),
       "expected pending round detail to preserve unscored submissions",
     );
+    assert.deepEqual(
+      round.submissions.map((submission) => submission.song.familiarity.label),
+      ["Known artist", "Brought back", "Known artist", "Brought back"],
+    );
     assert.match(round.highlights[0].value, /Awaiting votes/);
     assert.equal(await getRoundDetail(999999, { prisma }), null);
+  },
+);
+
+test(
+  "round detail familiarity treats same-round same-artist co-occurrence as debut",
+  { concurrency: false },
+  async () => {
+    const { roundId } = await createTask02SameRoundArtistFixture();
+    const round = await getRoundDetail(roundId, { prisma });
+
+    assert.ok(round);
+    assert.deepEqual(
+      round.submissions.map((submission) => submission.song.familiarity.kind),
+      ["debut", "debut"],
+    );
+    assert.ok(
+      round.submissions.every(
+        (submission) =>
+          submission.song.familiarity.priorArtistSubmissionCount === 0 &&
+          submission.song.familiarity.exactSongSubmissionCount === 1,
+      ),
+    );
   },
 );
 
@@ -710,20 +890,79 @@ test(
     const roundOneId = await findRoundIdBySourceId("seed-r1");
     const roundThreeId = await findRoundIdBySourceId("seed-r3");
     const songId = await findSongIdBySpotifyUri("spotify:track:seed-song-005");
+    const round = await getRoundDetail(roundThreeId, { prisma });
+    const modal = await getSongRoundModal(roundThreeId, songId, { prisma });
 
-    assert.deepEqual(
-      await getSongRoundModal(roundThreeId, songId, { prisma }),
-      {
-        roundId: roundThreeId,
-        songId,
-        title: "The Long Way Home",
-        artistName: "Solar Static",
-        submitterName: "Casey Chorus",
-        score: 21,
-        rank: 2,
-      },
-    );
+    assert.ok(round);
+    const row = round.submissions.find((submission) => submission.song.id === songId);
+    assert.ok(row);
+    assert.ok(modal);
+    assert.equal(modal.roundId, roundThreeId);
+    assert.equal(modal.songId, songId);
+    assert.equal(modal.title, "The Long Way Home");
+    assert.equal(modal.artistName, "Solar Static");
+    assert.equal(modal.submitterName, "Casey Chorus");
+    assert.equal(modal.score, 21);
+    assert.equal(modal.rank, 2);
+    assert.equal(modal.familiarity.kind, row.song.familiarity.kind);
+    assert.equal(modal.familiarity.label, row.song.familiarity.label);
+    assert.equal(modal.familiarity.label, "Brought back");
     assert.equal(await getSongRoundModal(roundOneId, songId, { prisma }), null);
+  },
+);
+
+test(
+  "song modal familiarity matches round detail cues for duplicate same-round origins",
+  { concurrency: false },
+  async () => {
+    const { roundId, songId, representativeSubmitterName } = await createTask02DuplicateSongFixture();
+    const round = await getRoundDetail(roundId, { prisma });
+    const modal = await getSongRoundModal(roundId, songId, { prisma });
+
+    assert.ok(round);
+    assert.ok(modal);
+    assert.equal(modal.submitterName, representativeSubmitterName);
+    assert.deepEqual(
+      round.submissions.map((submission) => submission.song.familiarity.kind),
+      ["debut", "debut"],
+    );
+    assert.ok(
+      round.submissions.every(
+        (submission) =>
+          submission.song.id === songId &&
+          submission.song.familiarity.kind === modal.familiarity.kind &&
+          submission.song.familiarity.label === modal.familiarity.label,
+      ),
+    );
+    assert.equal(modal.familiarity.exactSongSubmissionCount, 2);
+    assert.equal(modal.familiarity.priorExactSongSubmissionCount, 0);
+  },
+);
+
+test(
+  "player-scoped song view familiarity matches round song modal for duplicate same-round origins",
+  { concurrency: false },
+  async () => {
+    const { roundId, songId } = await createTask02DuplicateSongFixture();
+    const round = await getRoundDetail(roundId, { prisma });
+    const modal = await getSongRoundModal(roundId, songId, { prisma });
+
+    assert.ok(round);
+    assert.ok(modal);
+
+    const row = round.submissions.find((submission) => submission.song.id === songId);
+    assert.ok(row);
+
+    const playerSubmission = await getPlayerModalSubmission(roundId, row.player.id, row.id, {
+      prisma,
+    });
+
+    assert.ok(playerSubmission);
+    assert.equal(playerSubmission.familiarity.kind, modal.familiarity.kind);
+    assert.equal(playerSubmission.familiarity.label, modal.familiarity.label);
+    assert.equal(playerSubmission.familiarity.shortSummary, modal.familiarity.shortSummary);
+    assert.equal(playerSubmission.familiarity.exactSongSubmissionCount, 2);
+    assert.equal(playerSubmission.familiarity.priorExactSongSubmissionCount, 0);
   },
 );
 
@@ -1078,28 +1317,27 @@ test(
   { concurrency: false },
   async () => {
     const fixture = await createTask01Fixture();
-
-    assert.deepEqual(
-      await getPlayerModalSubmission(
-        fixture.originRoundId,
-        fixture.aceId,
-        fixture.aceLaterSubmissionId,
-        { prisma },
-      ),
-      {
-        originRoundId: fixture.originRoundId,
-        playerId: fixture.aceId,
-        submissionId: fixture.aceLaterSubmissionId,
-        playerName: "Ace Aurora 2",
-        roundId: fixture.laterRoundId,
-        roundName: "Second Spin",
-        title: "Later Glow 2",
-        artistName: "Task 01 Artist 2",
-        rank: 1,
-        score: 27,
-        comment: "Won again in the follow-up round.",
-      },
+    const activeSubmission = await getPlayerModalSubmission(
+      fixture.originRoundId,
+      fixture.aceId,
+      fixture.aceLaterSubmissionId,
+      { prisma },
     );
+
+    assert.ok(activeSubmission);
+    assert.equal(activeSubmission.originRoundId, fixture.originRoundId);
+    assert.equal(activeSubmission.playerId, fixture.aceId);
+    assert.equal(activeSubmission.submissionId, fixture.aceLaterSubmissionId);
+    assert.equal(activeSubmission.playerName, "Ace Aurora 2");
+    assert.equal(activeSubmission.roundId, fixture.laterRoundId);
+    assert.equal(activeSubmission.roundName, "Second Spin");
+    assert.equal(activeSubmission.title, "Later Glow 2");
+    assert.equal(activeSubmission.artistName, "Task 01 Artist 2");
+    assert.equal(activeSubmission.rank, 1);
+    assert.equal(activeSubmission.score, 27);
+    assert.equal(activeSubmission.comment, "Won again in the follow-up round.");
+    assert.equal(activeSubmission.familiarity.kind, "known-artist");
+    assert.equal(activeSubmission.familiarity.label, "Known artist");
     assert.equal(
       await getPlayerModalSubmission(
         fixture.originRoundId,
