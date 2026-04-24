@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const { createTempPrismaDb } = require("./helpers/temp-prisma-db");
 const {
   buildArchiveHref,
+  deriveGameStandings,
   derivePlayerTrait,
   getPlayerModalSubmission,
   getPlayerRoundModal,
@@ -20,6 +21,7 @@ const { prisma, cleanup } = createTempPrismaDb({
 });
 
 let task01FixtureCounter = 0;
+let task01SameNameFixtureCounter = 0;
 let task02FixtureCounter = 0;
 let task03FixtureCounter = 0;
 let task04CoverageFixtureCounter = 0;
@@ -1224,6 +1226,164 @@ test(
     );
   },
 );
+
+test(
+  "archive loader keeps same-named rounds grouped under their parent games",
+  { concurrency: false },
+  async () => {
+    task01SameNameFixtureCounter += 1;
+    const suffix = `task-01-same-name-${task01SameNameFixtureCounter}`;
+    const sharedRoundName = `Shared Theme ${task01SameNameFixtureCounter}`;
+
+    await Promise.all([
+      prisma.game.create({
+        data: {
+          sourceGameId: `${suffix}-alpha`,
+          displayName: `Alpha Game ${task01SameNameFixtureCounter}`,
+          rounds: {
+            create: {
+              leagueSlug: `${suffix}-alpha`,
+              sourceRoundId: `${suffix}-round-alpha`,
+              name: sharedRoundName,
+              occurredAt: new Date("2024-05-01T18:00:00.000Z"),
+            },
+          },
+        },
+      }),
+      prisma.game.create({
+        data: {
+          sourceGameId: `${suffix}-beta`,
+          displayName: `Beta Game ${task01SameNameFixtureCounter}`,
+          rounds: {
+            create: {
+              leagueSlug: `${suffix}-beta`,
+              sourceRoundId: `${suffix}-round-beta`,
+              name: sharedRoundName,
+              occurredAt: new Date("2024-05-02T18:00:00.000Z"),
+            },
+          },
+        },
+      }),
+    ]);
+
+    const archiveGames = await listArchiveGames({ prisma });
+    const alphaGame = archiveGames.find(
+      (game) => game.sourceGameId === `${suffix}-alpha`,
+    );
+    const betaGame = archiveGames.find(
+      (game) => game.sourceGameId === `${suffix}-beta`,
+    );
+
+    assert.ok(alphaGame, "expected alpha game in archive list");
+    assert.ok(betaGame, "expected beta game in archive list");
+    assert.deepEqual(
+      alphaGame.rounds.map((round) => round.name),
+      [sharedRoundName],
+    );
+    assert.deepEqual(
+      betaGame.rounds.map((round) => round.name),
+      [sharedRoundName],
+    );
+    assert.notEqual(alphaGame.id, betaGame.id);
+  },
+);
+
+test("derived game standings total scoped scored submissions with dense ties", () => {
+  const standings = deriveGameStandings([
+    {
+      playerId: 2,
+      playerName: "Beta Bridge",
+      roundId: 10,
+      score: 10,
+      rank: 2,
+    },
+    {
+      playerId: 2,
+      playerName: "Beta Bridge",
+      roundId: 11,
+      score: 7,
+      rank: 1,
+    },
+    {
+      playerId: 2,
+      playerName: "Beta Bridge",
+      roundId: 11,
+      score: 3,
+      rank: 3,
+    },
+    {
+      playerId: 1,
+      playerName: "Alpha Array",
+      roundId: 10,
+      score: 12,
+      rank: 1,
+    },
+    {
+      playerId: 1,
+      playerName: "Alpha Array",
+      roundId: 12,
+      score: 8,
+      rank: 2,
+    },
+    {
+      playerId: 3,
+      playerName: "Gamma Grid",
+      roundId: 12,
+      score: 5,
+      rank: 3,
+    },
+    {
+      playerId: 4,
+      playerName: "Pending Pulse",
+      roundId: 10,
+      score: null,
+      rank: null,
+    },
+    {
+      playerId: 4,
+      playerName: "Pending Pulse",
+      roundId: 11,
+      score: 40,
+      rank: null,
+    },
+  ]);
+
+  assert.deepEqual(standings, [
+    {
+      player: {
+        id: 1,
+        displayName: "Alpha Array",
+      },
+      totalScore: 20,
+      scoredSubmissionCount: 2,
+      scoredRoundCount: 2,
+      rank: 1,
+      tied: true,
+    },
+    {
+      player: {
+        id: 2,
+        displayName: "Beta Bridge",
+      },
+      totalScore: 20,
+      scoredSubmissionCount: 3,
+      scoredRoundCount: 2,
+      rank: 1,
+      tied: true,
+    },
+    {
+      player: {
+        id: 3,
+        displayName: "Gamma Grid",
+      },
+      totalScore: 5,
+      scoredSubmissionCount: 1,
+      scoredRoundCount: 1,
+      rank: 2,
+      tied: false,
+    },
+  ]);
+});
 
 test(
   "round detail loader returns deterministic highlights and ordered submissions",

@@ -321,12 +321,10 @@ robust under incomplete optional metadata.
 - The main open execution decision is whether round detail should be modal-first
   or page-first. SPEC-003 should choose based on navigation ergonomics, URL
   design, and implementation simplicity, while preserving deep-linkability.
-- Upstream modeling needs reconciliation. `FSD-001` and `FSD-002` currently
-  imply game-level grouping through derived keys and `Round.leagueSlug` rather
-  than through a clearly named first-class game contract. SPEC-003 can still
-  proceed against stable game and round IDs, but the architecture docs should
-  decide whether `Game` becomes an explicit domain object or whether existing
-  fields are reinterpreted and renamed later.
+- Upstream modeling has been reconciled for current scope: `Game` is the
+  first-class archive parent, while `Round.leagueSlug` is retained only as
+  compatibility metadata. Round-page grouping must stay anchored on `Game` and
+  stable round IDs.
 - Game-level presentation remains open. SPEC-003 should decide whether each
   game is best rendered as a section, card, accordion, or other lightweight
   grouping pattern.

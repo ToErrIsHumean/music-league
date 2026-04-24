@@ -32,6 +32,43 @@ It should feel like “Spotify Wrapped for your league”.
 
 ---
 
+### Corrective Semantic Contract
+
+Milestone 6 is scoped to one selected canonical `Game`. It must not flatten
+rounds across games, group by round names, or use `Round.leagueSlug` as the
+product grouping boundary.
+
+Supported imported data is a completed, post-vote, de-anonymized snapshot.
+`Submission.visibleToVoters` may be displayed or audited as source evidence
+only; it is not a current-product privacy gate.
+
+The overview must include a competitive standings or leader signal unless
+SPEC-006 explicitly defers it with a false-claim guardrail. Standings are a
+derived read model over scored `Submission.score` values within the selected
+game, exclude null score/null rank submissions from totals, use dense ranking,
+show ties as ties, and must not introduce a persisted standings table. The
+read model exposes total score, scored submission count, and distinct scored
+round count per player; multiple scored submissions in one round each add to
+the total but count as one scored round for that player. Tied leaders may be
+ordered by display name and player id for stable rendering only; the fallback
+does not create a sole champion. Players with no scored submissions are absent
+from standings rows, and the one-game derivation must avoid per-player or
+per-round query loops.
+
+Player-performance insights must name their denominator and avoid
+durable-tendency copy when the sample is small. The preferred v1 posture is
+finish percentile within scored rounds, with small samples shown only when the
+copy exposes the denominator or omitted when the claim would overreach.
+
+Vote-budget usage, missed-deadline penalties, disqualification, low-stakes
+mode, downvote availability, genre, mood, duration, popularity, album,
+release-year, audio-feature, and Spotify-enrichment claims are prohibited
+unless a prerequisite spec adds those source facts. Negative vote points remain
+valid imported facts; the overview must not infer the source setting that
+enabled them.
+
+---
+
 ## 🧭 Entry Point
 
 - Default route: `/`
@@ -56,7 +93,7 @@ Display 3–5 high-signal items:
 Examples:
 - Most submitted artist  
 - Most active player  
-- Longest average song picker  
+- Standings leader or tied leaders  
 - Total rounds / submissions (optional)
 
 Presentation:
@@ -77,14 +114,14 @@ Presentation:
 Display 3–5 insights:
 
 Examples:
-- “Has a *concerning* love for sad music”  
 - “Single-handedly keeping [artist] relevant”  
-- “Thinks long songs are a personality trait”
+- “[Player] turned 3 scored submissions into a podium average”
 
 Requirements:
 - grounded in real data
 - short, punchy, readable
 - reference real players/songs
+- omit unsupported genre, mood, duration, vote-budget, and deadline claims
 
 ---
 
@@ -152,6 +189,17 @@ Do NOT include:
   - league title  
   - 3–5 stats  
   - 3–5 insights  
+- Overview data is scoped to one selected `Game`
+- A standings/leader item is derived from scored `Submission.score` totals or
+  explicitly deferred by SPEC-006 with a false-claim guardrail
+- Tied standings remain visibly tied and never fabricate a sole champion
+- Standings expose scored submission and distinct scored round counts; multiple
+  scored submissions in one round all contribute to the player's total score
+- Missing score/rank data suppresses or caveats outcome-dependent claims
+- Player-performance insight copy names or exposes its denominator when the
+  sample is small
+- Unsupported metadata, vote-budget, deadline, disqualification, and low-stakes
+  explanations are omitted
 - At least one element feels “funny/true”
 - Elements link to deeper exploration:
   - Player modal  

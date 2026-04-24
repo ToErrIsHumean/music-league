@@ -97,20 +97,33 @@ query patterns without brittle hacks.
   URI.
 - One canonical artist per song in v1; multi-artist modeling deferred.
 
-#### F1.4 Round entity
+#### F1.4 Game entity
 
-- Fields: `id`, `leagueSlug` (default `"main"`), `name`, `description`
-  (optional), `playlistUrl` (optional), `sequenceNumber` (optional integer),
-  `occurredAt` (optional date), `sourceRoundKey` (optional), `createdAt`,
-  `updatedAt`.
-- Unique constraint on `(leagueSlug, sourceRoundKey)` — prevents duplicate
-  round creation on re-import. Null values are exempt (multiple rounds without
-  a source key are allowed).
-- Index on `(leagueSlug, sequenceNumber)`.
-- `leagueSlug` is present in single-league v1 so multi-league does not become
-  a schema migration later.
+- Fields: `id`, `sourceGameId` (unique), `displayName` (optional),
+  `createdAt`, `updatedAt`.
+- `Game` is the canonical parent of `Round` for archive browsing, player
+  history, song memory, standings, and overview aggregation.
+- `sourceGameId` is the stable source-game identity. Import code derives it
+  from the accepted bundle game key; display names are labels only.
 
-#### F1.5 Submission entity
+#### F1.5 Round entity
+
+- Fields: `id`, `gameId` (FK -> Game), `leagueSlug` (compatibility mirror of
+  `Game.sourceGameId`), `name`, `description` (optional), `playlistUrl`
+  (optional), `sequenceNumber` (optional integer), `occurredAt` (optional
+  date), `sourceRoundId` (optional), `createdAt`, `updatedAt`.
+- Canonical uniqueness is `(gameId, sourceRoundId)` for non-null source round
+  IDs. The legacy `(leagueSlug, sourceRoundId)` key remains as compatibility
+  ballast while older import/query paths are being reconciled.
+- Indexes on `(gameId, sequenceNumber)`, `(gameId, occurredAt)`, and the
+  compatibility `(leagueSlug, sequenceNumber)` shape support deterministic
+  per-game round ordering.
+- Product semantics must treat `Round.leagueSlug` as compatibility metadata,
+  not as the source of game grouping. Similar round names across games do not
+  create ambiguity because the parent `Game` and source round identity define
+  the round.
+
+#### F1.6 Submission entity
 
 - Fields: `id`, `roundId` (FK → Round), `playerId` (FK → Player), `songId`
   (FK → Song), `score` (nullable float, derived), `rank` (nullable integer,
@@ -125,8 +138,11 @@ query patterns without brittle hacks.
   submission. `rank` is the ordinal rank by score within the round. Both are
   computed and stored at import time for query efficiency; neither is a direct
   source field.
+- Supported current imports are completed, post-vote, de-anonymized snapshots.
+  `visibleToVoters` remains stored as source evidence/compatibility data and
+  must not be used as an active privacy gate by current product surfaces.
 
-#### F1.6 Vote entity
+#### F1.7 Vote entity
 
 - Fields: `id`, `roundId` (FK → Round), `voterId` (FK → Player), `songId`
   (FK → Song), `pointsAssigned` (integer), `comment` (optional), `votedAt`
@@ -257,7 +273,21 @@ the schema.
 #### F5.4 Overview aggregate queries
 
 - Schema supports: most-submitted artist, most active player, average rank or
-  score per player, and total submission and round counts.
+  score per player, total submission and round counts, and derived
+  game-scoped standings over scored `Submission.score` values.
+- Derived standings total a player's scored submitted songs within one `Game`,
+  exclude submissions with null score or null rank, count each scored
+  submission toward `scoredSubmissionCount`, count distinct scored rounds
+  toward `scoredRoundCount`, use dense ranking by total score, and mark ties
+  explicitly. If a player has multiple scored submissions in one round, each
+  scored submission contributes to the cumulative score while that round counts
+  once for the player. Tied rows use player display name and then player id
+  only as deterministic display fallback; that fallback must not manufacture a
+  sole champion. Players with zero scored submissions are excluded from the
+  standings rows. The derivation should remain linear or near-linear over one
+  game's scored submissions/votes and avoid per-player or per-round query
+  loops. Standings are read-model results, not a persisted `Standing` or
+  `Leaderboard` entity.
 - Implementation note: "most submitted artist" requires grouping through the
   `Song → Artist` relation. This is achievable via multi-step Prisma queries
   with application-layer aggregation; it is not a single `groupBy` call. No raw
@@ -301,9 +331,10 @@ the schema.
   requirements against what downstream milestones actually need.
 - `import/gameid_placeholder/` — actual CSV export structure (`competitors.csv`,
   `rounds.csv`, `submissions.csv`, `votes.csv`); drove addition of `Vote`
-  entity, `spotifyUri`, `sourcePlayerId`, `Round.description`,
-  `Round.playlistUrl`, `Submission.comment`, `Submission.visibleToVoters`, and
-  reversal of the voting-breakdown exclusion.
+  entity, `Game.sourceGameId`, `Round.gameId`, `spotifyUri`,
+  `sourcePlayerId`, `Round.description`, `Round.playlistUrl`,
+  `Submission.comment`, `Submission.visibleToVoters`, and reversal of the
+  voting-breakdown exclusion.
 - `docs/templates/FSD-template.md` — structural reference.
 - House style anchor: `projectABE/docs/specs/FSD-004-goals-schema.md`.
 

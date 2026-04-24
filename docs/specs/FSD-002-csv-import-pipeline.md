@@ -13,8 +13,9 @@
 ### For the PM
 
 Milestone 2 turns raw Music League exports into a repeatable product workflow.
-After a round closes, an admin or operator should be able to load a fresh
-game export, validate it quickly, and commit it with confidence.
+After voting closes and submitters are revealed, an admin or operator should be
+able to load a fresh game export, validate it quickly, and commit it with
+confidence.
 
 The user-visible shift is from "the app only knows seed or manually prepared
 data" to "the app can be refreshed from real game exports as part of normal
@@ -28,7 +29,8 @@ This milestone defines an end-to-end import workflow with four behavioral
 workstreams: parse, stage, validate, commit. The pipeline must stage imported
 data before it touches canonical records, reject bad or inconsistent input
 deterministically, and preserve an audit trail of what was imported, created,
-or rejected. Each four-file CSV bundle represents exactly one game snapshot.
+or rejected. Each four-file CSV bundle represents exactly one completed,
+post-vote, de-anonymized game snapshot.
 
 Done means an operator can import a supported CSV export, receive an immediate
 summary, and either commit a coherent dataset or get a clear failure report.
@@ -56,8 +58,9 @@ when deterministic validation succeeds.
   timestamps, counts, and failure metadata.
 - Canonical data remains unchanged until the operator explicitly commits the
   staged import.
-- One supported bundle equals one game snapshot; imports do not combine
-  unrelated games into a single undifferentiated namespace.
+- One supported bundle equals one completed game snapshot; imports do not
+  combine unrelated games into a single undifferentiated namespace or import
+  pre-reveal player-song associations.
 
 #### F1.2 Workflow stages
 
@@ -88,7 +91,7 @@ about consistently.
 - The supported input is the Music League CSV export containing competitor,
   round, submission, and vote data.
 - A supported import unit is exactly one set of four CSVs representing one
-  game snapshot.
+  completed, post-vote, de-anonymized game snapshot.
 - The canonical export fields evidenced in source samples are first-class input:
   competitor identity, round identity and metadata, submission song metadata,
   submitter identity, vote identity, and vote points.
@@ -102,6 +105,9 @@ about consistently.
 - Submission-stage records must be able to represent at least: song title,
   artist name, song identifier when present, submitter, round, timestamps,
   visibility flag, and free-text comment.
+- The visibility flag is preserved as imported source evidence/compatibility
+  data. Current product surfaces must not treat it as a privacy gate because
+  supported imports are already de-anonymized snapshots.
 - Vote-stage records must be able to represent at least: voter, round, song
   identifier, points assigned, vote timestamp, and comment.
 - Parsing errors are captured as explicit import issues; they must not be
@@ -176,6 +182,9 @@ without duplicate inflation, and it does so only after validation has passed.
 - If a newly committed bundle has the same derived game key as an existing
   imported game, the commit overwrites that game's canonical round/submission/
   vote snapshot so the committed data matches the incoming bundle exactly.
+- The derived game key maps to one canonical `Game.sourceGameId`. Rounds are
+  written under `Round.gameId`; `Round.leagueSlug` remains a compatibility
+  mirror of `Game.sourceGameId`, not the canonical product grouping boundary.
 
 #### F4.2 Duplicate prevention and replay safety
 

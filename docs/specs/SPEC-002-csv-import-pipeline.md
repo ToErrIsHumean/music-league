@@ -57,14 +57,16 @@ staging, deterministic validation, or failure tracking.
   score/rank CSV fields as authoritative input.
 - **INV-05:** The v1 import contract is a full Music League export bundle
   containing exactly the four required files: `competitors.csv`, `rounds.csv`,
-  `submissions.csv`, and `votes.csv`. Each bundle represents exactly one game
-  snapshot. Partial imports are out of scope.
+  `submissions.csv`, and `votes.csv`. Each bundle represents exactly one
+  completed, post-vote, de-anonymized game snapshot. Partial imports and
+  pre-reveal player-song associations are out of scope.
 - **INV-06:** Matching is deterministic only. `gameKey` is derived from the
-  first valid typed round row in `rounds.csv` and scopes the imported game.
-  Players use globally stable `sourcePlayerId`, rounds use
-  `(leagueSlug = gameKey, sourceRoundId)`, songs use `spotifyUri`, and artists
-  use normalized artist name. This milestone does not use fuzzy or fallback
-  matching for players, rounds, songs, or artists.
+  first valid typed round row in `rounds.csv` and maps to
+  `Game.sourceGameId`. Players use globally stable `sourcePlayerId`, rounds
+  use `(gameId, sourceRoundId)` with `Round.leagueSlug = Game.sourceGameId` as
+  compatibility metadata, songs use `spotifyUri`, and artists use normalized
+  artist name. This milestone does not use fuzzy or fallback matching for
+  players, rounds, songs, or artists.
 - **INV-06a:** Source rows are unique within a bundle by their deterministic
   source keys. Duplicate competitor rows (`sourcePlayerId`), duplicate round
   rows (`sourceRoundId`), duplicate submission rows
@@ -509,10 +511,12 @@ Errors:
 **Contract rules:**
 
 - Matching is deterministic only:
-  1. Players by `sourcePlayerId`
-  2. Rounds by `(leagueSlug = batch.gameKey, sourceRoundId)`
-  3. Songs by `spotifyUri`
-  4. Artists by normalized artist name
+  1. Games by `sourceGameId = batch.gameKey`
+  2. Players by `sourcePlayerId`
+  3. Rounds by `(gameId, sourceRoundId)` with `Round.leagueSlug` mirrored from
+     `Game.sourceGameId` for compatibility
+  4. Songs by `spotifyUri`
+  5. Artists by normalized artist name
 - Classification branches:
   - exact deterministic-key match -> matched
   - no canonical candidate -> create disposition
@@ -718,8 +722,9 @@ Errors:
     then mark the batch `failed`, set `failureStage = commit`, and persist
     `failureSummary` in a follow-up audit write
 - Replay safety rules:
+  - `Game` upsert key: `sourceGameId = batch.gameKey`
   - `Player` upsert key: `sourcePlayerId`
-  - `Round` upsert key: `(leagueSlug = batch.gameKey, sourceRoundId)`
+  - `Round` upsert key: `(gameId, sourceRoundId)`
   - `Song` upsert key: `spotifyUri`
   - `Artist` upsert key: `normalizedName`
   - `Submission` upsert key: `(roundId, playerId, songId)`
@@ -727,9 +732,9 @@ Errors:
 - Snapshot overwrite rules:
   - Re-ingesting a bundle whose derived `gameKey` matches an existing imported
     game overwrites that game's canonical snapshot.
-  - After commit, canonical `Round` rows with `leagueSlug = batch.gameKey` and
-    their dependent `Submission` and `Vote` rows must match the incoming staged
-    bundle exactly.
+  - After commit, canonical `Round` rows under the canonical `Game` for
+    `batch.gameKey` and their dependent `Submission` and `Vote` rows must match
+    the incoming staged bundle exactly.
   - Canonical rows for the same `gameKey` that are absent from the incoming
     bundle are deleted as part of the commit transaction.
   - Global `Player`, `Artist`, and `Song` rows are never deleted solely because
@@ -742,7 +747,7 @@ Errors:
   - `Song.title` and `normalizedTitle` may refresh from the source row that
     matches `spotifyUri`
   - `Round.name`, `description`, `playlistUrl`, and `occurredAt` may refresh
-    from the source row that matches `(leagueSlug = batch.gameKey, sourceRoundId)`
+    from the source row that matches `(gameId, sourceRoundId)`
   - `Submission.submittedAt`, `comment`, `visibleToVoters`, and
     `sourceImportId` must be written from the staged row
   - `Vote.votedAt`, `comment`, and `sourceImportId` must be written from the
@@ -751,7 +756,10 @@ Errors:
   identity changes that would remap an existing canonical record to a different
   deterministic key become blocking conflicts rather than silent rewrites.
 - Rows absent from the committing bundle are left untouched only when they are
-  outside the committing batch's `gameKey`.
+  outside the committing batch's `Game`.
+- `Submission.visibleToVoters` is stored from the staged row as source
+  evidence/compatibility data. It is not an active current-product privacy gate
+  because supported bundles are completed, post-vote, de-anonymized snapshots.
 
 #### §4d-8. `recomputeRoundResults(roundIds)`
 

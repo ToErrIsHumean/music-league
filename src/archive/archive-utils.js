@@ -553,6 +553,81 @@ function buildGameMetricsByPlayer(gameSubmissions) {
   return metricsByPlayer;
 }
 
+function deriveGameStandings(submissions) {
+  const rowsByPlayer = new Map();
+
+  for (const submission of submissions) {
+    if (!isScoredSubmission(submission)) {
+      continue;
+    }
+
+    const row = rowsByPlayer.get(submission.playerId) ?? {
+      player: {
+        id: submission.playerId,
+        displayName: submission.playerName,
+      },
+      totalScore: 0,
+      scoredSubmissionCount: 0,
+      scoredRoundIds: new Set(),
+    };
+
+    row.totalScore += submission.score;
+    row.scoredSubmissionCount += 1;
+    row.scoredRoundIds.add(submission.roundId);
+    rowsByPlayer.set(submission.playerId, row);
+  }
+
+  const standings = [...rowsByPlayer.values()]
+    .map((row) => ({
+      player: row.player,
+      totalScore: row.totalScore,
+      scoredSubmissionCount: row.scoredSubmissionCount,
+      scoredRoundCount: row.scoredRoundIds.size,
+      rank: null,
+      tied: false,
+    }))
+    .sort((left, right) => {
+      if (right.totalScore !== left.totalScore) {
+        return right.totalScore - left.totalScore;
+      }
+
+      if (left.player.displayName !== right.player.displayName) {
+        return left.player.displayName < right.player.displayName ? -1 : 1;
+      }
+
+      return left.player.id - right.player.id;
+    });
+
+  const rowsByTotalScore = new Map();
+  let currentRank = 0;
+  let previousScore = null;
+
+  for (const [index, row] of standings.entries()) {
+    if (row.totalScore !== previousScore) {
+      currentRank += 1;
+      previousScore = row.totalScore;
+    }
+
+    row.rank = currentRank;
+
+    const tiedRows = rowsByTotalScore.get(row.totalScore) ?? [];
+    tiedRows.push(index);
+    rowsByTotalScore.set(row.totalScore, tiedRows);
+  }
+
+  for (const tiedRowIndexes of rowsByTotalScore.values()) {
+    if (tiedRowIndexes.length < 2) {
+      continue;
+    }
+
+    for (const index of tiedRowIndexes) {
+      standings[index].tied = true;
+    }
+  }
+
+  return standings;
+}
+
 function buildGameBaselines(metricsByPlayer) {
   const playerMetrics = [...metricsByPlayer.values()];
 
@@ -1582,6 +1657,7 @@ module.exports = {
   buildArchiveHref,
   compareSongMemoryHistoryOrder,
   deriveSongFamiliarity,
+  deriveGameStandings,
   derivePlayerTrait,
   getPlayerModalSubmission,
   getPlayerRoundModal,

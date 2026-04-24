@@ -105,8 +105,20 @@ model Song {
   votes           Vote[]
 }
 
+model Game {
+  id           Int      @id @default(autoincrement())
+  sourceGameId String   @unique
+  displayName  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  rounds       Round[]
+
+  @@index([sourceGameId])
+}
+
 model Round {
   id             Int          @id @default(autoincrement())
+  gameId         Int
   leagueSlug     String       @default("main")
   name           String
   description    String?
@@ -116,10 +128,14 @@ model Round {
   sourceRoundId  String?
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
+  game           Game         @relation(fields: [gameId], references: [id])
   submissions    Submission[]
   votes          Vote[]
 
+  @@index([gameId, sequenceNumber])
+  @@index([gameId, occurredAt])
   @@index([leagueSlug, sequenceNumber])
+  @@unique([gameId, sourceRoundId])
   @@unique([leagueSlug, sourceRoundId])
 }
 
@@ -187,9 +203,15 @@ model ImportBatch {
 
 **Schema notes:**
 
-- `Round.@@unique([leagueSlug, sourceRoundId])`: SQLite treats NULL as
+- `Game` is the canonical parent of `Round`. Product-facing grouping and
+  archive queries use `Round.gameId` / `Game`, not round names or
+  `Round.leagueSlug` inference.
+- `Round.leagueSlug` remains a compatibility mirror of `Game.sourceGameId`.
+  New feature code must treat it as compatibility metadata unless an active
+  spec explicitly authorizes a legacy compatibility path.
+- `Round.@@unique([gameId, sourceRoundId])`: SQLite treats NULL as
   non-comparable in unique indexes; multiple rounds with `sourceRoundId = null`
-  are permitted. Only non-null values are deduplicated.
+  are permitted within a game. Only non-null values are deduplicated.
 - `Song.normalizedTitle`: not a unique constraint. `spotifyUri` is the sole
   dedup key (INV-03); `normalizedTitle` exists for display normalization and
   future lookup paths only.

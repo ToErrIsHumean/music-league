@@ -28,17 +28,17 @@ cross-round modal content remains a later-milestone expansion.
 | Artifact | Location | Relevance |
 |---|---|---|
 | FSD | `docs/specs/FSD-003-round-page.md` | Product source of truth for game-first archive browsing, round detail, deep-linking, and context-preserving drill-in |
-| Upstream spec | `docs/specs/SPEC-002-csv-import-pipeline.md` | Current game-scoped import contract and replay semantics; presently derives game grouping from `gameKey` / `Round.leagueSlug` |
-| Prisma schema | `prisma/schema.prisma` | Current canonical schema has `Round.leagueSlug` but no first-class `Game` model |
+| Upstream spec | `docs/specs/SPEC-002-csv-import-pipeline.md` | Current game-scoped import contract and replay semantics; derives `Game.sourceGameId` from `gameKey` and retains `Round.leagueSlug` as compatibility metadata |
+| Prisma schema | `prisma/schema.prisma` | Current canonical schema has first-class `Game`, `Round.gameId`, and compatibility `Round.leagueSlug` |
 | Seed data | `prisma/seed.js` | Current fixture only seeds one logical game (`leagueSlug = "main"`) with two rounds, which is insufficient to validate archive grouping |
 | Query evidence | `prisma/tests/queries.test.js` | Confirms downstream round detail data shape and rank-order query assumptions already exist at the Prisma layer |
 | Import parser | `src/import/parse-bundle.js` | Already captures bundle-level `sourceLabel`; canonical game identity currently flows through `parsedBundle.gameKey`, derived from the first valid round row |
 | Runtime/deps | `package.json` | Repo currently has Prisma + Node only; no UI framework or route surface exists yet |
 
-Current repo evidence shows solid data and import groundwork, but no consumer
-UI and no explicit game entity. The FSD's browse-by-game model therefore
-requires both a product surface and an architectural correction: the archive
-must stop treating `Round.leagueSlug` as the authoritative game boundary.
+Current repo evidence shows solid data, import groundwork, and explicit game
+identity. The FSD's browse-by-game model therefore requires the archive surface
+to preserve `Game` as the product grouping boundary and treat
+`Round.leagueSlug` only as compatibility metadata.
 
 ## 3. Invariants
 
