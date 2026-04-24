@@ -1,4 +1,9 @@
 const { PrismaClient } = require("@prisma/client");
+const {
+  compareSongMemoryHistoryOrder,
+  deriveSongFamiliarity,
+  sortSongMemoryHistory,
+} = require("./song-memory");
 
 const SHORT_GAME_ID_MAX_LENGTH = 16;
 
@@ -1045,6 +1050,8 @@ function buildArchiveHref(input = {}) {
 
 module.exports = {
   buildArchiveHref,
+  compareSongMemoryHistoryOrder,
+  deriveSongFamiliarity,
   derivePlayerTrait,
   getPlayerModalSubmission,
   getPlayerRoundModal,
@@ -1052,4 +1059,5 @@ module.exports = {
   getSongRoundModal,
   listArchiveGames,
   selectPlayerNotablePicks,
+  sortSongMemoryHistory,
 };
