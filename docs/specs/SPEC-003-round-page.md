@@ -50,8 +50,9 @@ to preserve `Game` as the product grouping boundary and treat
   must be able to enter a specific round directly and dismiss it without losing
   surrounding archive orientation.
 - **INV-03:** Round detail remains artifact-first: at most 3 quick-scan
-  highlights, followed by the full submission list. This milestone MUST NOT add
-  charts, filters, vote breakdowns, or analytics-heavy framing.
+  highlights, followed by the full submission list and, after PRE-M6 CP-07,
+  grouped v1 vote evidence. This milestone MUST NOT add charts, filters,
+  vote-budget/deadline explainers, or analytics-heavy framing.
 - **INV-04:** Missing optional metadata such as game display name, round date,
   winner, score, or rank must never hide the game, round summary, or submission
   row. Fallback presentation must read as intentional, not broken.
@@ -270,6 +271,20 @@ interface RoundDetailDialogProps {
       rank: number | null;
       comment: string | null;
     }>;
+    voteBreakdown: Array<{
+      submissionId: number;
+      song: { id: number; title: string; artistName: string };
+      submitter: { id: number; displayName: string };
+      rank: number | null;
+      score: number | null;
+      submissionComment: string | null;
+      votes: Array<{
+        voter: { id: number; displayName: string };
+        pointsAssigned: number;
+        votedAt: string | null;
+        voteComment: string | null;
+      }>;
+    }>;
   };
   closeHref: string;
   nestedEntity: null | {
@@ -285,6 +300,11 @@ interface RoundDetailDialogProps {
 - Render 2-3 highlights only.
 - Submission rows are vertically scannable and keep song, artist, player, and
   score/rank on one coherent row or compact stack.
+- Render grouped vote evidence for completed imported results without
+  suppressing submissions that have no vote rows. The section groups by target
+  submission/song, labels submission comments separately from vote comments,
+  and omits vote-budget, missed-deadline, disqualification, and low-stakes
+  explanations.
 - Song and player names are actionable affordances that open nested modal
   shells without dismissing the round dialog.
 
@@ -419,6 +439,20 @@ getRoundDetail(roundId: number): Promise<null | {
     score: number | null,
     rank: number | null,
     comment: string | null
+  }>,
+  voteBreakdown: Array<{
+    submissionId: number,
+    song: { id: number, title: string, artistName: string },
+    submitter: { id: number, displayName: string },
+    rank: number | null,
+    score: number | null,
+    submissionComment: string | null,
+    votes: Array<{
+      voter: { id: number, displayName: string },
+      pointsAssigned: number,
+      votedAt: string | null,
+      voteComment: string | null
+    }>
   }>
 }>
 ```
@@ -437,6 +471,16 @@ getRoundDetail(roundId: number): Promise<null | {
      - winner margin of 1 point
 - When scores are absent, fallback copy must use plain status language such as
   `"Awaiting votes"` rather than synthetic rankings.
+- `voteBreakdown` groups use the same target submission/song order as
+  `submissions`: `rank ASC NULLS LAST`, then `createdAt ASC`, then a stable
+  submission id fallback.
+- Votes within each group order by `pointsAssigned DESC`, then voter display
+  name ASC, then vote row id ASC or an equivalent stable fallback.
+- Empty vote lists are valid and must not suppress the submission row.
+- Vote comments and submission comments remain distinct fields in loader output
+  and UI labels.
+- `getRoundDetail` must not derive or return vote-budget usage,
+  missed-deadline, disqualification, or low-stakes explanations.
 
 #### §4d-3. `getSongRoundModal(roundId, songId)`
 
@@ -517,7 +561,7 @@ buildArchiveHref(input: {
 |---|---|---|
 | AC-01 | The archive route renders every seeded/imported game as a first-class group, with rounds nested only inside their parent game and ordered deterministically per §4d-1 | `test` |
 | AC-02 | Direct entry to `/?round=<valid-id>` opens the same round detail overlay as an in-app open, and invalid `round` params fall back gracefully to the archive with a non-blocking notice | `manual` |
-| AC-03 | Round detail shows round identity, parent game context, 2-3 quick-scan highlights, and the full submission list ordered per §4d-2 | `test` |
+| AC-03 | Round detail shows round identity, parent game context, 2-3 quick-scan highlights, the full submission list ordered per §4d-2, and the PRE-M6 v1 vote-breakdown evidence contract when implemented | `test` |
 | AC-04 | Clicking a song or player inside round detail opens the corresponding nested round-scoped modal shell without closing the round overlay, and closing the shell returns to the same round state | `manual` |
 | AC-05 | Missing optional date, winner, score, or rank renders intentional fallback labels and never removes the relevant game, round, or submission from the UI | `test` |
 | AC-06 | Prisma schema and migration introduce explicit `Game` identity, backfill existing rows deterministically, and archive loaders query via `Game` / `Round.gameId` rather than `Round.leagueSlug` inference | `test` |
@@ -559,7 +603,11 @@ TASK-07: TASK-04,TASK-06
 - [ ] Full player-history modal content, summary traits, or social insights beyond the round-scoped modal shell — Milestone 4. `Disposition: deferred` `Reason: sequencing` `Trace: §7 | BACKLOG.md`
 - [ ] Full song-history modal content, recurrence counts, or cross-round lookup utility beyond the round-scoped modal shell — Milestone 5. `Disposition: deferred` `Reason: sequencing` `Trace: §7 | BACKLOG.md`
 - [ ] League overview landing page, overview aggregates, or curated insights outside the round/archive flow — Milestone 6
-- [ ] Vote-by-vote breakdowns, scoring explainers, or ballot inspection
+- [ ] Scoring explainers, ballot inspection, vote-budget usage,
+  missed-deadline, disqualification, or low-stakes explanations. `Disposition:
+  partially superseded` `Reason: CP-07 requires v1 vote-by-vote evidence on
+  completed round detail while keeping settings explanations out of scope`
+  `Trace: PRE-M6 CP-07`
 - [ ] Cross-game filters, faceting, or comparison tools
 - [ ] Charts, dashboards, dense analytics panels, or screenshot-unfriendly clutter
 - [ ] Replacing every legacy `leagueSlug` reference outside the paths touched for Milestone 3 compatibility

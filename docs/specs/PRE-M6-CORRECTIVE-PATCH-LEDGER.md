@@ -303,6 +303,9 @@ persisted as a new schema entity.
 **Outcome:** Player traits and overview performance claims remain fair when
 round sizes, participation, and submission counts vary.
 
+**TASK-02 disposition:** `patched` in `FSD-004-player-modal`,
+`SPEC-004-player-modal`, and `docs/specs/milestone_6_league_overview.md`.
+
 #### CP-04.1 Originating gap
 
 - Music League games can vary in number of songs per player, voting rules,
@@ -352,6 +355,10 @@ negative points, vote budgets, missed-deadline behavior, and score anomalies
 without reverse-engineering source settings from outcomes. Vote-by-vote display
 in v1 does not by itself require vote-budget derivation or missed-deadline
 behavior.
+
+**TASK-02 disposition:** `patched` in `FSD-002-csv-import-pipeline`,
+`SPEC-002-csv-import-pipeline`, core vote contracts, and
+`docs/specs/milestone_6_league_overview.md`.
 
 #### CP-05.1 Originating gap
 
@@ -454,6 +461,10 @@ SPEC explicitly declares a local slice as a non-canonical preview.
 **Outcome:** v1 includes a vote-by-vote result breakdown for completed imported
 rounds, while keeping vote-budget and missed-deadline explanations out of scope
 unless the source facts are available.
+
+**TASK-02 disposition:** `patched` in `FSD-003-round-page`,
+`SPEC-003-round-page`, core vote contracts, song-detail exclusions, and
+`docs/specs/milestone_6_league_overview.md`.
 
 #### CP-07.1 Originating gap
 

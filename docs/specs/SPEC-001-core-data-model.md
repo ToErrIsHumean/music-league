@@ -38,6 +38,10 @@ Prisma project.
   `Vote` rows. They must not be written to a non-null value unless corresponding
   `Vote` rows for that `(roundId, songId)` pair exist. They are computed and
   stored at import time; they are not source fields.
+- **INV-01a:** `Vote.pointsAssigned` may be negative, zero, or positive.
+  Negative points are valid imported facts and do not prove source rule
+  settings such as downvote availability, vote-budget size, deadline penalties,
+  or low-stakes behavior.
 - **INV-02:** `normalize()` is a pure function — no side effects, no DB access,
   no I/O. Given the same input it always returns the same output.
 - **INV-03:** `Song.spotifyUri` is non-nullable and is the sole deduplication
@@ -325,12 +329,24 @@ prisma.submission.groupBy({ by: ['playerId'], _count: { id: true } })
 Input:  roundId: number, songId: number
 Output: Array<Vote & { voter: Pick<Player, 'id' | 'displayName'> }>
 
+Input:  roundId: number
+Output: Array<{
+  submission: Submission & { song: Song & { artist: Pick<Artist, 'id' | 'name'> }, player: Pick<Player, 'id' | 'displayName'> },
+  votes: Array<Vote & { voter: Pick<Player, 'id' | 'displayName'> }>
+}>
+
 Input:  voterId: number
 Output: Array<Vote & {
   song: Song & { artist: Pick<Artist, 'id' | 'name'> },
   round: Pick<Round, 'id' | 'name'>
 }>
 ```
+
+Round-level vote evidence groups by target submission/song, preserves empty
+vote lists for unvoted submissions, and keeps `Submission.comment` distinct
+from `Vote.comment`. Query contracts must not derive vote-budget usage,
+missed-deadline penalties, disqualification, low-stakes behavior, or
+downvote-enabled settings from vote rows.
 
 #### §4d-7. Score and rank computation
 

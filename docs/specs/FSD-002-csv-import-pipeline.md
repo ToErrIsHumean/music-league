@@ -110,6 +110,15 @@ about consistently.
   supported imports are already de-anonymized snapshots.
 - Vote-stage records must be able to represent at least: voter, round, song
   identifier, points assigned, vote timestamp, and comment.
+- The supported CSV bundle exposes no trusted vote-budget, deadline,
+  low-stakes, songs-per-round, or downvote-enabled setting field. Those source
+  settings are unknown unless a future import source or trusted local
+  configuration explicitly supplies them.
+- If a later source adds settings, the accepting SPEC must define whether each
+  setting attaches to `Game`, `Round`, or `ImportBatch` before product copy may
+  explain outcomes with it.
+- Negative vote points are valid imported facts and must not be rejected solely
+  because they are negative.
 - Parsing errors are captured as explicit import issues; they must not be
   dropped silently.
 
@@ -119,6 +128,10 @@ about consistently.
   differences should not make an otherwise valid export fail.
 - Unsupported structure or missing critical fields should produce a clear
   failure, not a best-effort guess that mutates league data.
+- Validation must not fabricate failures from absent source settings. Unknown
+  vote budgets, deadline behavior, low-stakes behavior, songs-per-round rules,
+  or downvote availability remain unknown rather than defaulting to local
+  assumptions.
 - The product promise is "strict deterministic import for a trusted source,"
   not "accept anything and let a human fix it later."
 

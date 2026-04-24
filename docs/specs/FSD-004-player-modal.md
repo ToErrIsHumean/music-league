@@ -38,9 +38,23 @@ Three workstreams:
 #### F1.1 Derivation
 
 - Computed from rank and score data only; no genre, mood, duration, or external metadata
-- Reflects the most statistically dominant signal among: avg rank relative to league, score variance, win rate
+- Uses finish percentile, not raw rank alone, when comparing finishes across
+  rounds: `(rank - 1) / max(scoredRoundSize - 1, 1)`, where `0` is best and
+  `1` is worst
+- Names or exposes the denominator for any player-performance claim. Finish
+  and win-rate claims use scored submissions unless a later SPEC explicitly
+  chooses another named denominator.
+- Multi-submit rounds count once per scored submission for submission-based
+  claims, and once per player/round only for submitted-round-count claims
+- Score variance may use raw score as descriptive context, but copy must not
+  explain that variance through vote budgets, deadlines, low-stakes settings,
+  or downvote availability unless those source settings are known
+- Reflects the most statistically dominant supported signal among: normalized
+  average finish, score variance, win rate
 - Exactly one trait line; no stacking
-- Omitted for players with 0 scored submissions; minimum threshold: 1
+- Omitted for players with 0 scored submissions; minimum threshold: 1. A
+  one-scored-submission line may describe that one result but must not imply a
+  durable tendency without a later threshold rule.
 
 #### F1.2 Copy tone
 
@@ -70,6 +84,8 @@ Three workstreams:
 #### F2.2 Display
 
 - Each pick shows: song title, artist, round name, rank position (score as secondary)
+- Evidence copy should keep rank legible with its scored-round denominator when
+  a pick is used outside the modal as player-performance support
 - Picks are labeled "Best Pick" and "Worst Pick" respectively
 - Song title and round name are tappable (see F3)
 - Best and worst are visually distinguished from each other and from the submission history below; exact visual treatment is a SPEC decision

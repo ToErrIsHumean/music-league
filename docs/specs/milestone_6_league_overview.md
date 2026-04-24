@@ -59,6 +59,19 @@ Player-performance insights must name their denominator and avoid
 durable-tendency copy when the sample is small. The preferred v1 posture is
 finish percentile within scored rounds, with small samples shown only when the
 copy exposes the denominator or omitted when the claim would overreach.
+Finish percentile is `(rank - 1) / max(scoredRoundSize - 1, 1)`, where `0`
+is best and `1` is worst. Submission-based claims use scored submissions as
+their denominator; submitted-round claims must use a distinct submitted-round
+count. Multi-submit rounds count once per scored submission for
+submission-based claims and once per player/round for submitted-round claims.
+Raw score variance is descriptive context only and must not be used to infer
+vote-budget or deadline settings.
+
+Completed round evidence links should resolve to the round-level
+vote-by-vote breakdown. That evidence groups by target submission/song,
+includes voter, points, voted-at timestamp when present, and vote comment, and
+keeps vote comments distinct from submission comments. Empty vote lists do not
+remove the submission row.
 
 Vote-budget usage, missed-deadline penalties, disqualification, low-stakes
 mode, downvote availability, genre, mood, duration, popularity, album,
@@ -200,6 +213,8 @@ Do NOT include:
   sample is small
 - Unsupported metadata, vote-budget, deadline, disqualification, and low-stakes
   explanations are omitted
+- Vote-derived evidence links resolve to round-level vote breakdowns without
+  conflating submission comments with vote comments
 - At least one element feels “funny/true”
 - Elements link to deeper exploration:
   - Player modal  

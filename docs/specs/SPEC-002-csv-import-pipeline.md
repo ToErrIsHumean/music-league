@@ -88,6 +88,12 @@ staging, deterministic validation, or failure tracking.
   canonical snapshot matches the incoming bundle exactly. Global canonical
   `Player`, `Artist`, and `Song` rows are not deleted by snapshot
   reconciliation.
+- **INV-11:** The supported CSV bundle does not expose trusted vote-budget,
+  deadline, low-stakes, songs-per-round, or downvote-enabled configuration.
+  These settings remain unknown unless a future source contract or trusted
+  local configuration supplies them. Negative `Vote.pointsAssigned` values are
+  valid imported facts and must not be rejected solely because they are
+  negative.
 
 ---
 
@@ -426,6 +432,10 @@ Errors:
   - `Visible To Voters`: `Yes` -> `true`, `No` -> `false`, blank -> `null`
   - `Points Assigned` parses as a base-10 integer and may be negative, zero, or
     positive; invalid values emit `invalid_scalar`
+- The parser and validator do not infer vote-budget exhaustion,
+  missed-deadline penalties, low-stakes behavior, songs-per-round rules, or
+  downvote availability from vote rows. Unknown source settings do not create
+  blocking issues by themselves.
 - The parser does not normalize or validate non-scalar string values beyond CSV
   decoding and header normalization.
 - `rowCount` counts source data rows encountered in the file, even when a row
@@ -760,6 +770,18 @@ Errors:
 - `Submission.visibleToVoters` is stored from the staged row as source
   evidence/compatibility data. It is not an active current-product privacy gate
   because supported bundles are completed, post-vote, de-anonymized snapshots.
+- Source setting posture:
+  - known current settings: none from the supported four-file CSV bundle
+  - unknown current settings: vote budget, submission deadline behavior, voting
+    deadline behavior, low-stakes mode, songs-per-round rule, and
+    downvote-enabled configuration
+  - future known settings must define their attachment boundary before use:
+    `Game`, `Round`, or `ImportBatch`
+  - copy prohibition for downstream import summaries and archive surfaces:
+    do not explain score oddities, missing votes, negative points, or result
+    shape through those settings unless a future source fact establishes them
+- Negative `Vote.pointsAssigned` values remain displayable and computable as
+  imported vote facts.
 
 #### §4d-8. `recomputeRoundResults(roundIds)`
 

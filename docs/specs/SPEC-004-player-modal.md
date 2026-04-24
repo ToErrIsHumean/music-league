@@ -368,8 +368,18 @@ derivePlayerTrait(input: {
 - Compute `averageFinishPercentile` from each scored submission as
   `(rank - 1) / max(scoredRoundSize - 1, 1)` so `0` means best-in-round and `1`
   means worst-in-round.
+- The denominator for `averageFinishPercentile`, `winRate`, and branch
+  eligibility is scored submissions. Multi-submit rounds count once per scored
+  submission for these submission-based metrics.
+- If a downstream overview insight needs a submitted-round denominator, it must
+  compute and name a distinct submitted-round count rather than reusing scored
+  submission count.
 - Compute `scoreStdDev` from scored submission `score` values; treat fewer than
   2 scored submissions as `0`.
+- `scoreStdDev` is raw descriptive variance only. It must not be used to infer
+  vote-budget size, deadline penalties, low-stakes behavior, or downvote
+  availability because those source settings are not imported in the current
+  CSV contract.
 - Compute candidate dominance deltas as:
   - `top-finish = gameBaselines.averageFinishPercentile - playerMetrics.averageFinishPercentile`
   - `low-finish = playerMetrics.averageFinishPercentile - gameBaselines.averageFinishPercentile`
@@ -388,6 +398,9 @@ derivePlayerTrait(input: {
   return `null` for 0 scored submissions.
 - The branch selection must compare the player's metrics against the current
   game's player distribution rather than raw app-wide totals.
+- The M4 modal may render a one-scored-submission trait, but overview claims
+  that reuse this derivation must expose the scored-submission denominator and
+  avoid durable-tendency wording for small samples.
 
 #### §4d-4. `selectPlayerNotablePicks(scoredHistory)`
 
@@ -404,6 +417,9 @@ selectPlayerNotablePicks(scoredHistory: PlayerHistoryRow[]): {
   then `submissionId DESC`.
 - `worst` sorts by `rank DESC`, then `score ASC`, then `occurredAt DESC NULLS LAST`,
   then `submissionId DESC`.
+- Multi-submit rounds are evaluated per scored submission; distinct
+  submitted-round counts are separate overview context and do not collapse
+  notable-pick evidence.
 - When there is exactly 1 scored submission, return it as `best` and return
   `worst = null`.
 - When the sorted `worst` candidate equals `best`, advance to the next distinct

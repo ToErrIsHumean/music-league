@@ -281,7 +281,12 @@ robust under incomplete optional metadata.
 
 ## 4. Explicit Exclusions
 
-- No vote-by-vote breakdowns or scoring explainers in Milestone 3.
+- Milestone 3 did not ship vote-by-vote breakdowns, but PRE-M6 CP-07
+  supersedes that omission for completed imported round results. The current
+  v1 round-detail contract includes grouped vote evidence with voter, target
+  submission/song, points, and vote comment.
+- No vote-budget usage, missed-deadline, disqualification, low-stakes, or
+  scoring-rule explainers unless source facts establish those settings.
 - No charts, dense analytics panels, or dashboard-style comparison views.
 - No cross-game comparison tools, filters, or faceting in v1.
 - No editing, curation, or admin actions on games, rounds, or submissions.

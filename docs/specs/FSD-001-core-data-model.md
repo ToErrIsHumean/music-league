@@ -148,6 +148,8 @@ query patterns without brittle hacks.
   (FK → Song), `pointsAssigned` (integer), `comment` (optional), `votedAt`
   (nullable, source timestamp from CSV), `sourceImportId` (nullable FK →
   ImportBatch), `createdAt`, `updatedAt`.
+- `pointsAssigned` may be negative, zero, or positive. Negative points are
+  valid imported vote facts, not validation errors by themselves.
 - Unique constraint on `(roundId, voterId, songId)` — a voter casts at most one
   vote per song per round.
 - Individual indexes on `roundId`, `voterId`, `songId`.
@@ -298,6 +300,12 @@ the schema.
 
 - Given a `submissionId` (or `roundId` + `songId`): retrieve all votes with
   voter display name, points assigned, and comment.
+- For round result evidence, group vote rows by the uniquely resolvable target
+  submission/song within the round, keeping `Submission.comment` separate from
+  `Vote.comment`.
+- Vote-based queries expose imported vote facts only; they do not infer vote
+  budgets, missed-deadline penalties, low-stakes behavior, disqualification, or
+  downvote-enabled settings.
 - Given a `playerId` as voter: retrieve all votes cast, linked songs, rounds,
   and points assigned — sufficient to derive per-voter patterns (e.g. consistent
   high/low scorer, frequent commenter).
