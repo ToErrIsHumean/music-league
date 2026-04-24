@@ -4,35 +4,43 @@
 
 | AC | Criterion (§5 text) | Status | Evidence |
 |----|---------------------|--------|----------|
-| AC-02 | Familiarity derivation distinguishes true debut, same-artist/new-song, and prior exact-song history using only canonical `Song.id` and `Artist.id`; exact-song history wins when both apply, and same-round co-occurrence alone does not create prior familiarity | `satisfied` | `deriveSongFamiliarity()` returns exactly one of the three kinds, filters exact evidence to the opened song id, excludes opened-song rows from artist-only counts, and prioritizes exact-song history before artist-only history in [song-memory.js](/home/zacha/music-league-worktrees/M5-task-01/src/archive/song-memory.js:78). Focused tests cover debut, known artist, brought back, precedence, artist-only exclusion, and same-round co-occurrence in [song-memory.test.js](/home/zacha/music-league-worktrees/M5-task-01/src/archive/song-memory.test.js:34). `npm test` passed. |
-| AC-03 | The same canonical song opened from round detail and from player history receives the same semantic familiarity kind and modal verdict for the same route-visible origin context, including anomalous same-round duplicates that resolve through the deterministic representative origin | `satisfied` | The derivation ignores `originSubmissionId` for familiarity inflation, derives prior evidence from the route-visible `originRoundId`, and chooses a deterministic origin-round anchor from sorted round evidence in [song-memory.js](/home/zacha/music-league-worktrees/M5-task-01/src/archive/song-memory.js:87). The duplicate-origin regression test verifies identical verdicts for round-detail and player-history anchors in [song-memory.test.js](/home/zacha/music-league-worktrees/M5-task-01/src/archive/song-memory.test.js:305). `npm test` passed. |
-| AC-11 | M5 ships without global search, fuzzy matching, external metadata enrichment, recommendations, charts, vote-by-vote explainers, or multiple simultaneous familiarity badges | `satisfied` | The diff adds only a shared song-memory helper, unit tests, archive-utils exports, test wiring, and a `.gitignore` entry; no search UI, fuzzy matching, external metadata, recommendation, chart, scoring-explainer, or multi-badge surface is introduced. Evidence: [song-memory.js](/home/zacha/music-league-worktrees/M5-task-01/src/archive/song-memory.js:1), [archive-utils.js](/home/zacha/music-league-worktrees/M5-task-01/src/archive/archive-utils.js:1), [package.json](/home/zacha/music-league-worktrees/M5-task-01/package.json:20). |
+| AC-01 | CP-01 through CP-10 each have an explicit `patched`, `deferred`, or `rejected` disposition in the updated product/spec documents, and no CP item disappears through consolidation. | `unsatisfied` | The provided diff artifact is empty: `/home/zacha/music-league-worktrees/M1-task-01/docs/sdd/last-diff-task-01.md` is 0 bytes, so no updated product/spec documents record CP dispositions. |
+| AC-02 | Import and product-surface contracts state that current supported imports are completed, post-vote, de-anonymized snapshots; `visibleToVoters` is documented as source evidence/compatibility data, not a current-product privacy gate. | `unsatisfied` | Empty diff; no import or product-surface contract amendments are present to establish completed-snapshot scope or `visibleToVoters` posture. |
+| AC-03 | Product contracts and tests preserve `Game` as the canonical parent of `Round`, treat `Round.leagueSlug` as compatibility metadata, and prove similar round names across games do not create grouping ambiguity. | `unsatisfied` | Empty diff; no contract or test changes are present to prove `Game` parentage, `Round.leagueSlug` compatibility treatment, or similar-round-name ambiguity handling. |
+| AC-04 | A derived standings read model totals scored `Submission.score` values by player within one game, excludes unscored submissions from totals, handles ties explicitly, and introduces no persisted standings table. | `unsatisfied` | Empty diff; although no persisted standings table is introduced, no amended contract or test evidence establishes the required derived standings semantics. |
+| AC-12 | The cleanup adds no new package dependency and no schema migration. | `satisfied` | Empty diff; no package manifest changes or schema migration files are present in `/home/zacha/music-league-worktrees/M1-task-01/docs/sdd/last-diff-task-01.md`. |
+| AC-13 | HITL-resolved derivation decisions for standings, finish percentile, small samples, and vote-budget/deadline non-inference are reflected in the amended contracts, with no remaining open question blocking TASK-06 through TASK-08. | `unsatisfied` | Empty diff; no amended contracts reflect the resolved standings, finish-percentile, small-sample, or vote-budget/deadline non-inference decisions. |
 
 **Invariant Audit** (`preserves:` + repo constitutional)
 
 | Invariant | Source | Status | Evidence |
 |-----------|--------|--------|----------|
-| INV-02 | spec | `preserved` | The helper computes one mutually exclusive `kind` from exact-song and same-artist evidence and returns that verdict for downstream cue/modal consumers in [song-memory.js](/home/zacha/music-league-worktrees/M5-task-01/src/archive/song-memory.js:131). |
-| INV-03 | spec | `preserved` | The label vocabulary is exactly `New to us`, `Known artist`, and `Brought back`; exact-song classification branches before artist-only classification in [song-memory.js](/home/zacha/music-league-worktrees/M5-task-01/src/archive/song-memory.js:1). |
-| INV-08 | spec | `preserved` | The diff is confined to deterministic song-memory derivation and tests; it adds no global search, fuzzy matching, instant results, or standalone search UI. |
-| INV-10 | spec | `preserved` | Exact-song submissions are kept separate from other same-artist submissions, and artist-only counts exclude the opened canonical `Song.id` in [song-memory.js](/home/zacha/music-league-worktrees/M5-task-01/src/archive/song-memory.js:79). |
-| INV-12 | spec | `preserved` | Prior evidence is selected by comparison to the origin-round anchor, preventing same-round co-occurrence from counting as prior familiarity; covered by [song-memory.test.js](/home/zacha/music-league-worktrees/M5-task-01/src/archive/song-memory.test.js:266). |
-| AGENTS canonical guidance | guidance | `preserved` | The diff does not alter `AGENTS.md` or add competing guidance. |
-| bolder-utils role ownership | guidance | `preserved` | The diff does not replace package-bin role ownership or SDD helper wrappers. |
-| Prompt override locality | guidance | `preserved` | No repo-local prompt overrides are added or moved. |
-| Runtime artifacts home | guidance | `preserved` | The diff artifact remains under `docs/sdd`; the implementation diff does not relocate runtime artifacts. |
-| Orchestrator PLAN ownership | guidance | `preserved` | No `PLAN-*.md` files are modified in the provided diff. |
-| Spec contract immutability | guidance | `preserved` | No active spec contracts or acceptance criteria are changed in the provided diff. |
-| Dependency constraint | guidance | `preserved` | No new dependency is added; `package.json` only adds the new unit test file to `test:unit` in [package.json](/home/zacha/music-league-worktrees/M5-task-01/package.json:20). |
+| INV-01 | spec | `preserved` | Empty diff; no product surface was changed to treat `Submission.visibleToVoters` as an active privacy gate. |
+| INV-02 | spec | `preserved` | Empty diff; no pre-reveal or in-progress import support was added. |
+| INV-03 | spec | `preserved` | Empty diff; no new product-facing grouping, links, standings, overview aggregation, song memory, or player history code was added using non-`Game` grouping semantics. |
+| INV-04 | spec | `preserved` | Empty diff; no new feature code uses `Round.leagueSlug` to infer game grouping. |
+| INV-05 | spec | `preserved` | Empty diff; no new score, rank, standings, winners, champions, leaders, or performance claim logic bypasses vote provenance. |
+| INV-06 | spec | `preserved` | Empty diff; no `Standing`, `Leaderboard`, or equivalent persisted table is introduced. |
+| INV-07 | spec | `preserved` | Empty diff; no source settings are inferred from absence, odd scores, or local intuition. |
+| INV-15 | spec | `preserved` | Empty diff; no existing CP traceability was removed or consolidated away, though TASK-01's required additions are absent and fail AC-01/§4d-1. |
+| INV-16 | spec | `preserved` | Empty diff; no duplicate-song identity logic was changed. |
+| AGENTS canonical guidance | guidance | `preserved` | Empty diff; `AGENTS.md` is not modified or superseded. |
+| bolder-utils role ownership | guidance | `preserved` | Empty diff; no default SDD role wrapper ownership is replaced. |
+| Prompt override locality | guidance | `preserved` | Empty diff; no repo-local prompt overrides are added outside `docs/sdd/`. |
+| Runtime artifacts home | guidance | `preserved` | Empty diff; no runtime artifacts are relocated outside `docs/sdd/`. |
+| Orchestrator PLAN ownership | guidance | `preserved` | Empty diff; no `PLAN-*.md` files are written or modified. |
+| Spec contract immutability | guidance | `preserved` | Empty diff; no active spec contracts or acceptance criteria are implicitly changed in code. |
+| Dependency constraint | guidance | `preserved` | Empty diff; no new dependency is added. |
 
 **Contract Audit** (`contracts:` → §4 items)
 
 | Contract ref | §4 item | Status | Evidence |
 |--------------|---------|--------|----------|
-| §4d-1 | `SongFamiliarityVerdict` shape and classification | `fulfilled` | The returned verdict includes `kind`, canonical labels, `shortSummary`, exact/prior counts, artist song count, and `throughSubmitters`; classification branches implement brought-back, known-artist, and debut with exact-song precedence in [song-memory.js](/home/zacha/music-league-worktrees/M5-task-01/src/archive/song-memory.js:131). |
-| §4d-2 | `deriveSongFamiliarity()` and deterministic history order | `fulfilled` | The exported comparator orders by round occurred-at, round sequence, round id, submission created-at, and submission id with nulls last, and `deriveSongFamiliarity()` applies that order for prior evidence and no-origin fallback counts in [song-memory.js](/home/zacha/music-league-worktrees/M5-task-01/src/archive/song-memory.js:37). Sparse-order and fallback tests cover the required order and no-origin behavior in [song-memory.test.js](/home/zacha/music-league-worktrees/M5-task-01/src/archive/song-memory.test.js:345). |
-| §4d-8 | Song-memory implementation locality | `fulfilled` | Shared derivation and ordering live in adjacent `src/archive/song-memory.js`, are imported/exported by `archive-utils`, and are consumed by tests; no package is added in [archive-utils.js](/home/zacha/music-league-worktrees/M5-task-01/src/archive/archive-utils.js:1). |
+| §4b-1 | No schema migration | `fulfilled` | Empty diff; no schema migration, persisted standings table, source-settings table, artist-collaboration table, genre/mood/duration/enrichment table, or dependency appears in the provided diff. |
+| §4d-1 | Corrective patch disposition record | `broken` | Empty diff; no edited source document records explicit `patched`, `deferred`, or `rejected` dispositions for CP-01 through CP-10. |
+| §4d-3 | Derived game standings read model | `broken` | Empty diff; no amended contract or test establishes one-game standings derivation, scored-only inclusion, multi-submit contribution, dense ranking, tie behavior, deterministic fallback, or cheap computation. |
+| §4d-6 | Source settings posture | `broken` | Empty diff; no amended contract documents vote-budget, deadline, low-stakes, and downvote settings as unknown while preserving negative `Vote.pointsAssigned` as imported fact. |
 
-**Verdict:** `confirmed`
+**Verdict:** `contested`
 
-All audited acceptance criteria, invariants, and contracts passed without unverifiable rows.
+Failing items: AC-01, AC-02, AC-03, AC-04, AC-13, §4d-1, §4d-3, and §4d-6. The implementer diff artifact is empty, so the required TASK-01 contract amendments and verification evidence are absent.

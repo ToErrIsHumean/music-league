@@ -363,7 +363,12 @@ TASK-08: TASK-04,TASK-06,TASK-07
 
 ## Appendix D: Discoveries Log
 
-No discoveries recorded.
+### D-001 — PRE-M6 worktree label must not collide with prior M1 worktrees
+
+- **Discovered:** 2026-04-24T23:08:02Z during `TASK-01` cycle 1 meta-orchestrator dispatch.
+- **Trigger:** The meta-orchestrator derived the default worktree label `M1-task-01` for this PRE-M6 spec and reused the existing `/home/zacha/music-league-worktrees/M1-task-01` branch/worktree.
+- **Impact:** Runtime slice files from `docs/specs/slices-pre-m6/` existed on `main`, but were absent in the reused task worktree, so the implementer could not load `TASK-01` contracts or acceptance criteria and produced an empty diff. This is an orchestration/worktree identity issue, not a product-contract failure.
+- **Resolution:** Resume this PRE-M6 workstream with an explicit non-colliding milestone label, for example `--milestone PRE-M6`, while preserving the existing spec, plan, slice directory, contracts, and acceptance criteria.
 
 ---
 
