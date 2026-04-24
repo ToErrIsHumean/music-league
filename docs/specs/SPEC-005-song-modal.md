@@ -706,7 +706,23 @@ TASK-06: TASK-01,TASK-02,TASK-03,TASK-04,TASK-05
 
 ## Appendix D: Discoveries Log
 
-No discoveries recorded yet.
+### D-001 — 2026-04-24T08:13:46Z
+
+- **Trigger:** Meta-orchestrator dispatch for `TASK-01` failed before
+  implementation because `bolder-meta-orchestrator` delegated to
+  `scripts/sdd/orchestrator.sh`, which did not exist in this repo.
+- **Nature:** `operational`
+- **Affected sections:** orchestration hygiene only; no product contract
+  sections changed
+- **Agent assessment:** The repo exposes SDD commands through `package.json`
+  package bins, while the meta-orchestrator's nested dispatch path expects
+  repo-local role wrapper scripts. Adding narrow forwarding wrappers keeps the
+  product spec unchanged and preserves `bolder-utils` as the implementation
+  source of truth.
+- **Escalation required:** `no` — low-blast-radius procedural fix authorized
+  by the operator and reversible
+- **Resolution:** Add repo-local forwarding wrappers for the orchestrator,
+  implementer, and reviewer scripts, then resume meta-orchestration.
 
 ## Appendix E: Context Slices
 
