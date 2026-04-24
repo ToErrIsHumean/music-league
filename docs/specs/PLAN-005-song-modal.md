@@ -5,8 +5,8 @@
 > **Status:** `pending`
 
 | Task | Title | Status | Depends-on |
-|------|-------|--------|------------|
-| TASK-01 | Add shared song familiarity derivation | `pending` | — |
+| ---- | ----- | ------ | ---------- |
+| TASK-01 | Add shared song familiarity derivation | `done` | — |
 | TASK-02 | Hydrate round-detail familiarity cues | `pending` | TASK-01 |
 | TASK-03 | Build canonical song memory payload | `pending` | TASK-01 |
 | TASK-04 | Wire and render canonical song detail | `pending` | TASK-03 |
@@ -31,5 +31,11 @@ elevated override.
 <!-- Append signals as tasks complete. -->
 
 | Task | Signal | Discovery | Cycle | Model | Reasoning-Effort | Timestamp |
-|------|--------|-----------|-------|-------|------------------|-----------|
-| | | | | | | |
+| ---- | ------ | --------- | ----- | ----- | ---------------- | --------- |
+| TASK-01 | pass | null | 1 | gpt-5.5 | high | 2026-04-24T08:20:25.658Z |
+
+## Review Notes
+
+<!-- Orchestrator review notes append below. -->
+
+- TASK-01 cycle 1: `confirmed` -> `docs/sdd/reviews/TASK-01-epoch-1-cycle-1.md`
