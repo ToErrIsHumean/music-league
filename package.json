@@ -9,6 +9,14 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "sdd:bootstrap": "bolder-bootstrap",
+    "sdd:planner": "bolder-planner",
+    "sdd:implementer": "bolder-implementer",
+    "sdd:reviewer": "bolder-reviewer",
+    "sdd:orchestrator": "bolder-orchestrator",
+    "sdd:meta-orchestrator": "bolder-meta-orchestrator",
+    "sdd:define-slices": "bolder-define-slices",
+    "sdd:extract-slices": "bolder-extract-slices",
     "test": "npm run test:unit",
     "test:unit": "node --test src/lib/normalize.test.js src/import/parse-bundle.test.js",
     "test:integration": "node --test prisma/tests/archive-page.test.js prisma/tests/constraints.test.js prisma/tests/migration.test.js prisma/tests/queries.test.js prisma/tests/seed.test.js src/import/analyze-batch.test.js src/import/commit-batch.test.js src/import/get-batch-summary.test.js src/import/list-batch-issues.test.js src/import/list-batches.test.js src/import/recompute-round-results.test.js src/import/stage-batch.test.js src/import/workflow-integration.test.js",
@@ -20,6 +28,7 @@
   "description": "",
   "dependencies": {
     "@prisma/client": "^6.19.0",
+    "bolder-utils": "github:ToErrIsHumean/bolder-utils#v0.1.0",
     "next": "^16.2.4",
     "react": "^19.2.5",
     "react-dom": "^19.2.5"

@@ -1,8 +1,7 @@
 # AGENTS.md — Music League Repo Conventions
 
-Music League uses the same disk-backed SDD workflow as `projectABE`, but this
-repo is the canonical home for its own specs, plans, prompts, and utility
-scripts.
+Music League uses the shared `bolder-utils` package for the disk-backed SDD
+workflow, while keeping repo-local specs, plans, config, and runtime artifacts.
 
 ## Context Loading
 
@@ -36,9 +35,12 @@ promotion path.
 
 - `AGENTS.md` is the canonical repo guidance. `CLAUDE.md` may mirror or point
   to it for tool compatibility.
-- `docs/sdd/` contains the tracked Planner, Implementer, Reviewer, and
-  Orchestrator prompts.
-- `scripts/sdd/` contains the tracked wrapper and orchestration scripts.
+- `bolder-utils` provides the default Planner, Implementer, Reviewer,
+  Orchestrator, and helper wrappers via package bins.
+- Repo-local prompt overrides should live under `docs/sdd/` only when
+  `APP_SDD_PROMPTS_DIR` is explicitly pointed there.
+- `docs/sdd/` remains the home for runtime artifacts such as reviews, diffs,
+  and logs.
 - Only the Orchestrator writes `PLAN-*.md` files during execution.
 - Do not change active spec contracts or acceptance criteria implicitly in code.
 - New dependencies must be explicitly allowed by the active spec or already

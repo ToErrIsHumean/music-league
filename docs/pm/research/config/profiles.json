@@ -1,0 +1,49 @@
+{
+  "profiles": [
+    {
+      "id": "merit-competitor",
+      "label": "Merit Competitor",
+      "summary": "A highly competitive music lover who treats the league as a contest of discernment rather than casual discovery. Winning is central to their enjoyment, and they want their record to be visible, cumulative, and socially legible through placements, streaks, rivalries, and proof that they consistently pick better than others. They tend to believe a prompt has a best answer, or at least a most defensible one, and become intensely invested in whether the game surfaces it. They will forgive losing more readily than arbitrariness; what they will not forgive is a result that feels illegible, socially distorted, or insufficiently earned.",
+      "constraints": [
+        "Winning and rank movement materially affect their enjoyment",
+        "Wants visible records, streaks, placements, and head-to-head history",
+        "Expects outcomes to feel earned, intelligible, and procedurally fair",
+        "Disengages if scoring feels opaque, noisy, or overly arbitrary",
+        "Prefers mechanics that reward strong prompt interpretation and curation rather than luck",
+        "Remembers controversial outcomes and wants enough context to evaluate them afterward",
+        "Treats social play primarily as a competitive arena, not a substitute for rigor"
+      ],
+      "scope_horizon": "current-single-user"
+    },
+    {
+      "id": "discovery-curator",
+      "label": "Discovery Curator",
+      "summary": "A music-forward participant who treats the league as a vehicle for discovery, surprise, and expressive curation more than a pure contest. Votes still matter, but mainly as evidence that a pick landed with force or distinction, not merely that it achieved broad acceptability. They are often more satisfied by a song that one person loves and another rejects than by one everyone finds passable. What they want from the game is revelation: unfamiliar tracks, inventive prompt interpretations, and reward structures that surface memorable picks rather than flattening taste into consensus-safe optimization.",
+      "constraints": [
+        "Optimizes for novelty, depth, and expressive fit more than maximum win rate",
+        "Values strong reactions over bland universal approval",
+        "Wants the game to surface unfamiliar or underplayed music, not just obvious hits",
+        "Disengages if incentives push everyone toward safest-consensus picks",
+        "Appreciates commentary and context that explain why a pick is interesting or surprising",
+        "Tolerates losing if distinctive curation is still legible and discovery remains high",
+        "Needs room for idiosyncratic taste and non-mainstream prompt interpretations"
+      ],
+      "scope_horizon": "current-single-user"
+    },
+    {
+      "id": "social-ritualist",
+      "label": "Social Ritualist",
+      "summary": "A socially motivated player who treats the league primarily as a recurring shared ritual with friends rather than a pure competition. Music is the medium, not just the object: comments, reactions, banter, and the gradual revelation of one another's taste are often as valuable as the results themselves. Scoring is welcome because it gives the game structure, but winning is subordinate to participation, conversation, and the sense of doing something together. They will tolerate imperfect competitive sharpness more readily than social thinness; what matters most is that the game reliably creates a lively, low-friction setting for connection.",
+      "constraints": [
+        "Prioritizes playing with friends over optimizing for wins",
+        "Wants comments, reactions, and discussion to feel central rather than ornamental",
+        "Needs low-friction participation so the ritual survives busy weeks",
+        "Disengages if the experience feels solitary, sterile, or over-instrumented",
+        "Welcomes scoring as structure but not if it suppresses conversation or warmth",
+        "Values continuity, inside jokes, and recurring group identity over perfect competitive rigor",
+        "Prefers features that help people notice, respond to, and discuss one another's picks"
+      ],
+      "scope_horizon": "current-single-user"
+    }
+  ]
+}

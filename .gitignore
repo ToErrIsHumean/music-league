@@ -5,3 +5,4 @@ node_modules/
 config/project.local.env
 docs/sdd/orchestrator.log
 docs/sdd/last-diff*
+docs/sdd/reviews
