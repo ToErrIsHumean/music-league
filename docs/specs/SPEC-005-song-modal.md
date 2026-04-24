@@ -667,7 +667,9 @@ TASK-06: TASK-01,TASK-02,TASK-03,TASK-04,TASK-05
   audio features, comments, scores, ranks, or other non-key metadata.
 - [ ] External metadata enrichment from Spotify or other third-party APIs.
 - [ ] Charts, score timelines, filters, analytics dashboards, vote-by-vote
-  breakdowns, or scoring explainers inside song detail.
+  breakdowns, or scoring explainers inside song detail. Round-level vote
+  evidence links are allowed when supplied by the round-detail contract, but
+  song detail must not create a parallel vote explainer.
 - [ ] First-release familiarity cues on every song mention across the product;
   round detail is the required inline-cue surface.
 - [ ] Multiple simultaneous familiarity badges on one song instance.

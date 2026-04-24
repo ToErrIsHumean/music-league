@@ -250,7 +250,9 @@ Requirements:
 - Recommendation, similarity matching, or "you might also like" behavior.
 - External metadata enrichment from Spotify or other third-party APIs.
 - Charts, score timelines, or analytics-heavy song dashboards.
-- Vote-by-vote breakdowns or scoring explainers inside song detail.
+- Vote-by-vote breakdowns or scoring explainers inside song detail. Song detail
+  may link to round-level vote evidence when an active round-detail contract
+  provides it, but it must not duplicate or reinterpret that evidence locally.
 - First-release familiarity cues on every song mention across the product.
 - Multiple simultaneous familiarity badges on one song instance.
 - Merge or deduplication tooling; M5 consumes canonical song identity rather
