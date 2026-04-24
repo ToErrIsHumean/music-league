@@ -23,6 +23,7 @@ let task01FixtureCounter = 0;
 let task02FixtureCounter = 0;
 let task03FixtureCounter = 0;
 let task04CoverageFixtureCounter = 0;
+let task06FixtureCounter = 0;
 
 function assertNonEmptyArray(value, message) {
   assert.ok(Array.isArray(value), message);
@@ -799,6 +800,359 @@ async function createTask04CoverageFixture() {
   };
 }
 
+async function createTask06SongMemoryRegressionFixture() {
+  task06FixtureCounter += 1;
+
+  const suffix = `task-06-regression-${task06FixtureCounter}`;
+  const [originGame, satelliteGame] = await Promise.all([
+    prisma.game.create({
+      data: {
+        sourceGameId: `${suffix}-origin`,
+        displayName: `Task 06 Origin ${task06FixtureCounter}`,
+      },
+    }),
+    prisma.game.create({
+      data: {
+        sourceGameId: `${suffix}-satellite`,
+        displayName: `Task 06 Satellite ${task06FixtureCounter}`,
+      },
+    }),
+  ]);
+  const [priorRound, originRound, satelliteRound] = await Promise.all([
+    prisma.round.create({
+      data: {
+        gameId: originGame.id,
+        leagueSlug: originGame.sourceGameId,
+        sourceRoundId: `${suffix}-prior`,
+        name: `Task 06 Prior ${task06FixtureCounter}`,
+        sequenceNumber: 1,
+        occurredAt: new Date("2024-06-01T19:00:00.000Z"),
+      },
+    }),
+    prisma.round.create({
+      data: {
+        gameId: originGame.id,
+        leagueSlug: originGame.sourceGameId,
+        sourceRoundId: `${suffix}-origin-round`,
+        name: `Task 06 Origin Round ${task06FixtureCounter}`,
+        sequenceNumber: 2,
+        occurredAt: new Date("2024-06-15T19:00:00.000Z"),
+      },
+    }),
+    prisma.round.create({
+      data: {
+        gameId: satelliteGame.id,
+        leagueSlug: satelliteGame.sourceGameId,
+        sourceRoundId: `${suffix}-satellite-round`,
+        name: `Task 06 Satellite Round ${task06FixtureCounter}`,
+        sequenceNumber: 1,
+        occurredAt: new Date("2024-07-01T19:00:00.000Z"),
+      },
+    }),
+  ]);
+  const [debutArtist, familiarArtist, repeatArtist, sparseArtist, staleArtist] =
+    await Promise.all([
+      prisma.artist.create({
+        data: {
+          name: `Task 06 Debut Artist ${task06FixtureCounter}`,
+          normalizedName: `task06debutartist${task06FixtureCounter}`,
+        },
+      }),
+      prisma.artist.create({
+        data: {
+          name: `Task 06 Familiar Artist ${task06FixtureCounter}`,
+          normalizedName: `task06familiarartist${task06FixtureCounter}`,
+        },
+      }),
+      prisma.artist.create({
+        data: {
+          name: `Task 06 Repeat Artist ${task06FixtureCounter}`,
+          normalizedName: `task06repeatartist${task06FixtureCounter}`,
+        },
+      }),
+      prisma.artist.create({
+        data: {
+          name: `Task 06 Sparse Artist ${task06FixtureCounter}`,
+          normalizedName: `task06sparseartist${task06FixtureCounter}`,
+        },
+      }),
+      prisma.artist.create({
+        data: {
+          name: `Task 06 Stale Artist ${task06FixtureCounter}`,
+          normalizedName: `task06staleartist${task06FixtureCounter}`,
+        },
+      }),
+    ]);
+  const [
+    debutPlayer,
+    familiarPriorPlayer,
+    familiarOriginPlayer,
+    repeatPriorPlayer,
+    repeatOriginPlayer,
+    repeatRecentPlayer,
+    repeatArtistPriorPlayer,
+    sparsePlayer,
+    stalePlayer,
+  ] = await Promise.all([
+    prisma.player.create({
+      data: {
+        displayName: `Task 06 Debut Player ${task06FixtureCounter}`,
+        normalizedName: `task06debutplayer${task06FixtureCounter}`,
+        sourcePlayerId: `${suffix}-debut-player`,
+      },
+    }),
+    prisma.player.create({
+      data: {
+        displayName: `Task 06 Familiar Prior ${task06FixtureCounter}`,
+        normalizedName: `task06familiarprior${task06FixtureCounter}`,
+        sourcePlayerId: `${suffix}-familiar-prior`,
+      },
+    }),
+    prisma.player.create({
+      data: {
+        displayName: `Task 06 Familiar Origin ${task06FixtureCounter}`,
+        normalizedName: `task06familiarorigin${task06FixtureCounter}`,
+        sourcePlayerId: `${suffix}-familiar-origin`,
+      },
+    }),
+    prisma.player.create({
+      data: {
+        displayName: `Task 06 Repeat Prior ${task06FixtureCounter}`,
+        normalizedName: `task06repeatprior${task06FixtureCounter}`,
+        sourcePlayerId: `${suffix}-repeat-prior`,
+      },
+    }),
+    prisma.player.create({
+      data: {
+        displayName: `Task 06 Repeat Origin ${task06FixtureCounter}`,
+        normalizedName: `task06repeatorigin${task06FixtureCounter}`,
+        sourcePlayerId: `${suffix}-repeat-origin`,
+      },
+    }),
+    prisma.player.create({
+      data: {
+        displayName: `Task 06 Repeat Recent ${task06FixtureCounter}`,
+        normalizedName: `task06repeatrecent${task06FixtureCounter}`,
+        sourcePlayerId: `${suffix}-repeat-recent`,
+      },
+    }),
+    prisma.player.create({
+      data: {
+        displayName: `Task 06 Repeat Artist Prior ${task06FixtureCounter}`,
+        normalizedName: `task06repeatartistprior${task06FixtureCounter}`,
+        sourcePlayerId: `${suffix}-repeat-artist-prior`,
+      },
+    }),
+    prisma.player.create({
+      data: {
+        displayName: `Task 06 Sparse Player ${task06FixtureCounter}`,
+        normalizedName: `task06sparseplayer${task06FixtureCounter}`,
+        sourcePlayerId: `${suffix}-sparse-player`,
+      },
+    }),
+    prisma.player.create({
+      data: {
+        displayName: `Task 06 Stale Player ${task06FixtureCounter}`,
+        normalizedName: `task06staleplayer${task06FixtureCounter}`,
+        sourcePlayerId: `${suffix}-stale-player`,
+      },
+    }),
+  ]);
+  const [
+    debutSong,
+    familiarPriorSong,
+    familiarOriginSong,
+    repeatSong,
+    repeatArtistPriorSong,
+    sparseSong,
+    staleSong,
+  ] = await Promise.all([
+    prisma.song.create({
+      data: {
+        title: `Task 06 Debut Song ${task06FixtureCounter}`,
+        normalizedTitle: `task06debutsong${task06FixtureCounter}`,
+        spotifyUri: `spotify:track:${suffix}-debut`,
+        artistId: debutArtist.id,
+      },
+    }),
+    prisma.song.create({
+      data: {
+        title: `Task 06 Familiar Prior Song ${task06FixtureCounter}`,
+        normalizedTitle: `task06familiarpriorsong${task06FixtureCounter}`,
+        spotifyUri: `spotify:track:${suffix}-familiar-prior`,
+        artistId: familiarArtist.id,
+      },
+    }),
+    prisma.song.create({
+      data: {
+        title: `Task 06 Familiar Origin Song ${task06FixtureCounter}`,
+        normalizedTitle: `task06familiaroriginsong${task06FixtureCounter}`,
+        spotifyUri: `spotify:track:${suffix}-familiar-origin`,
+        artistId: familiarArtist.id,
+      },
+    }),
+    prisma.song.create({
+      data: {
+        title: `Task 06 Repeat Song ${task06FixtureCounter}`,
+        normalizedTitle: `task06repeatsong${task06FixtureCounter}`,
+        spotifyUri: `spotify:track:${suffix}-repeat`,
+        artistId: repeatArtist.id,
+      },
+    }),
+    prisma.song.create({
+      data: {
+        title: `Task 06 Repeat Artist Prior Song ${task06FixtureCounter}`,
+        normalizedTitle: `task06repeatartistpriorsong${task06FixtureCounter}`,
+        spotifyUri: `spotify:track:${suffix}-repeat-artist-prior`,
+        artistId: repeatArtist.id,
+      },
+    }),
+    prisma.song.create({
+      data: {
+        title: `Task 06 Sparse Song ${task06FixtureCounter}`,
+        normalizedTitle: `task06sparsesong${task06FixtureCounter}`,
+        spotifyUri: `spotify:track:${suffix}-sparse`,
+        artistId: sparseArtist.id,
+      },
+    }),
+    prisma.song.create({
+      data: {
+        title: `Task 06 Stale Song ${task06FixtureCounter}`,
+        normalizedTitle: `task06stalesong${task06FixtureCounter}`,
+        spotifyUri: `spotify:track:${suffix}-stale`,
+        artistId: staleArtist.id,
+      },
+    }),
+  ]);
+
+  const familiarPriorSubmission = await prisma.submission.create({
+    data: {
+      roundId: priorRound.id,
+      playerId: familiarPriorPlayer.id,
+      songId: familiarPriorSong.id,
+      score: 18,
+      rank: 3,
+      comment: "Earlier artist memory for the familiar origin song.",
+      createdAt: new Date("2024-05-30T18:00:00.000Z"),
+    },
+  });
+  const repeatPriorSubmission = await prisma.submission.create({
+    data: {
+      roundId: priorRound.id,
+      playerId: repeatPriorPlayer.id,
+      songId: repeatSong.id,
+      score: 16,
+      rank: 4,
+      comment: "First exact-song appearance before the origin round.",
+      createdAt: new Date("2024-05-30T18:05:00.000Z"),
+    },
+  });
+  const repeatArtistPriorSubmission = await prisma.submission.create({
+    data: {
+      roundId: priorRound.id,
+      playerId: repeatArtistPriorPlayer.id,
+      songId: repeatArtistPriorSong.id,
+      score: 25,
+      rank: 1,
+      comment: "Artist-only memory that must not enter exact-song history.",
+      createdAt: new Date("2024-05-30T18:10:00.000Z"),
+    },
+  });
+  await prisma.submission.create({
+    data: {
+      roundId: priorRound.id,
+      playerId: stalePlayer.id,
+      songId: staleSong.id,
+      score: 11,
+      rank: 5,
+      comment: "A song that never appears in the origin round.",
+      createdAt: new Date("2024-05-30T18:15:00.000Z"),
+    },
+  });
+  const debutOriginSubmission = await prisma.submission.create({
+    data: {
+      roundId: originRound.id,
+      playerId: debutPlayer.id,
+      songId: debutSong.id,
+      score: 28,
+      rank: 1,
+      comment: "True debut with no prior artist memory.",
+      createdAt: new Date("2024-06-13T18:00:00.000Z"),
+    },
+  });
+  const familiarOriginSubmission = await prisma.submission.create({
+    data: {
+      roundId: originRound.id,
+      playerId: familiarOriginPlayer.id,
+      songId: familiarOriginSong.id,
+      score: 22,
+      rank: 2,
+      comment: "New exact song from a familiar artist.",
+      createdAt: new Date("2024-06-13T18:05:00.000Z"),
+    },
+  });
+  const repeatOriginSubmission = await prisma.submission.create({
+    data: {
+      roundId: originRound.id,
+      playerId: repeatOriginPlayer.id,
+      songId: repeatSong.id,
+      score: 19,
+      rank: 3,
+      comment: "Exact song returns in the route-visible origin round.",
+      createdAt: new Date("2024-06-13T18:10:00.000Z"),
+    },
+  });
+  const sparseOriginSubmission = await prisma.submission.create({
+    data: {
+      roundId: originRound.id,
+      playerId: sparsePlayer.id,
+      songId: sparseSong.id,
+      score: null,
+      rank: null,
+      comment: null,
+      createdAt: new Date("2024-06-13T18:15:00.000Z"),
+    },
+  });
+  const repeatSatelliteSubmission = await prisma.submission.create({
+    data: {
+      roundId: satelliteRound.id,
+      playerId: repeatRecentPlayer.id,
+      songId: repeatSong.id,
+      score: 30,
+      rank: 1,
+      comment: "Most recent cross-game exact-song appearance.",
+      createdAt: new Date("2024-06-28T18:00:00.000Z"),
+    },
+  });
+
+  return {
+    originRoundId: originRound.id,
+    satelliteRoundId: satelliteRound.id,
+    originGameLabel: originGame.displayName,
+    satelliteGameLabel: satelliteGame.displayName,
+    debutSongId: debutSong.id,
+    familiarSongId: familiarOriginSong.id,
+    repeatSongId: repeatSong.id,
+    sparseSongId: sparseSong.id,
+    staleSongId: staleSong.id,
+    debutOriginSubmissionId: debutOriginSubmission.id,
+    familiarPriorSubmissionId: familiarPriorSubmission.id,
+    familiarOriginSubmissionId: familiarOriginSubmission.id,
+    repeatPriorSubmissionId: repeatPriorSubmission.id,
+    repeatArtistPriorSubmissionId: repeatArtistPriorSubmission.id,
+    repeatOriginSubmissionId: repeatOriginSubmission.id,
+    repeatSatelliteSubmissionId: repeatSatelliteSubmission.id,
+    sparseOriginSubmissionId: sparseOriginSubmission.id,
+    debutPlayerId: debutPlayer.id,
+    debutPlayerName: debutPlayer.displayName,
+    familiarPriorPlayerName: familiarPriorPlayer.displayName,
+    repeatPriorPlayerName: repeatPriorPlayer.displayName,
+    repeatRecentPlayerName: repeatRecentPlayer.displayName,
+    sparsePlayerId: sparsePlayer.id,
+    sparsePlayerName: sparsePlayer.displayName,
+  };
+}
+
 async function findVoteTarget() {
   const vote = await prisma.vote.findFirst({
     select: {
@@ -946,6 +1300,59 @@ test(
         (submission) =>
           submission.song.familiarity.priorArtistSubmissionCount === 0 &&
           submission.song.familiarity.exactSongSubmissionCount === 1,
+      ),
+    );
+  },
+);
+
+test(
+  "TASK-06 contested familiarity coverage excludes same-round evidence from prior history",
+  { concurrency: false },
+  async () => {
+    const sameArtistFixture = await createTask02SameRoundArtistFixture();
+    const sameArtistRound = await getRoundDetail(sameArtistFixture.roundId, { prisma });
+
+    assert.ok(sameArtistRound);
+    assert.deepEqual(
+      sameArtistRound.submissions.map((submission) => submission.song.familiarity.kind),
+      ["debut", "debut"],
+    );
+    assert.ok(
+      sameArtistRound.submissions.every(
+        (submission) =>
+          submission.song.familiarity.label === "New to us" &&
+          submission.song.familiarity.priorArtistSubmissionCount === 0,
+      ),
+    );
+
+    const duplicateFixture = await createTask02DuplicateSongFixture();
+    const duplicateRound = await getRoundDetail(duplicateFixture.roundId, { prisma });
+    const duplicateModal = await getSongMemoryModal(
+      duplicateFixture.roundId,
+      duplicateFixture.songId,
+      { prisma },
+    );
+
+    assert.ok(duplicateRound);
+    assert.ok(duplicateModal);
+    assert.equal(
+      duplicateModal.summary.firstSubmitter.displayName,
+      duplicateFixture.representativeSubmitterName,
+    );
+    assert.equal(duplicateModal.familiarity.exactSongSubmissionCount, 2);
+    assert.equal(duplicateModal.familiarity.priorExactSongSubmissionCount, 0);
+    assert.deepEqual(
+      duplicateModal.historyGroups.flatMap((group) =>
+        group.rows.filter((row) => row.isOrigin).map((row) => row.submissionId),
+      ),
+      [duplicateFixture.firstSubmissionId],
+    );
+    assert.ok(
+      duplicateRound.submissions.every(
+        (submission) =>
+          submission.song.id === duplicateFixture.songId &&
+          submission.song.familiarity.kind === duplicateModal.familiarity.kind &&
+          submission.song.familiarity.label === duplicateModal.familiarity.label,
       ),
     );
   },
@@ -1241,6 +1648,140 @@ test(
       closeHref: `/?round=${staleRoundId}`,
     });
     assert.equal(await getSongMemoryModal(999999, staleSongId, { prisma }), null);
+  },
+);
+
+test(
+  "TASK-06 song-memory regression fixture covers familiarity, grouping, sparse history, and stale origins",
+  { concurrency: false },
+  async () => {
+    const fixture = await createTask06SongMemoryRegressionFixture();
+    const round = await getRoundDetail(fixture.originRoundId, { prisma });
+
+    assert.ok(round);
+
+    const rowBySubmissionId = new Map(
+      round.submissions.map((submission) => [submission.id, submission]),
+    );
+    const debutRow = rowBySubmissionId.get(fixture.debutOriginSubmissionId);
+    const familiarRow = rowBySubmissionId.get(fixture.familiarOriginSubmissionId);
+    const repeatRow = rowBySubmissionId.get(fixture.repeatOriginSubmissionId);
+    const sparseRow = rowBySubmissionId.get(fixture.sparseOriginSubmissionId);
+
+    assert.ok(debutRow);
+    assert.ok(familiarRow);
+    assert.ok(repeatRow);
+    assert.ok(sparseRow);
+    assert.equal(debutRow.song.familiarity.kind, "debut");
+    assert.equal(debutRow.song.familiarity.label, "New to us");
+    assert.equal(familiarRow.song.familiarity.kind, "known-artist");
+    assert.equal(familiarRow.song.familiarity.label, "Known artist");
+    assert.equal(familiarRow.song.familiarity.priorArtistSubmissionCount, 1);
+    assert.equal(repeatRow.song.familiarity.kind, "brought-back");
+    assert.equal(repeatRow.song.familiarity.label, "Brought back");
+    assert.equal(repeatRow.song.familiarity.priorExactSongSubmissionCount, 1);
+    assert.equal(sparseRow.song.familiarity.kind, "debut");
+    assert.equal(sparseRow.score, null);
+    assert.equal(sparseRow.rank, null);
+    assert.equal(sparseRow.comment, null);
+
+    const [debutModal, familiarModal, repeatModal, sparseModal] = await Promise.all([
+      getSongMemoryModal(fixture.originRoundId, fixture.debutSongId, { prisma }),
+      getSongMemoryModal(fixture.originRoundId, fixture.familiarSongId, { prisma }),
+      getSongMemoryModal(fixture.originRoundId, fixture.repeatSongId, { prisma }),
+      getSongMemoryModal(fixture.originRoundId, fixture.sparseSongId, { prisma }),
+    ]);
+
+    assert.ok(debutModal);
+    assert.ok(familiarModal);
+    assert.ok(repeatModal);
+    assert.ok(sparseModal);
+    assert.equal(debutModal.familiarity.kind, debutRow.song.familiarity.kind);
+    assert.equal(familiarModal.familiarity.kind, familiarRow.song.familiarity.kind);
+    assert.equal(repeatModal.familiarity.kind, repeatRow.song.familiarity.kind);
+    assert.equal(sparseModal.familiarity.kind, sparseRow.song.familiarity.kind);
+    assert.equal(familiarModal.familiarity.throughSubmitters.length, 1);
+    assert.equal(
+      familiarModal.familiarity.throughSubmitters[0].displayName,
+      fixture.familiarPriorPlayerName,
+    );
+
+    assert.equal(repeatModal.familiarity.kind, "brought-back");
+    assert.equal(repeatModal.familiarity.priorExactSongSubmissionCount, 1);
+    assert.equal(repeatModal.familiarity.priorArtistSubmissionCount, 1);
+    assert.equal(repeatModal.summary.exactSongSubmissionCount, 3);
+    assert.equal(repeatModal.summary.artistFootprint.submissionCount, 1);
+    assert.equal(repeatModal.summary.artistFootprint.songCount, 1);
+    assert.equal(repeatModal.summary.firstSubmitter.displayName, fixture.repeatPriorPlayerName);
+    assert.equal(repeatModal.summary.mostRecentSubmitter.displayName, fixture.repeatRecentPlayerName);
+    assert.deepEqual(repeatModal.summary.bestExactSongFinish, {
+      rank: 1,
+      score: 30,
+      submissionId: fixture.repeatSatelliteSubmissionId,
+    });
+    assert.equal(repeatModal.summary.recallComment.submissionId, fixture.repeatSatelliteSubmissionId);
+    assert.match(repeatModal.summary.recallComment.text, /Most recent cross-game/);
+    assert.deepEqual(repeatModal.shortcuts, [
+      {
+        kind: "first-appearance",
+        label: "First appearance",
+        submissionId: fixture.repeatPriorSubmissionId,
+      },
+      {
+        kind: "most-recent-appearance",
+        label: "Most recent appearance",
+        submissionId: fixture.repeatSatelliteSubmissionId,
+      },
+    ]);
+    assert.deepEqual(
+      repeatModal.historyGroups.map((group) => group.gameLabel),
+      [fixture.originGameLabel, fixture.satelliteGameLabel],
+    );
+    assert.deepEqual(
+      repeatModal.historyGroups[0].rows.map((row) => row.submissionId),
+      [fixture.repeatOriginSubmissionId, fixture.repeatPriorSubmissionId],
+    );
+    assert.deepEqual(
+      repeatModal.historyGroups[1].rows.map((row) => row.submissionId),
+      [fixture.repeatSatelliteSubmissionId],
+    );
+    assert.deepEqual(
+      repeatModal.historyGroups.flatMap((group) =>
+        group.rows.filter((row) => row.isOrigin).map((row) => row.submissionId),
+      ),
+      [fixture.repeatOriginSubmissionId],
+    );
+    assert.ok(
+      !repeatModal.historyGroups
+        .flatMap((group) => group.rows)
+        .some((row) => row.submissionId === fixture.repeatArtistPriorSubmissionId),
+      "artist-only evidence must not be interleaved into exact-song history",
+    );
+
+    assert.equal(sparseModal.summary.exactSongSubmissionCount, 1);
+    assert.deepEqual(sparseModal.summary.firstSubmitter, {
+      id: fixture.sparsePlayerId,
+      displayName: fixture.sparsePlayerName,
+    });
+    assert.deepEqual(sparseModal.summary.mostRecentSubmitter, {
+      id: fixture.sparsePlayerId,
+      displayName: fixture.sparsePlayerName,
+    });
+    assert.equal(sparseModal.summary.bestExactSongFinish, null);
+    assert.equal(sparseModal.summary.recallComment, null);
+    assert.deepEqual(sparseModal.shortcuts, []);
+    assert.deepEqual(sparseModal.historyGroups[0].rows[0].result, {
+      rank: null,
+      score: null,
+    });
+    assert.equal(sparseModal.historyGroups[0].rows[0].comment, null);
+
+    assert.deepEqual(await getSongMemoryModal(fixture.originRoundId, fixture.staleSongId, { prisma }), {
+      unavailable: true,
+      originRoundId: fixture.originRoundId,
+      requestedSongId: fixture.staleSongId,
+      closeHref: `/?round=${fixture.originRoundId}`,
+    });
   },
 );
 

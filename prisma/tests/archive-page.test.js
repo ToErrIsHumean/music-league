@@ -144,6 +144,217 @@ test(
 );
 
 test(
+  "TASK-06 archive render regression covers M5 cues, canonical song evidence, player-history links, and exclusions",
+  { concurrency: false },
+  async () => {
+    const debutRoundId = await findRoundIdBySourceId("seed-r1");
+    const familiarRoundId = await findRoundIdBySourceId("seed-r2");
+    const memoryRoundId = await findRoundIdBySourceId("seed-r3");
+    const memorySongId = await findSongIdBySpotifyUri("spotify:track:seed-song-005");
+    const debutProps = await buildGameArchivePageProps({
+      prisma,
+      searchParams: Promise.resolve({
+        round: String(debutRoundId),
+      }),
+    });
+    const familiarProps = await buildGameArchivePageProps({
+      prisma,
+      searchParams: Promise.resolve({
+        round: String(familiarRoundId),
+      }),
+    });
+    const debutMarkup = renderToStaticMarkup(React.createElement(GameArchivePage, debutProps));
+    const familiarMarkup = renderToStaticMarkup(
+      React.createElement(GameArchivePage, familiarProps),
+    );
+    const debutSubmissionMarkup = debutMarkup.slice(
+      debutMarkup.indexOf('class="archive-submission-list"'),
+    );
+    const familiarSubmissionMarkup = familiarMarkup.slice(
+      familiarMarkup.indexOf('class="archive-submission-list"'),
+    );
+
+    assert.ok(debutProps.openRound);
+    assert.ok(familiarProps.openRound);
+    assert.equal(
+      (debutSubmissionMarkup.match(/class=\"archive-submission-familiarity\"/g) ?? []).length,
+      debutProps.openRound.submissions.length,
+    );
+    assert.equal(
+      (familiarSubmissionMarkup.match(/class=\"archive-submission-familiarity\"/g) ?? []).length,
+      familiarProps.openRound.submissions.length,
+    );
+    assert.deepEqual(
+      debutProps.openRound.submissions.map((submission) => submission.song.familiarity.label),
+      ["New to us", "New to us", "New to us", "New to us"],
+    );
+    assert.deepEqual(
+      familiarProps.openRound.submissions.map((submission) => submission.song.familiarity.label),
+      ["Known artist", "Brought back", "Known artist", "Brought back"],
+    );
+    assert.match(debutSubmissionMarkup, /New to us/);
+    assert.match(familiarSubmissionMarkup, /Known artist/);
+    assert.match(familiarSubmissionMarkup, /Brought back/);
+    assert.match(familiarSubmissionMarkup, /Score pending/);
+    assert.match(familiarSubmissionMarkup, /Unranked/);
+
+    const songProps = await buildGameArchivePageProps({
+      prisma,
+      searchParams: Promise.resolve({
+        round: String(memoryRoundId),
+        song: String(memorySongId),
+      }),
+    });
+    const songMarkup = renderToStaticMarkup(React.createElement(GameArchivePage, songProps));
+    const songShellMarkup = songMarkup.slice(songMarkup.lastIndexOf('data-nested-kind="song"'));
+
+    assert.deepEqual(songProps.nestedEntity, {
+      kind: "song",
+      id: memorySongId,
+    });
+    assert.ok(songProps.openSongModal);
+    assert.equal(songProps.openSongModal.familiarity.label, "Brought back");
+    assert.deepEqual(
+      songProps.openSongModal.historyGroups.map((group) => group.gameLabel),
+      ["After Party League", "main"],
+    );
+    assert.ok(songShellMarkup.indexOf("After Party League") < songShellMarkup.indexOf("main"));
+    assert.match(songShellMarkup, /First appearance/);
+    assert.match(songShellMarkup, /Most recent appearance/);
+    assert.match(songShellMarkup, /href=\"#song-history-submission-/);
+    assert.match(songShellMarkup, /Origin game/);
+    assert.match(songShellMarkup, /Submission evidence/);
+    assert.ok(!songShellMarkup.includes("playerSubmission="));
+
+    const evidenceRow = songProps.openSongModal.historyGroups[0].rows[0];
+
+    assert.match(
+      songShellMarkup,
+      new RegExp(`href=\"/\\?round=${evidenceRow.roundId}&amp;player=${evidenceRow.submitter.id}\"`),
+    );
+    assert.match(songShellMarkup, new RegExp(`href=\"/\\?round=${evidenceRow.roundId}\"`));
+
+    const outOfScopeCopy = [
+      /global search/i,
+      /fuzzy/i,
+      /external metadata/i,
+      /recommend/i,
+      /chart/i,
+      /vote-by-vote/i,
+      /similar songs/i,
+    ];
+
+    for (const forbiddenCopy of outOfScopeCopy) {
+      assert.ok(
+        !forbiddenCopy.test(songShellMarkup),
+        `song detail should not render out-of-scope surface: ${forbiddenCopy}`,
+      );
+    }
+
+    const originSubmission = debutProps.openRound.submissions[0];
+    const playerProps = await buildGameArchivePageProps({
+      prisma,
+      searchParams: Promise.resolve({
+        round: String(debutRoundId),
+        player: String(originSubmission.player.id),
+      }),
+    });
+    const playerMarkup = renderToStaticMarkup(React.createElement(GameArchivePage, playerProps));
+    const playerShellMarkup = playerMarkup.slice(
+      playerMarkup.lastIndexOf('class="archive-nested-shell archive-player-shell"'),
+    );
+
+    assert.ok(playerProps.openPlayerModal);
+    assert.ok(playerProps.openPlayerModal.history.length > 0);
+
+    for (const submission of playerProps.openPlayerModal.history) {
+      assert.match(
+        playerShellMarkup,
+        new RegExp(`href=\"/\\?round=${submission.roundId}&amp;song=${submission.song.id}\"`),
+      );
+    }
+
+    assert.ok(!playerShellMarkup.includes("playerSubmission="));
+
+    const playerHistoryTarget = playerProps.openPlayerModal.history.find(
+      (submission) => submission.submissionId !== originSubmission.id,
+    );
+
+    assert.ok(playerHistoryTarget, "expected another player-history row for canonical song open coverage");
+
+    const historyRoundProps = await buildGameArchivePageProps({
+      prisma,
+      searchParams: Promise.resolve({
+        round: String(playerHistoryTarget.roundId),
+      }),
+    });
+    const historyRoundSubmission = historyRoundProps.openRound.submissions.find(
+      (submission) => submission.id === playerHistoryTarget.submissionId,
+    );
+    const historySongProps = await buildGameArchivePageProps({
+      prisma,
+      searchParams: Promise.resolve({
+        round: String(playerHistoryTarget.roundId),
+        song: String(playerHistoryTarget.song.id),
+      }),
+    });
+
+    assert.ok(historyRoundSubmission);
+    assert.deepEqual(historySongProps.nestedEntity, {
+      kind: "song",
+      id: playerHistoryTarget.song.id,
+    });
+    assert.ok(historySongProps.openSongModal);
+    assert.equal(historySongProps.openPlayerModal, null);
+    assert.equal(
+      historySongProps.openSongModal.familiarity.kind,
+      historyRoundSubmission.song.familiarity.kind,
+    );
+    assert.equal(
+      historySongProps.openSongModal.familiarity.label,
+      historyRoundSubmission.song.familiarity.label,
+    );
+
+    const legacyPlayerSubmissionProps = await buildGameArchivePageProps({
+      prisma,
+      searchParams: Promise.resolve({
+        round: String(debutRoundId),
+        player: String(originSubmission.player.id),
+        playerSubmission: String(playerHistoryTarget.submissionId),
+        song: String(originSubmission.song.id),
+      }),
+    });
+
+    assert.deepEqual(legacyPlayerSubmissionProps.nestedEntity, {
+      kind: "player",
+      id: originSubmission.player.id,
+    });
+    assert.equal(legacyPlayerSubmissionProps.openSongModal, null);
+    assert.ok(legacyPlayerSubmissionProps.openPlayerModal?.activeSubmission);
+    assert.equal(
+      legacyPlayerSubmissionProps.openPlayerModal.activeSubmission.submissionId,
+      playerHistoryTarget.submissionId,
+    );
+
+    const mixedProps = await buildGameArchivePageProps({
+      prisma,
+      searchParams: Promise.resolve({
+        round: String(debutRoundId),
+        player: String(originSubmission.player.id),
+        song: String(originSubmission.song.id),
+      }),
+    });
+
+    assert.deepEqual(mixedProps.nestedEntity, {
+      kind: "song",
+      id: originSubmission.song.id,
+    });
+    assert.ok(mixedProps.openSongModal);
+    assert.equal(mixedProps.openPlayerModal, null);
+  },
+);
+
+test(
   "round detail submission links open canonical song memory without dismissing the round dialog",
   { concurrency: false },
   async () => {
