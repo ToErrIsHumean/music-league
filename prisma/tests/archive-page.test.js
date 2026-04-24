@@ -111,6 +111,8 @@ test(
     const orderedPlayers = props.openRound.submissions.map(
       (submission) => `Submitted by ${submission.player.displayName}`,
     );
+    const familiarityCueCount =
+      (submissionMarkup.match(/class=\"archive-submission-familiarity\"/g) ?? []).length;
 
     for (let index = 1; index < orderedPlayers.length; index += 1) {
       assert.ok(
@@ -119,6 +121,14 @@ test(
         "expected submission titles to render in round detail order",
       );
     }
+
+    assert.equal(familiarityCueCount, props.openRound.submissions.length);
+    assert.ok(
+      props.openRound.submissions.every(
+        (submission) => submission.song.familiarity.label === "New to us",
+      ),
+    );
+    assert.match(submissionMarkup, /New to us/);
   },
 );
 
@@ -150,6 +160,8 @@ test(
     assert.ok(props.openRound, "expected nested modal state to preserve the round detail");
     assert.ok(props.openSongModal, "expected song modal content to load");
     assert.equal(props.openPlayerModal, null);
+    assert.equal(props.openSongModal.familiarity.kind, targetSubmission.song.familiarity.kind);
+    assert.equal(props.openSongModal.familiarity.label, targetSubmission.song.familiarity.label);
     assert.equal((markup.match(/role=\"dialog\"/g) ?? []).length, 2);
     assert.match(markup, new RegExp(`href=\"/\\?round=${roundId}&amp;song=${targetSubmission.song.id}\"`));
     assert.match(
@@ -157,6 +169,8 @@ test(
       new RegExp(`href=\"/\\?round=${roundId}&amp;player=${targetSubmission.player.id}\"`),
     );
     assert.match(markup, /Song detail/);
+    assert.match(markup, /archive-song-modal-familiarity/);
+    assert.match(markup, /New to us: No earlier song or artist history/);
     assert.match(markup, /Back to round/);
     assert.match(markup, /Round detail/);
   },
@@ -250,6 +264,10 @@ test(
     assert.ok(props.openPlayerModal, "expected player modal content to load");
     assert.equal(props.openPlayerModal.activeSubmissionId, playerHistorySubmission.id);
     assert.equal(props.openPlayerModal.activeSubmission?.submissionId, playerHistorySubmission.id);
+    assert.ok(
+      props.openPlayerModal.activeSubmission?.familiarity,
+      "expected player-scoped song detail to include familiarity",
+    );
   },
 );
 
@@ -382,9 +400,11 @@ test(
     );
 
     assert.ok(props.openPlayerModal?.activeSubmission, "expected a player-scoped song view to load");
+    assert.ok(props.openPlayerModal.activeSubmission.familiarity);
     assert.match(markup, new RegExp(`Back to ${targetSubmission.player.displayName} summary`));
     assert.ok(markup.includes(playerHistorySubmission.song.title));
     assert.ok(markup.includes(playerHistorySubmission.round.name));
+    assert.match(markup, /archive-song-modal-familiarity/);
     assert.ok(!playerShellMarkup.includes(`href="/?round=${playerHistorySubmission.round.id}"`));
     assert.ok(!playerShellMarkup.includes("playerSubmission="));
     assert.equal((playerShellMarkup.match(/href=\"/g) ?? []).length, 2);

@@ -387,6 +387,18 @@ a {
   font-weight: 700;
 }
 
+.archive-submission-familiarity {
+  width: fit-content;
+  padding: 3px 8px;
+  border-radius: 999px;
+  color: rgba(64, 54, 45, 0.84);
+  background: rgba(255, 255, 255, 0.58);
+  border: 1px solid rgba(104, 90, 77, 0.16);
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
 .archive-nested-shell-layer {
   position: absolute;
   inset: 0;
@@ -443,6 +455,16 @@ a {
 .archive-nested-shell-line {
   color: var(--muted);
   line-height: 1.6;
+}
+
+.archive-song-modal-familiarity {
+  width: fit-content;
+  padding: 4px 10px;
+  border-radius: 999px;
+  color: rgba(64, 54, 45, 0.86);
+  background: rgba(255, 255, 255, 0.66);
+  border: 1px solid rgba(104, 90, 77, 0.16);
+  font-weight: 700;
 }
 
 .archive-nested-shell-meta {

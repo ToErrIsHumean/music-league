@@ -349,6 +349,16 @@ function renderSubmissionRow(roundId, submission) {
             { className: "archive-submission-artist" },
             submission.song.artistName,
           ),
+          submission.song.familiarity
+            ? React.createElement(
+                "span",
+                {
+                  className: "archive-submission-familiarity",
+                  "data-familiarity-kind": submission.song.familiarity.kind,
+                },
+                submission.song.familiarity.label,
+              )
+            : null,
         ),
         React.createElement(
           "a",
@@ -428,6 +438,16 @@ function renderNestedSongModal(roundId, songModal) {
           { className: "archive-nested-shell-line" },
           `Submitted by ${songModal.submitterName}`,
         ),
+        songModal.familiarity
+          ? React.createElement(
+              "p",
+              {
+                className: "archive-nested-shell-line archive-song-modal-familiarity",
+                "data-familiarity-kind": songModal.familiarity.kind,
+              },
+              `${songModal.familiarity.label}: ${songModal.familiarity.shortSummary}`,
+            )
+          : null,
         React.createElement(
           "div",
           { className: "archive-nested-shell-meta" },
@@ -667,6 +687,16 @@ function renderPlayerSongView(playerModal) {
       React.createElement("p", { className: "archive-round-dialog-kicker" }, "Song detail"),
       React.createElement("h4", { className: "archive-player-song-title" }, submission.title),
       React.createElement("p", { className: "archive-player-song-artist" }, submission.artistName),
+      submission.familiarity
+        ? React.createElement(
+            "p",
+            {
+              className: "archive-nested-shell-line archive-song-modal-familiarity",
+              "data-familiarity-kind": submission.familiarity.kind,
+            },
+            `${submission.familiarity.label}: ${submission.familiarity.shortSummary}`,
+          )
+        : null,
       React.createElement(
         "div",
         { className: "archive-player-song-field" },

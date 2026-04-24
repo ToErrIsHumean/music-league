@@ -144,6 +144,124 @@ function buildPlayerHistoryRow(submission) {
   };
 }
 
+function buildSongMemoryEvidenceRow(submission) {
+  return {
+    id: submission.id,
+    roundId: submission.roundId,
+    roundSequenceNumber: submission.round.sequenceNumber,
+    songId: submission.songId,
+    playerId: submission.playerId,
+    playerName: submission.player.displayName,
+    createdAt: submission.createdAt,
+    roundOccurredAt: submission.round.occurredAt,
+  };
+}
+
+function groupSongMemoryEvidence(evidenceSubmissions) {
+  const exactSubmissionsBySongId = new Map();
+  const artistSubmissionsByArtistId = new Map();
+
+  for (const submission of evidenceSubmissions) {
+    const evidenceRow = buildSongMemoryEvidenceRow(submission);
+    const exactSubmissions = exactSubmissionsBySongId.get(submission.songId) ?? [];
+    const artistSubmissions = artistSubmissionsByArtistId.get(submission.song.artistId) ?? [];
+
+    exactSubmissions.push(evidenceRow);
+    artistSubmissions.push(evidenceRow);
+    exactSubmissionsBySongId.set(submission.songId, exactSubmissions);
+    artistSubmissionsByArtistId.set(submission.song.artistId, artistSubmissions);
+  }
+
+  return {
+    exactSubmissionsBySongId,
+    artistSubmissionsByArtistId,
+  };
+}
+
+function buildRepresentativeOriginSubmissions(submissions) {
+  const representativeOriginsBySongId = new Map();
+
+  for (const submission of [...submissions].sort(compareByCreatedAtAscending)) {
+    if (!representativeOriginsBySongId.has(submission.song.id)) {
+      representativeOriginsBySongId.set(submission.song.id, submission);
+    }
+  }
+
+  return representativeOriginsBySongId;
+}
+
+async function getRoundFamiliarityEvidence(prisma, submissions) {
+  const songIds = [...new Set(submissions.map((submission) => submission.song.id))];
+  const artistIds = [...new Set(submissions.map((submission) => submission.song.artist.id))];
+
+  if (songIds.length === 0 && artistIds.length === 0) {
+    return groupSongMemoryEvidence([]);
+  }
+
+  const evidenceSubmissions = await prisma.submission.findMany({
+    where: {
+      OR: [
+        {
+          songId: {
+            in: songIds,
+          },
+        },
+        {
+          song: {
+            artistId: {
+              in: artistIds,
+            },
+          },
+        },
+      ],
+    },
+    select: {
+      id: true,
+      roundId: true,
+      songId: true,
+      playerId: true,
+      createdAt: true,
+      round: {
+        select: {
+          occurredAt: true,
+          sequenceNumber: true,
+        },
+      },
+      song: {
+        select: {
+          artistId: true,
+        },
+      },
+      player: {
+        select: {
+          displayName: true,
+        },
+      },
+    },
+  });
+
+  return groupSongMemoryEvidence(evidenceSubmissions);
+}
+
+function buildRoundSubmissionFamiliarity({
+  roundId,
+  submission,
+  representativeOriginsBySongId,
+  exactSubmissionsBySongId,
+  artistSubmissionsByArtistId,
+}) {
+  const representativeOrigin = representativeOriginsBySongId.get(submission.song.id) ?? submission;
+
+  return deriveSongFamiliarity({
+    songId: submission.song.id,
+    artistId: submission.song.artist.id,
+    originRoundId: roundId,
+    originSubmissionId: representativeOrigin.id,
+    exactSongSubmissions: exactSubmissionsBySongId.get(submission.song.id) ?? [],
+    artistSubmissions: artistSubmissionsByArtistId.get(submission.song.artist.id) ?? [],
+  });
+}
+
 function buildGameMetricsByPlayer(gameSubmissions) {
   const scoredSubmissions = gameSubmissions.filter(isScoredSubmission);
   const scoredRoundSizes = new Map();
@@ -578,6 +696,7 @@ async function getRoundDetail(roundId, input = {}) {
                 title: true,
                 artist: {
                   select: {
+                    id: true,
                     name: true,
                   },
                 },
@@ -599,6 +718,9 @@ async function getRoundDetail(roundId, input = {}) {
     }
 
     const orderedSubmissions = [...round.submissions].sort(compareSubmissionOrder);
+    const representativeOriginsBySongId = buildRepresentativeOriginSubmissions(orderedSubmissions);
+    const { exactSubmissionsBySongId, artistSubmissionsByArtistId } =
+      await getRoundFamiliarityEvidence(prisma, orderedSubmissions);
 
     return {
       id: round.id,
@@ -617,6 +739,13 @@ async function getRoundDetail(roundId, input = {}) {
           id: submission.song.id,
           title: submission.song.title,
           artistName: submission.song.artist.name,
+          familiarity: buildRoundSubmissionFamiliarity({
+            roundId: round.id,
+            submission,
+            representativeOriginsBySongId,
+            exactSubmissionsBySongId,
+            artistSubmissionsByArtistId,
+          }),
         },
         player: {
           id: submission.player.id,
@@ -788,13 +917,24 @@ async function getSongRoundModal(roundId, songId, input = {}) {
       },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       select: {
+        id: true,
         roundId: true,
+        songId: true,
+        playerId: true,
+        createdAt: true,
+        round: {
+          select: {
+            occurredAt: true,
+            sequenceNumber: true,
+          },
+        },
         song: {
           select: {
             id: true,
             title: true,
             artist: {
               select: {
+                id: true,
                 name: true,
               },
             },
@@ -814,12 +954,23 @@ async function getSongRoundModal(roundId, songId, input = {}) {
       return null;
     }
 
+    const representativeOriginsBySongId = buildRepresentativeOriginSubmissions([submission]);
+    const { exactSubmissionsBySongId, artistSubmissionsByArtistId } =
+      await getRoundFamiliarityEvidence(prisma, [submission]);
+
     return {
       roundId: submission.roundId,
       songId: submission.song.id,
       title: submission.song.title,
       artistName: submission.song.artist.name,
       submitterName: submission.player.displayName,
+      familiarity: buildRoundSubmissionFamiliarity({
+        roundId: submission.roundId,
+        submission,
+        representativeOriginsBySongId,
+        exactSubmissionsBySongId,
+        artistSubmissionsByArtistId,
+      }),
       score: submission.score,
       rank: submission.rank,
     };
@@ -976,6 +1127,8 @@ async function getPlayerModalSubmission(originRoundId, playerId, submissionId, i
             id: true,
             gameId: true,
             name: true,
+            occurredAt: true,
+            sequenceNumber: true,
           },
         },
         song: {
@@ -984,6 +1137,7 @@ async function getPlayerModalSubmission(originRoundId, playerId, submissionId, i
             title: true,
             artist: {
               select: {
+                id: true,
                 name: true,
               },
             },
@@ -1000,6 +1154,10 @@ async function getPlayerModalSubmission(originRoundId, playerId, submissionId, i
       return null;
     }
 
+    const representativeOriginsBySongId = buildRepresentativeOriginSubmissions([submission]);
+    const { exactSubmissionsBySongId, artistSubmissionsByArtistId } =
+      await getRoundFamiliarityEvidence(prisma, [submission]);
+
     return {
       originRoundId,
       playerId,
@@ -1009,6 +1167,13 @@ async function getPlayerModalSubmission(originRoundId, playerId, submissionId, i
       roundName: submission.round.name,
       title: submission.song.title,
       artistName: submission.song.artist.name,
+      familiarity: buildRoundSubmissionFamiliarity({
+        roundId: submission.round.id,
+        submission,
+        representativeOriginsBySongId,
+        exactSubmissionsBySongId,
+        artistSubmissionsByArtistId,
+      }),
       score: submission.score,
       rank: submission.rank,
       comment: submission.comment,
