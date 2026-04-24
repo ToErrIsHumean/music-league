@@ -6,7 +6,7 @@
 
 | Task | Title | Status | Depends-on |
 | ---- | ----- | ------ | ---------- |
-| TASK-01 | Patch snapshot, game, and standings source contracts | `active` | — |
+| TASK-01 | Patch snapshot, game, and standings source contracts | `done` | — |
 | TASK-02 | Patch player-metric, source-setting, and vote-evidence source contracts | `pending` | TASK-01 |
 | TASK-03 | Patch song, artist, and M6 insight source contracts | `pending` | TASK-01, TASK-02 |
 | TASK-04 | Add semantic fixture bundles and manifest | `pending` | TASK-01, TASK-02, TASK-03 |
@@ -24,9 +24,15 @@ Status values: `pending` | `active` | `done` | `fail` | `blocked` | `skipped`
 | Task | Signal | Discovery | Cycle | Model | Reasoning-Effort | Timestamp |
 | ---- | ------ | --------- | ----- | ----- | ---------------- | --------- |
 | TASK-01 | fail | null | 1 | gpt-5.5 | high | 2026-04-24T23:08:02.323Z |
+| TASK-01 | pass | null | 2 | gpt-5.5 | high | 2026-04-24T23:20:02.086Z |
+| TASK-01 | pass | null | 3 | gpt-5.5 | high | 2026-04-24T23:26:18.665Z |
 
 ## Review Notes
 
 <!-- Orchestrator review notes append below. -->
+
+- TASK-01 cycle 3: `confirmed` -> `docs/sdd/reviews/TASK-01-epoch-1-cycle-3.md`
+
+- TASK-01 cycle 2: `contested` -> `docs/sdd/reviews/TASK-01-epoch-1-cycle-2.md`
 
 - TASK-01 cycle 1: `contested` -> `docs/sdd/reviews/TASK-01-epoch-1-cycle-1.md`
