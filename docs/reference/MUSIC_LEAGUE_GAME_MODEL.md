@@ -90,6 +90,10 @@ historical game snapshots. In repo-facing work:
 - `Game` is the top-level archive object for one imported Music League game
   snapshot or source game identity.
 - `Round` belongs to exactly one `Game`.
+- `Round.leagueSlug` is compatibility metadata in current scope. Product
+  grouping, standings, overview aggregation, song memory, and player history
+  should use `Game` / `Round.gameId` semantics unless an active spec authorizes
+  a legacy compatibility path.
 - `Round.name` is usually the theme or prompt label.
 - `Round.description` may contain extra prompt text or context.
 - `Round.playlistUrl` points to the generated playlist when available.
@@ -115,6 +119,13 @@ The supported import unit is one four-file Music League CSV bundle:
 The repo optimizes for this trusted export shape. It should fail deterministically
 on unsupported or internally inconsistent data rather than infer a plausible
 answer.
+
+Current supported imports are completed, post-vote, de-anonymized snapshots.
+The `visibleToVoters` export field is preserved as source evidence and
+compatibility data; current product surfaces must not use it as an active
+privacy gate. If a future feature imports pre-reveal or in-progress data, that
+feature needs a separate privacy/reveal-state contract before exposing
+player-song associations.
 
 ### Canonical Non-Case: Same Song Twice In One Round
 
@@ -182,7 +193,7 @@ experience, not a full replacement for live Music League gameplay.
 
 In scope for the current product direction:
 
-- Importing completed or in-progress source snapshots.
+- Importing completed, post-vote, de-anonymized source snapshots.
 - Browsing games, rounds, submissions, songs, players, scores, ranks, and
   comments.
 - Preserving source identity so refreshes are replay-safe.
@@ -194,6 +205,8 @@ Out of scope unless a future spec says otherwise:
 - Hosting live submission deadlines.
 - Creating or editing Music League rounds.
 - Running voting sessions.
+- Exposing pre-reveal player-song associations without a new reveal-state
+  contract.
 - Managing league invitations, membership, or platform accounts.
 - Syncing live Spotify playlist state outside the provided import data.
 - Arbitrating ambiguous imports through a manual review UI.

@@ -101,6 +101,25 @@ verification obligations remain authoritative in each CP section.
   histories, and stale origin context; require each non-deferred CP and shipped
   M6 insight category to name its fixture coverage.
 
+### Corrective Patch Disposition Record
+
+Disposition status here means the product/source contract is explicit. The
+downstream implementation owner still owns the code, fixture, or UI work named
+by the active cleanup SPEC.
+
+| CP | Disposition | Patched contract | Downstream owner | Verification anchor |
+| --- | --- | --- | --- | --- |
+| CP-01 completed snapshots | `patched` | Supported imports are completed, post-vote, de-anonymized snapshots; `Submission.visibleToVoters` is source evidence/compatibility data, not a current privacy gate. | TASK-05 import-hardening tests | AC-01, AC-02, AC-11 |
+| CP-02 game identity | `patched` | `Game` is the canonical parent of `Round`; `Game.sourceGameId`/`ImportBatch.gameKey` identify the source game; `Round.leagueSlug` is compatibility metadata. | TASK-05 import-hardening tests | AC-01, AC-03, AC-11 |
+| CP-03 standings | `patched` | M6 standings are a derived, game-scoped read model over scored `Submission.score` values with dense tied ranking and no persisted standings table. | TASK-07 standings helper | AC-01, AC-04, AC-12, AC-13 |
+| CP-04 normalized player metrics | `patched` | Overview player claims use named denominators, finish-percentile posture, explicit multi-submit treatment, and small-sample caveats. | TASK-08 overview insights | AC-01, AC-05, AC-11, AC-13 |
+| CP-05 source settings | `patched` | Vote budget, deadline, low-stakes, and downvote-enabled settings remain unknown unless imported or configured; negative vote points remain valid imported facts. | TASK-05 and TASK-06 import/round evidence | AC-01, AC-06, AC-11 |
+| CP-06 canonical song detail | `patched` | Song links target canonical song memory by canonical song identity; origin context is navigation/evidence chrome. | TASK-08 overview links | AC-01, AC-07, AC-11 |
+| CP-07 vote breakdown | `patched` | Completed round result surfaces may display vote-by-vote evidence while keeping vote comments, submission comments, and settings explanations separate. | TASK-06 round evidence | AC-01, AC-08, AC-11 |
+| CP-08 artist identity | `patched` | v1 artist identity is the normalized exported artist display string, not parsed collaborator truth. | TASK-08 overview insights | AC-01, AC-09, AC-11 |
+| CP-09 insight grounding | `patched` | Each M6 insight template must name source facts, scope, denominator, minimum sample, omission condition, and evidence link; unsupported metadata claims are omitted. | Future SPEC-006 implementation | AC-01, AC-10, AC-13 |
+| CP-10 fixtures | `patched` | Fixture coverage is required for overlapping games, standings ties, negative points, comments, sparse histories, visibility flags, and stale origin context. | TASK-04 fixture manifest and downstream consumers | AC-11 |
+
 ---
 
 ## 2. Corrective Patch Features
@@ -247,6 +266,10 @@ persisted as a new schema entity.
 - Define standings as a derived read model: total points by player within a
   game, computed from the player's submitted songs' canonical
   `Submission.score` values after import.
+- The standings row contract includes `totalScore`, `scoredSubmissionCount`,
+  `scoredRoundCount`, dense `rank`, and explicit `tied` state. Multi-submit
+  rounds count once per scored submission for total score and once per
+  distinct round for `scoredRoundCount`.
 - Do not add `Standing`, `Leaderboard`, or equivalent persisted schema tables
   for M6. If future performance or audit requirements need persistence, that
   must be justified in a separate schema-changing spec.
@@ -254,7 +277,11 @@ persisted as a new schema entity.
   explicitly named subset.
 - Define how missing scores, null ranks, and partial imports affect standings.
 - Define tie handling. Minimum: stable deterministic tie ordering and explicit
-  tied-state display; do not invent a winner from arbitrary sort order.
+  tied-state display; do not invent a winner from arbitrary sort order. Players
+  with zero scored submissions are excluded from standings rows.
+- Require a computationally cheap one-game derivation that is linear or
+  near-linear in the game's scored submissions/votes and avoids per-player or
+  per-round query loops.
 - M6 overview must include a standings/champion signal unless explicitly
   deferred with a rationale stronger than "not in the original overview doc."
 - "Winner", "champion", "leader", and similar copy must be backed by the
@@ -539,8 +566,9 @@ claims.
 - Older milestone source material mentions optional genre and average song
   length for player modal ideas.
 - FSD-004 correctly excludes genre, mood, duration, and external metadata.
-- The Milestone 6 overview source still gives examples such as sad music and
-  long songs.
+- The Milestone 6 overview source previously gave examples such as sad music
+  and long songs; the corrective contract now prohibits those examples unless
+  prerequisite source facts are added.
 - Result: M6 agents may reintroduce unavailable metadata as if it were product
   truth.
 
