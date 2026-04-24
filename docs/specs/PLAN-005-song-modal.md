@@ -10,7 +10,7 @@
 | TASK-02 | Hydrate round-detail familiarity cues | `done` | TASK-01 |
 | TASK-03 | Build canonical song memory payload | `done` | TASK-01 |
 | TASK-04 | Wire and render canonical song detail | `done` | TASK-03 |
-| TASK-05 | Converge player-history song taps on canonical song detail | `pending` | TASK-04 |
+| TASK-05 | Converge player-history song taps on canonical song detail | `done` | TASK-04 |
 | TASK-06 | Expand M5 fixtures and integrated regressions | `pending` | TASK-01, TASK-02, TASK-03, TASK-04, TASK-05 |
 
 Status values: `pending` | `active` | `done` | `fail` | `blocked` | `skipped`
@@ -38,10 +38,13 @@ elevated override.
 | TASK-02 | pass | null | 3 | gpt-5.5 | high | 2026-04-24T08:53:27.744Z |
 | TASK-03 | pass | null | 1 | gpt-5.5 | xhigh | 2026-04-24T09:08:07.381Z |
 | TASK-04 | pass | null | 1 | gpt-5.5 | xhigh | 2026-04-24T09:23:24.691Z |
+| TASK-05 | pass | null | 1 | gpt-5.5 | high | 2026-04-24T09:28:42.404Z |
 
 ## Review Notes
 
 <!-- Orchestrator review notes append below. -->
+
+- TASK-05 cycle 1: `deferred` -> `docs/sdd/reviews/TASK-05-epoch-1-cycle-1.md`
 
 - TASK-04 cycle 1: `confirmed` -> `docs/sdd/reviews/TASK-04-epoch-1-cycle-1.md`
 
