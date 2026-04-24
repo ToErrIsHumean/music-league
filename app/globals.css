@@ -473,6 +473,154 @@ a {
   gap: 10px;
 }
 
+.archive-song-shell {
+  width: min(680px, 100%);
+  max-height: min(88vh, 760px);
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+}
+
+.archive-song-shell .archive-nested-shell-header {
+  flex-shrink: 0;
+  margin-bottom: 0;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(104, 90, 77, 0.16);
+}
+
+.archive-song-shell .archive-nested-shell-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 16px 4px 0 0;
+  overflow: auto;
+}
+
+.archive-song-summary,
+.archive-song-history-section,
+.archive-song-history-group,
+.archive-song-history-copy {
+  display: grid;
+  gap: 12px;
+}
+
+.archive-song-verdict-copy,
+.archive-song-recall-comment,
+.archive-song-history-date,
+.archive-song-history-comment {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.archive-song-summary-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.archive-song-summary-fact,
+.archive-song-history-card {
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(104, 90, 77, 0.16);
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.archive-song-summary-fact {
+  display: grid;
+  gap: 5px;
+}
+
+.archive-song-summary-label {
+  color: var(--accent);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.archive-song-summary-value,
+.archive-song-history-player,
+.archive-song-history-game {
+  color: var(--ink);
+  font-weight: 800;
+}
+
+.archive-song-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.archive-song-shortcut,
+.archive-song-unavailable-action {
+  display: inline-flex;
+  width: fit-content;
+  padding: 9px 12px;
+  border-radius: 999px;
+  background: rgba(164, 63, 47, 0.1);
+  color: var(--accent);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.archive-song-history-section {
+  padding-top: 16px;
+  border-top: 1px solid rgba(104, 90, 77, 0.12);
+}
+
+.archive-song-history-header,
+.archive-song-history-group-header,
+.archive-song-history-main {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.archive-song-history-game {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.archive-song-history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.archive-song-history-player,
+.archive-song-history-round {
+  text-decoration: none;
+}
+
+.archive-song-history-round {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.archive-song-history-result {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.archive-song-origin-pill {
+  width: fit-content;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(213, 181, 98, 0.2);
+  color: rgba(64, 54, 45, 0.82);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
 .archive-player-shell {
   width: min(560px, 100%);
   max-height: min(88vh, 720px);
@@ -740,13 +888,30 @@ a {
     padding: 18px;
   }
 
+  .archive-song-shell {
+    width: 100%;
+    max-height: min(88vh, 640px);
+    padding: 18px;
+  }
+
+  .archive-song-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
   .archive-player-pick-grid {
     grid-template-columns: 1fr;
   }
 
   .archive-player-history-header,
-  .archive-player-history-main {
+  .archive-player-history-main,
+  .archive-song-history-header,
+  .archive-song-history-group-header,
+  .archive-song-history-main {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .archive-song-history-result {
+    justify-content: flex-start;
   }
 }

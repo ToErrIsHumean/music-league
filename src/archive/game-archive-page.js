@@ -4,7 +4,7 @@ const {
   getPlayerModalSubmission,
   getPlayerRoundModal,
   getRoundDetail,
-  getSongRoundModal,
+  getSongMemoryModal,
   listArchiveGames,
 } = require("./archive-utils");
 
@@ -59,6 +59,55 @@ async function resolveNestedSelection(searchParams, roundSelection, input) {
   const requestedPlayerSubmissionId = normalizeQueryInteger(searchParams?.playerSubmission);
   const requestedSongId = normalizeQueryInteger(searchParams?.song);
 
+  if (requestedPlayerId !== null && requestedPlayerSubmissionId !== null) {
+    const openPlayerModal = await getPlayerRoundModal(
+      roundSelection.openRound.id,
+      requestedPlayerId,
+      input,
+    );
+
+    if (openPlayerModal) {
+      const activeSubmission = await getPlayerModalSubmission(
+        roundSelection.openRound.id,
+        requestedPlayerId,
+        requestedPlayerSubmissionId,
+        input,
+      );
+
+      return {
+        nestedEntity: {
+          kind: "player",
+          id: openPlayerModal.playerId,
+        },
+        openSongModal: null,
+        openPlayerModal: {
+          ...openPlayerModal,
+          activeSubmissionId: activeSubmission?.submissionId ?? null,
+          activeSubmission,
+        },
+      };
+    }
+  }
+
+  if (requestedSongId !== null) {
+    const openSongModal = await getSongMemoryModal(
+      roundSelection.openRound.id,
+      requestedSongId,
+      input,
+    );
+
+    return {
+      nestedEntity: openSongModal
+        ? {
+            kind: "song",
+            id: openSongModal.song?.id ?? requestedSongId,
+          }
+        : null,
+      openSongModal,
+      openPlayerModal: null,
+    };
+  }
+
   if (requestedPlayerId !== null) {
     const openPlayerModal = await getPlayerRoundModal(
       roundSelection.openRound.id,
@@ -74,19 +123,6 @@ async function resolveNestedSelection(searchParams, roundSelection, input) {
       };
     }
 
-    let activeSubmissionId = null;
-    let activeSubmission = null;
-
-    if (requestedPlayerSubmissionId !== null) {
-      activeSubmission = await getPlayerModalSubmission(
-        roundSelection.openRound.id,
-        requestedPlayerId,
-        requestedPlayerSubmissionId,
-        input,
-      );
-      activeSubmissionId = activeSubmission?.submissionId ?? null;
-    }
-
     return {
       nestedEntity: {
         kind: "player",
@@ -95,24 +131,9 @@ async function resolveNestedSelection(searchParams, roundSelection, input) {
       openSongModal: null,
       openPlayerModal: {
         ...openPlayerModal,
-        activeSubmissionId,
-        activeSubmission,
+        activeSubmissionId: null,
+        activeSubmission: null,
       },
-    };
-  }
-
-  if (requestedSongId !== null) {
-    const openSongModal = await getSongRoundModal(roundSelection.openRound.id, requestedSongId, input);
-
-    return {
-      nestedEntity: openSongModal
-        ? {
-            kind: "song",
-            id: openSongModal.songId,
-          }
-        : null,
-      openSongModal,
-      openPlayerModal: null,
     };
   }
 
@@ -224,6 +245,95 @@ function formatSubmissionScoreLabel(score) {
 
 function formatPlayerHistoryCount(submissionCount) {
   return `${submissionCount} submission${submissionCount === 1 ? "" : "s"} across this game`;
+}
+
+function formatGenericCount(count, singular) {
+  return `${count} ${singular}${count === 1 ? "" : "s"}`;
+}
+
+function formatSongArtistFootprint(artistFootprint) {
+  if (artistFootprint.submissionCount === 0) {
+    return "No other songs by this artist";
+  }
+
+  return `${formatGenericCount(artistFootprint.submissionCount, "submission")} across ${formatGenericCount(
+    artistFootprint.songCount,
+    "other song",
+  )} by ${formatGenericCount(artistFootprint.submitterCount, "submitter")}`;
+}
+
+function formatSongFamiliarityVerdict(familiarity, summary) {
+  if (familiarity.kind === "brought-back") {
+    const artistCopy =
+      summary.artistFootprint.submissionCount > 0
+        ? `, with ${formatSongArtistFootprint(summary.artistFootprint).toLowerCase()}`
+        : "";
+
+    return `${formatGenericCount(
+      familiarity.priorExactSongSubmissionCount,
+      "earlier exact-song submission",
+    )}${artistCopy}.`;
+  }
+
+  if (familiarity.kind === "known-artist") {
+    return `First exact-song appearance here, with ${formatGenericCount(
+      familiarity.priorArtistSubmissionCount,
+      "earlier artist submission",
+    )} across ${formatGenericCount(familiarity.priorArtistSongCount, "other song")}.`;
+  }
+
+  return "No earlier exact-song or same-artist history before this round.";
+}
+
+function formatBestSongFinish(bestExactSongFinish) {
+  if (!bestExactSongFinish) {
+    return null;
+  }
+
+  return bestExactSongFinish.score === null
+    ? formatSubmissionRank(bestExactSongFinish.rank)
+    : `${formatSubmissionRank(bestExactSongFinish.rank)}, ${formatSubmissionScore(
+        bestExactSongFinish.score,
+      )}`;
+}
+
+function buildSongSummaryFacts(songModal) {
+  const summary = songModal.summary;
+  const facts = [];
+
+  if (summary.firstSubmitter) {
+    facts.push({
+      label: "First appearance",
+      value: summary.firstSubmitter.displayName,
+    });
+  }
+
+  if (summary.mostRecentSubmitter) {
+    facts.push({
+      label: "Most recent",
+      value: summary.mostRecentSubmitter.displayName,
+    });
+  }
+
+  facts.push({
+    label: "Exact history",
+    value: formatGenericCount(summary.exactSongSubmissionCount, "submission"),
+  });
+  facts.push({
+    label: "Artist footprint",
+    value: formatSongArtistFootprint(summary.artistFootprint),
+  });
+
+  const bestFinish = formatBestSongFinish(summary.bestExactSongFinish);
+
+  if (bestFinish) {
+    facts.push({
+      label: "Best finish",
+      value: bestFinish,
+    });
+  }
+
+  return facts;
 }
 
 function renderRoundCard(round, openRoundId) {
@@ -390,9 +500,212 @@ function renderSubmissionRow(roundId, submission) {
   );
 }
 
+function renderSongSummaryFact(fact) {
+  return React.createElement(
+    "li",
+    { className: "archive-song-summary-fact", key: fact.label },
+    React.createElement("span", { className: "archive-song-summary-label" }, fact.label),
+    React.createElement("span", { className: "archive-song-summary-value" }, fact.value),
+  );
+}
+
+function renderSongEvidenceShortcuts(shortcuts) {
+  if (shortcuts.length === 0) {
+    return null;
+  }
+
+  return React.createElement(
+    "nav",
+    { className: "archive-song-shortcuts", "aria-label": "Song evidence shortcuts" },
+    shortcuts.map((shortcut) =>
+      React.createElement(
+        "a",
+        {
+          href: `#song-history-submission-${shortcut.submissionId}`,
+          className: "archive-song-shortcut",
+          key: shortcut.kind,
+        },
+        shortcut.label,
+      ),
+    ),
+  );
+}
+
+function renderSongHistoryRow(row) {
+  const playerHref = buildArchiveHref({
+    roundId: row.roundId,
+    playerId: row.submitter.id,
+  });
+  const roundHref = buildArchiveHref({ roundId: row.roundId });
+
+  return React.createElement(
+    "li",
+    {
+      className: row.isOrigin
+        ? "archive-song-history-item is-origin"
+        : "archive-song-history-item",
+      id: `song-history-submission-${row.submissionId}`,
+      key: row.submissionId,
+    },
+    React.createElement(
+      "article",
+      { className: "archive-song-history-card" },
+      React.createElement(
+        "div",
+        { className: "archive-song-history-main" },
+        React.createElement(
+          "div",
+          { className: "archive-song-history-copy" },
+          React.createElement(
+            "a",
+            {
+              href: playerHref,
+              className: "archive-song-history-player",
+              "aria-label": `Open ${row.submitter.displayName} from ${row.roundName}`,
+            },
+            row.submitter.displayName,
+          ),
+          React.createElement(
+            "a",
+            {
+              href: roundHref,
+              className: "archive-song-history-round",
+              "aria-label": `Open ${row.roundName}`,
+            },
+            row.roundName,
+          ),
+          React.createElement(
+            "span",
+            { className: "archive-song-history-date" },
+            formatRoundDate(row.occurredAt),
+          ),
+          row.isOrigin
+            ? React.createElement("span", { className: "archive-song-origin-pill" }, "Origin")
+            : null,
+        ),
+        React.createElement(
+          "div",
+          { className: "archive-song-history-result" },
+          React.createElement(
+            "span",
+            { className: "archive-submission-rank" },
+            formatSubmissionRankLabel(row.result.rank),
+          ),
+          React.createElement(
+            "span",
+            { className: "archive-submission-score" },
+            formatSubmissionScoreLabel(row.result.score),
+          ),
+        ),
+      ),
+      row.comment
+        ? React.createElement("p", { className: "archive-song-history-comment" }, row.comment)
+        : null,
+    ),
+  );
+}
+
+function renderSongHistoryGroup(group) {
+  return React.createElement(
+    "section",
+    { className: "archive-song-history-group", key: group.gameId },
+    React.createElement(
+      "div",
+      { className: "archive-song-history-group-header" },
+      React.createElement("h4", { className: "archive-song-history-game" }, group.gameLabel),
+      group.isOriginGame
+        ? React.createElement("span", { className: "archive-song-origin-pill" }, "Origin game")
+        : null,
+    ),
+    React.createElement(
+      "ol",
+      { className: "archive-song-history-list" },
+      group.rows.map(renderSongHistoryRow),
+    ),
+  );
+}
+
+function renderUnavailableSongState(songModal) {
+  return React.createElement(
+    React.Fragment,
+    null,
+    React.createElement(
+      "p",
+      { className: "archive-nested-shell-line" },
+      "This song detail is unavailable for the open round, but the round remains available.",
+    ),
+    React.createElement(
+      "a",
+      {
+        href: songModal.closeHref,
+        className: "archive-song-unavailable-action",
+        "aria-label": "Return to the origin round",
+      },
+      "Return to round",
+    ),
+  );
+}
+
+function renderCanonicalSongState(songModal) {
+  const summaryFacts = buildSongSummaryFacts(songModal);
+
+  return React.createElement(
+    React.Fragment,
+    null,
+    React.createElement(
+      "section",
+      { className: "archive-song-summary", "aria-label": "Song memory summary" },
+      React.createElement(
+        "p",
+        {
+          className: "archive-song-modal-familiarity",
+          "data-familiarity-kind": songModal.familiarity.kind,
+        },
+        songModal.familiarity.label,
+      ),
+      React.createElement(
+        "p",
+        { className: "archive-song-verdict-copy" },
+        formatSongFamiliarityVerdict(songModal.familiarity, songModal.summary),
+      ),
+      React.createElement(
+        "ul",
+        { className: "archive-song-summary-grid" },
+        summaryFacts.map(renderSongSummaryFact),
+      ),
+      songModal.summary.recallComment
+        ? React.createElement(
+            "p",
+            { className: "archive-song-recall-comment" },
+            songModal.summary.recallComment.text,
+          )
+        : null,
+      renderSongEvidenceShortcuts(songModal.shortcuts),
+    ),
+    React.createElement(
+      "section",
+      { className: "archive-song-history-section", "aria-label": "Submission history" },
+      React.createElement(
+        "div",
+        { className: "archive-song-history-header" },
+        React.createElement("p", { className: "archive-round-dialog-kicker" }, "Submission evidence"),
+        React.createElement(
+          "p",
+          { className: "archive-submission-section-meta" },
+          formatGenericCount(songModal.summary.exactSongSubmissionCount, "exact-song submission"),
+        ),
+      ),
+      songModal.historyGroups.map(renderSongHistoryGroup),
+    ),
+  );
+}
+
 function renderNestedSongModal(roundId, songModal) {
-  const dialogTitleId = `round-${roundId}-song-${songModal.songId}-title`;
-  const closeHref = buildArchiveHref({ roundId });
+  const isUnavailable = songModal.unavailable === true;
+  const dialogTitleId = isUnavailable
+    ? `round-${roundId}-song-unavailable-title`
+    : `round-${roundId}-song-${songModal.song.id}-title`;
+  const closeHref = songModal.closeHref ?? buildArchiveHref({ roundId });
 
   return React.createElement(
     "div",
@@ -405,7 +718,9 @@ function renderNestedSongModal(roundId, songModal) {
     React.createElement(
       "aside",
       {
-        className: "archive-nested-shell",
+        className: isUnavailable
+          ? "archive-nested-shell archive-song-shell archive-song-unavailable-shell"
+          : "archive-nested-shell archive-song-shell",
         role: "dialog",
         "aria-modal": "false",
         "aria-labelledby": dialogTitleId,
@@ -416,9 +731,17 @@ function renderNestedSongModal(roundId, songModal) {
         React.createElement(
           "div",
           { className: "archive-nested-shell-copy" },
-          React.createElement("p", { className: "archive-round-dialog-kicker" }, "Song detail"),
-          React.createElement("h3", { className: "archive-nested-shell-title", id: dialogTitleId }, songModal.title),
-          React.createElement("p", { className: "archive-round-context" }, songModal.artistName),
+          React.createElement("p", { className: "archive-round-dialog-kicker" }, "Song memory"),
+          React.createElement(
+            "h3",
+            { className: "archive-nested-shell-title", id: dialogTitleId },
+            isUnavailable ? "Song detail unavailable" : songModal.song.title,
+          ),
+          React.createElement(
+            "p",
+            { className: "archive-round-context" },
+            isUnavailable ? `Requested song ${songModal.requestedSongId ?? "unknown"}` : songModal.song.artistName,
+          ),
         ),
         React.createElement(
           "a",
@@ -433,42 +756,21 @@ function renderNestedSongModal(roundId, songModal) {
       React.createElement(
         "div",
         { className: "archive-nested-shell-body" },
-        React.createElement(
-          "p",
-          { className: "archive-nested-shell-line" },
-          `Submitted by ${songModal.submitterName}`,
-        ),
-        songModal.familiarity
-          ? React.createElement(
-              "p",
-              {
-                className: "archive-nested-shell-line archive-song-modal-familiarity",
-                "data-familiarity-kind": songModal.familiarity.kind,
-              },
-              `${songModal.familiarity.label}: ${songModal.familiarity.shortSummary}`,
-            )
-          : null,
-        React.createElement(
-          "div",
-          { className: "archive-nested-shell-meta" },
-          React.createElement("span", { className: "archive-submission-rank" }, formatSubmissionRank(songModal.rank)),
-          React.createElement("span", { className: "archive-submission-score" }, formatSubmissionScore(songModal.score)),
-        ),
+        isUnavailable ? renderUnavailableSongState(songModal) : renderCanonicalSongState(songModal),
       ),
     ),
   );
 }
 
-function renderPlayerNotablePick(originRoundId, playerId, kind, submission) {
+function renderPlayerNotablePick(kind, submission) {
   if (!submission) {
     return null;
   }
 
   const pickLabel = kind === "best" ? "Best Pick" : "Worst Pick";
   const songHref = buildArchiveHref({
-    roundId: originRoundId,
-    playerId,
-    playerSubmissionId: submission.submissionId,
+    roundId: submission.roundId,
+    songId: submission.song.id,
   });
   const roundHref = buildArchiveHref({ roundId: submission.roundId });
 
@@ -518,11 +820,10 @@ function renderPlayerNotablePick(originRoundId, playerId, kind, submission) {
   );
 }
 
-function renderPlayerHistoryRow(originRoundId, playerId, submission) {
+function renderPlayerHistoryRow(submission) {
   const songHref = buildArchiveHref({
-    roundId: originRoundId,
-    playerId,
-    playerSubmissionId: submission.submissionId,
+    roundId: submission.roundId,
+    songId: submission.song.id,
   });
   const roundHref = buildArchiveHref({ roundId: submission.roundId });
 
@@ -590,18 +891,8 @@ function renderPlayerHistoryRow(originRoundId, playerId, submission) {
 
 function renderPlayerSummaryBody(playerModal) {
   const notablePickCards = [
-    renderPlayerNotablePick(
-      playerModal.originRoundId,
-      playerModal.playerId,
-      "best",
-      playerModal.notablePicks.best,
-    ),
-    renderPlayerNotablePick(
-      playerModal.originRoundId,
-      playerModal.playerId,
-      "worst",
-      playerModal.notablePicks.worst,
-    ),
+    renderPlayerNotablePick("best", playerModal.notablePicks.best),
+    renderPlayerNotablePick("worst", playerModal.notablePicks.worst),
   ].filter(Boolean);
 
   return React.createElement(
@@ -649,9 +940,7 @@ function renderPlayerSummaryBody(playerModal) {
       React.createElement(
         "ol",
         { className: "archive-player-history-list" },
-        playerModal.history.map((submission) =>
-          renderPlayerHistoryRow(playerModal.originRoundId, playerModal.playerId, submission),
-        ),
+        playerModal.history.map(renderPlayerHistoryRow),
       ),
     ),
   );
