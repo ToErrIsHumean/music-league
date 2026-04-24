@@ -113,8 +113,14 @@ Validation / error handling:
 
 - Direct entry to `/?round=<id>&player=<id>` must render the same player modal
   as an in-app open from round detail.
-- Song links inside the player summary/history use
-  `buildArchiveHref({ roundId: originRoundId, playerId, playerSubmissionId: submissionId })`.
+- M4 song links inside the player summary/history used
+  `buildArchiveHref({ roundId: originRoundId, playerId, playerSubmissionId:
+  submissionId })` for a player-scoped local evidence preview.
+- Pre-M6 CP-06 amendment: new or changed song links inside player history or
+  notable picks must instead target canonical song memory with
+  `buildArchiveHref({ roundId: evidenceRoundId, songId })`. The player and
+  submission remain evidence context in the destination payload/copy; they do
+  not create a separate song-detail identity.
 - Round links inside the player summary/history use
   `buildArchiveHref({ roundId: historyRoundId })`.
 - Round links inside the player modal use ordinary archive href navigation; the
@@ -546,6 +552,9 @@ TASK-04: TASK-01,TASK-02,TASK-03
 - [ ] Cross-player song history, recurrence counts, or the broader Song Modal
   lookup experience inside the player-scoped song view - Milestone 5.
   `Disposition: deferred` `Reason: sequencing` `Trace: §7 | BACKLOG.md`
+- [ ] New player-history song navigation to the legacy player-scoped song
+  preview. `Disposition: superseded` `Reason: CP-06 canonical Song memory`
+  `Trace: SPEC-005 §4d-5 | PRE-M6 CP-06`
 - [ ] Charts, graphs, or score timeline visualizations
 - [ ] Player-to-player comparison, filtering, or editable profiles
 - [ ] Illustrated or copy-heavy empty-state treatments for zero-submission or

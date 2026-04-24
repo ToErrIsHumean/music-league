@@ -73,6 +73,54 @@ includes voter, points, voted-at timestamp when present, and vote comment, and
 keeps vote comments distinct from submission comments. Empty vote lists do not
 remove the submission row.
 
+Song links from the overview target canonical song memory by `Song` identity.
+Round, player, or insight origin context may foreground the relevant evidence
+row and provide return navigation, but it must not create local song-detail
+semantics unless the UI explicitly labels the element as an evidence preview.
+
+Artist aggregate and artist-familiarity copy uses the normalized exported
+artist display string as v1 identity. A combined multi-artist export label is
+one label for aggregation and familiarity; overview copy must not imply
+collaborator-level truth, split-artist attribution, or artist-graph knowledge.
+
+Every shipped insight family must declare this contract before implementation:
+
+```ts
+interface InsightTemplateContract {
+  id: string;
+  sourceFacts: string[];
+  scope: "Game" | "Round" | "Player" | "Song" | "Submission" | "Vote" | "mixed";
+  denominator: string;
+  minimumSample: number;
+  omissionCondition: string;
+  evidenceLink: {
+    kind: "round" | "player" | "song" | "submission" | "vote-breakdown";
+    requiresGameContext: boolean;
+  };
+  copyGuardrails: string[];
+}
+```
+
+If source facts, denominator, minimum sample, omission condition, and evidence
+link cannot be named, the insight is not dispatchable. Unsupported funny copy
+is omitted rather than replaced with generic text that sounds factual.
+
+Downstream round, standings, and overview insight work may rely on these
+resolved derivations without reopening the pre-M6 questions:
+
+- Standings are game-scoped, derived from scored `Submission.score` totals,
+  exclude null score/null rank submissions, use dense ranking, preserve ties,
+  and never require a persisted standings table.
+- Finish-percentile player claims use `(rank - 1) /
+  max(scoredRoundSize - 1, 1)` within each scored round, where `0` is best and
+  `1` is worst.
+- Submission-based player claims use scored submissions as the denominator;
+  submitted-round claims use distinct player/round submissions. Multi-submit
+  rounds count per scored submission for submission-based claims and once per
+  player/round for submitted-round claims.
+- Small-sample claims are allowed only when the copy names or exposes the
+  denominator and avoids durable-tendency overclaims.
+
 Vote-budget usage, missed-deadline penalties, disqualification, low-stakes
 mode, downvote availability, genre, mood, duration, popularity, album,
 release-year, audio-feature, and Spotify-enrichment claims are prohibited
@@ -109,6 +157,9 @@ Examples:
 - Standings leader or tied leaders  
 - Total rounds / submissions (optional)
 
+Artist-count items aggregate the normalized exported artist display string.
+They must not parse collaborators out of combined labels.
+
 Presentation:
 - clean cards or simple visual blocks
 - designed to be screenshot-friendly
@@ -132,9 +183,12 @@ Examples:
 
 Requirements:
 - grounded in real data
+- expressible through `InsightTemplateContract`
 - short, punchy, readable
 - reference real players/songs
-- omit unsupported genre, mood, duration, vote-budget, and deadline claims
+- omit unsupported genre, mood, duration, popularity, album, release-year,
+  audio-feature, Spotify-enrichment, vote-budget, deadline, disqualification,
+  low-stakes, and collaborator-level artist claims
 
 ---
 
@@ -147,7 +201,7 @@ Subtle links to:
 
 These should lead into:
 - Player Modal  
-- Song Modal  
+- canonical Song Modal by `Song` identity
 - Round Page  
 
 ---
@@ -155,7 +209,7 @@ These should lead into:
 ## 🔗 Interaction Model
 
 - Clicking player → Player Modal  
-- Clicking song → Song Modal  
+- Clicking song → canonical Song Modal by `Song` identity
 - Clicking round → Round Page  
 
 No heavy navigation UI required.
@@ -173,6 +227,15 @@ Requires aggregated data:
 Insights should be derived from:
 - simple heuristics (v1)
 - no complex ML required
+- canonical archive facts already imported or derived in current scope:
+  players, games, rounds, submissions, songs, normalized exported artist
+  labels, votes, scores, ranks, dates, playlist URLs, visibility flags as
+  source evidence, and comments where an insight template explicitly permits
+  them
+
+Each insight category requires a named fixture or fixture plan before SPEC-006
+can dispatch implementation. Small samples are allowed only when the insight
+names or exposes the denominator and the copy avoids durable-tendency claims.
 
 ---
 
@@ -215,6 +278,12 @@ Do NOT include:
   explanations are omitted
 - Vote-derived evidence links resolve to round-level vote breakdowns without
   conflating submission comments with vote comments
+- Song links resolve to canonical song memory by `Song` identity unless
+  explicitly labeled as local evidence previews
+- Artist aggregates and familiarity claims use normalized exported artist
+  display strings and prohibit collaborator-level overclaims
+- Each shipped insight template declares source facts, scope, denominator,
+  minimum sample, omission condition, evidence link, and copy guardrails
 - At least one element feels “funny/true”
 - Elements link to deeper exploration:
   - Player modal  
@@ -231,6 +300,27 @@ Do NOT include:
    - precomputed after import?
 
 2. How should missing or low-volume data be handled?
+
+Missing or low-volume data must be handled by each insight's
+`minimumSample`, `denominator`, and `omissionCondition`; it is not an open
+license for unsupported fallback claims.
+
+---
+
+## Pre-M6 Corrective Patch Dispositions
+
+| CP | Disposition | Patched contracts | Verification |
+| --- | --- | --- | --- |
+| CP-01 completed snapshots | patched | Completed, post-vote, de-anonymized snapshot assumption in this M6 overview contract and PRE-M6 ledger disposition | AC-01, AC-02, AC-11 |
+| CP-02 game identity | patched | One selected canonical `Game` scope and no `Round.leagueSlug` product grouping in this M6 overview contract and PRE-M6 ledger disposition | AC-01, AC-03, AC-11 |
+| CP-03 standings | patched | Derived game-scoped standings contract in this M6 overview contract and PRE-M6 ledger disposition | AC-01, AC-04, AC-12, AC-13 |
+| CP-04 normalized player metrics | patched | Finish percentile, denominator, multi-submit, and small-sample contract in this M6 overview contract and PRE-M6 ledger disposition | AC-01, AC-05, AC-11, AC-13 |
+| CP-05 source settings | patched | Unknown vote-budget, deadline, disqualification, low-stakes, downvote, and unsupported-setting prohibitions in this M6 overview contract and PRE-M6 ledger disposition | AC-01, AC-06, AC-11 |
+| CP-06 canonical song detail | patched | `FSD-003` F5.1; `SPEC-003` §4c/§4d-5; `FSD-004` F3.1; `SPEC-004` §4a/§7; `FSD-005` F1/F2; `SPEC-005` §4d-3/§4d-5; this M6 overview contract | AC-01, AC-07, AC-11 |
+| CP-07 vote breakdown | patched | Round-level vote-breakdown evidence-link contract in this M6 overview contract and PRE-M6 ledger disposition | AC-01, AC-08, AC-11 |
+| CP-08 artist identity | patched | `FSD-005` F1; `SPEC-005` §4d-1; this M6 overview artist aggregate and insight contract | AC-01, AC-09, AC-11 |
+| CP-09 insight grounding | patched | this M6 overview insight-template, data-source, omission, and unsupported-claim contract | AC-01, AC-10, AC-13 |
+| CP-10 fixtures | patched | PRE-M6 fixture coverage requirement retained for TASK-04 fixture manifest and downstream consumers | AC-11 |
 
 ---
 

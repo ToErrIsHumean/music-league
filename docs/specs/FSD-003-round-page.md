@@ -205,8 +205,10 @@ losing orientation.
 
 #### F5.1 Song drill-in
 
-- Clicking a song from round detail opens the Song Modal.
-- Song drill-in should not sever the user's connection to the underlying round.
+- Clicking a song from round detail opens the canonical Song Modal for that
+  `Song` identity.
+- The round remains origin context for return navigation and evidence
+  foregrounding; it must not redefine the song as a current-round-only detail.
 
 #### F5.2 Player drill-in
 

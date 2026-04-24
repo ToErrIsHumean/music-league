@@ -98,9 +98,14 @@ Three workstreams:
 
 #### F3.1 Song tap (push)
 
-- Tapping a song title replaces modal inner content with a player-scoped song view
-- Song view shows this player's submission: title, artist, round name, rank, score, comment if present — not cross-player history
-- Back affordance (e.g. "← [Player name]") returns to the player view; modal shell stays throughout
+- M4 shipped a player-scoped song push view for local submission evidence.
+- Pre-M6 CP-06 amendment: new or changed song taps from player history or
+  notable-pick contexts target canonical song memory by `Song` identity, with
+  the clicked row's round retained only as origin context.
+- Any remaining player-scoped song view is legacy/local evidence preview
+  behavior and must not be presented as the canonical Song Modal.
+- Back affordance returns to the player view when a legacy/local preview is
+  used; canonical song detail follows the Song Modal navigation contract.
 
 #### F3.2 Round tap (navigate, preserve stack)
 
