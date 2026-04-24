@@ -25,6 +25,17 @@ async function findRoundIdBySourceId(sourceRoundId) {
   return round.id;
 }
 
+async function findSongIdBySpotifyUri(spotifyUri) {
+  const song = await prisma.song.findFirst({
+    where: { spotifyUri },
+    select: { id: true },
+  });
+
+  assert.ok(song, `expected seeded song ${spotifyUri} to exist`);
+
+  return song.id;
+}
+
 test.after(async () => {
   await cleanup();
 });
@@ -133,7 +144,7 @@ test(
 );
 
 test(
-  "round detail submission links open a nested song shell without dismissing the round dialog",
+  "round detail submission links open canonical song memory without dismissing the round dialog",
   { concurrency: false },
   async () => {
     const roundId = await findRoundIdBySourceId("seed-r1");
@@ -160,24 +171,40 @@ test(
     assert.ok(props.openRound, "expected nested modal state to preserve the round detail");
     assert.ok(props.openSongModal, "expected song modal content to load");
     assert.equal(props.openPlayerModal, null);
+    assert.equal(props.openSongModal.song.id, targetSubmission.song.id);
     assert.equal(props.openSongModal.familiarity.kind, targetSubmission.song.familiarity.kind);
     assert.equal(props.openSongModal.familiarity.label, targetSubmission.song.familiarity.label);
+    assert.ok(props.openSongModal.historyGroups.length > 0);
+    const evidenceRow = props.openSongModal.historyGroups[0].rows[0];
     assert.equal((markup.match(/role=\"dialog\"/g) ?? []).length, 2);
     assert.match(markup, new RegExp(`href=\"/\\?round=${roundId}&amp;song=${targetSubmission.song.id}\"`));
     assert.match(
       markup,
       new RegExp(`href=\"/\\?round=${roundId}&amp;player=${targetSubmission.player.id}\"`),
     );
-    assert.match(markup, /Song detail/);
+    assert.match(
+      markup,
+      new RegExp(`href=\"/\\?round=${evidenceRow.roundId}&amp;player=${evidenceRow.submitter.id}\"`),
+    );
+    assert.match(markup, new RegExp(`href=\"/\\?round=${evidenceRow.roundId}\"`));
+    assert.match(markup, /Song memory/);
+    assert.match(markup, new RegExp(targetSubmission.song.title));
+    assert.match(markup, new RegExp(targetSubmission.song.artistName));
     assert.match(markup, /archive-song-modal-familiarity/);
-    assert.match(markup, /New to us: No earlier song or artist history/);
+    assert.match(markup, /No earlier exact-song or same-artist history before this round\./);
+    assert.match(markup, /First appearance/);
+    assert.match(markup, /Most recent/);
+    assert.match(markup, /Exact history/);
+    assert.match(markup, /Artist footprint/);
+    assert.match(markup, /Submission evidence/);
+    assert.match(markup, /href=\"#song-history-submission-/);
     assert.match(markup, /Back to round/);
     assert.match(markup, /Round detail/);
   },
 );
 
 test(
-  "round-scoped song URLs keep milestone 3 close behavior outside player flow",
+  "canonical song URLs close back to the origin round outside player flow",
   { concurrency: false },
   async () => {
     const roundId = await findRoundIdBySourceId("seed-r1");
@@ -205,12 +232,53 @@ test(
       kind: "song",
       id: targetSubmission.song.id,
     });
-    assert.ok(props.openSongModal, "expected the legacy round-scoped song shell to stay open");
+    assert.ok(props.openSongModal, "expected the canonical song memory shell to stay open");
     assert.equal(props.openPlayerModal, null);
-    assert.deepEqual(closeHrefMatches, [`href="/?round=${roundId}"`, `href="/?round=${roundId}"`]);
+    assert.ok(closeHrefMatches.length >= 2);
+    assert.match(
+      songShellMarkup,
+      new RegExp(`href=\"/\\?round=${roundId}\" class=\"archive-nested-shell-backdrop\"`),
+    );
+    assert.match(
+      songShellMarkup,
+      new RegExp(`href=\"/\\?round=${roundId}\" class=\"archive-round-close\"`),
+    );
     assert.ok(!songShellMarkup.includes("playerSubmission="));
-    assert.ok(!songShellMarkup.includes(`player=${targetSubmission.player.id}`));
     assert.match(songShellMarkup, /Back to round/);
+  },
+);
+
+test(
+  "stale origin-song URLs render a contained unavailable state inside the round overlay",
+  { concurrency: false },
+  async () => {
+    const roundId = await findRoundIdBySourceId("seed-r1");
+    const staleSongId = await findSongIdBySpotifyUri("spotify:track:seed-song-005");
+    const props = await buildGameArchivePageProps({
+      prisma,
+      searchParams: Promise.resolve({
+        round: String(roundId),
+        song: String(staleSongId),
+      }),
+    });
+    const markup = renderToStaticMarkup(React.createElement(GameArchivePage, props));
+
+    assert.deepEqual(props.nestedEntity, {
+      kind: "song",
+      id: staleSongId,
+    });
+    assert.deepEqual(props.openSongModal, {
+      unavailable: true,
+      originRoundId: roundId,
+      requestedSongId: staleSongId,
+      closeHref: `/?round=${roundId}`,
+    });
+    assert.equal(props.openPlayerModal, null);
+    assert.equal((markup.match(/role=\"dialog\"/g) ?? []).length, 2);
+    assert.match(markup, /Song detail unavailable/);
+    assert.match(markup, /This song detail is unavailable for the open round/);
+    assert.match(markup, new RegExp(`href=\"/\\?round=${roundId}\"`));
+    assert.match(markup, /Round detail/);
   },
 );
 
@@ -272,6 +340,39 @@ test(
 );
 
 test(
+  "mixed player and song query without playerSubmission opens canonical song memory",
+  { concurrency: false },
+  async () => {
+    const roundId = await findRoundIdBySourceId("seed-r1");
+    const baseProps = await buildGameArchivePageProps({
+      prisma,
+      searchParams: Promise.resolve({
+        round: String(roundId),
+      }),
+    });
+    const targetSubmission = baseProps.openRound.submissions[0];
+    const props = await buildGameArchivePageProps({
+      prisma,
+      searchParams: Promise.resolve({
+        round: String(roundId),
+        player: String(targetSubmission.player.id),
+        song: String(targetSubmission.song.id),
+      }),
+    });
+    const markup = renderToStaticMarkup(React.createElement(GameArchivePage, props));
+
+    assert.deepEqual(props.nestedEntity, {
+      kind: "song",
+      id: targetSubmission.song.id,
+    });
+    assert.ok(props.openSongModal, "expected canonical song memory to load");
+    assert.equal(props.openPlayerModal, null);
+    assert.match(markup, /data-nested-kind=\"song\"/);
+    assert.ok(!markup.includes('data-nested-kind="player"'));
+  },
+);
+
+test(
   "direct player entry renders summary picks and cross-round history links inside the nested player shell",
   { concurrency: false },
   async () => {
@@ -301,6 +402,11 @@ test(
             name: true,
           },
         },
+        song: {
+          select: {
+            id: true,
+          },
+        },
       },
       orderBy: {
         id: "asc",
@@ -326,12 +432,13 @@ test(
     assert.match(
       markup,
       new RegExp(
-        `href=\"/\\?round=${roundId}&amp;player=${targetSubmission.player.id}&amp;playerSubmission=${playerHistorySubmission.id}\"`,
+        `href=\"/\\?round=${playerHistorySubmission.round.id}&amp;song=${playerHistorySubmission.song.id}\"`,
       ),
     );
     assert.match(markup, new RegExp(`href=\"/\\?round=${playerHistorySubmission.round.id}\"`));
     assert.match(markup, new RegExp(playerHistorySubmission.round.name));
     assert.ok(!markup.includes("Round-scoped submission"));
+    assert.ok(!markup.includes("playerSubmission="));
 
     if (props.openPlayerModal.notablePicks.best) {
       assert.match(markup, /Best Pick/);
