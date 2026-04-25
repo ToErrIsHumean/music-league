@@ -1,5 +1,6 @@
 const React = require("react");
 const {
+  applySelectedGameRouteContext,
   buildArchiveHref,
   buildCanonicalSongMemoryHref,
   getPlayerModalSubmission,
@@ -376,17 +377,22 @@ async function buildGameMemoryBoardPageProps(input = {}) {
   });
   const nestedSelection = await resolveNestedSelection(searchParams, roundSelection, archiveInput);
   const notices = [selected.invalidGameNotice, roundSelection.notice].filter(Boolean);
+  const routeContext = {
+    selectedGameId: selected.selectedGame?.id ?? null,
+    openRoundId: roundSelection.openRoundId,
+    selectedGameHref: buildArchiveHref({ gameId: selected.selectedGame?.id ?? null }),
+  };
 
   return {
     selectedGame: selectedGameFrame,
     games: buildGameSwitcherOptions(selectableGames, selected.selectedGame?.id ?? null),
     board: selectedGameMemoryBoard?.board ?? null,
     openRoundId: roundSelection.openRoundId,
-    openRound: roundSelection.openRound,
+    openRound: applySelectedGameRouteContext(roundSelection.openRound, routeContext),
     notices,
     nestedEntity: nestedSelection.nestedEntity,
-    openSongModal: nestedSelection.openSongModal,
-    openPlayerModal: nestedSelection.openPlayerModal,
+    openSongModal: applySelectedGameRouteContext(nestedSelection.openSongModal, routeContext),
+    openPlayerModal: applySelectedGameRouteContext(nestedSelection.openPlayerModal, routeContext),
   };
 }
 
@@ -760,20 +766,24 @@ function renderRoundHighlight(highlight) {
 }
 
 function renderSubmissionRow(roundId, submission, gameId = null) {
-  const songHref = buildCanonicalSongMemoryHref({
-    gameId,
-    roundId,
-    songId: submission.song.id,
-  });
-  const playerHref = buildArchiveHref({
-    gameId,
-    roundId,
-    playerId: submission.player.id,
-  });
+  const songHref =
+    submission.songHref ??
+    buildCanonicalSongMemoryHref({
+      gameId,
+      roundId,
+      songId: submission.song.id,
+    });
+  const playerHref =
+    submission.playerHref ??
+    buildArchiveHref({
+      gameId,
+      roundId,
+      playerId: submission.player.id,
+    });
 
   return React.createElement(
     "li",
-    { className: "archive-submission-row", key: submission.id },
+    { className: "archive-submission-row", id: `submission-${submission.id}`, key: submission.id },
     React.createElement(
       "div",
       { className: "archive-submission-main" },
@@ -945,7 +955,7 @@ function renderRoundVoteBreakdownSection(round) {
 
   return React.createElement(
     "div",
-    { className: "archive-vote-breakdown-section" },
+    { className: "archive-vote-breakdown-section", id: "vote-breakdown" },
     React.createElement(
       "div",
       { className: "archive-submission-section-header" },
@@ -996,12 +1006,15 @@ function renderSongEvidenceShortcuts(shortcuts) {
 }
 
 function renderSongHistoryRow(row) {
-  const playerHref = buildArchiveHref({
-    gameId: row.gameId,
-    roundId: row.roundId,
-    playerId: row.submitter.id,
-  });
-  const roundHref = buildArchiveHref({ gameId: row.gameId, roundId: row.roundId });
+  const playerHref =
+    row.playerHref ??
+    buildArchiveHref({
+      gameId: row.gameId,
+      roundId: row.roundId,
+      playerId: row.submitter.id,
+    });
+  const roundHref =
+    row.roundHref ?? buildArchiveHref({ gameId: row.gameId, roundId: row.roundId });
 
   return React.createElement(
     "li",
@@ -1233,15 +1246,19 @@ function renderPlayerNotablePick(kind, submission, gameId = null) {
   }
 
   const pickLabel = kind === "best" ? "Best Pick" : "Worst Pick";
-  const songHref = buildCanonicalSongMemoryHref({
-    gameId: submission.gameId ?? gameId,
-    roundId: submission.roundId,
-    songId: submission.song.id,
-  });
-  const roundHref = buildArchiveHref({
-    gameId: submission.gameId ?? gameId,
-    roundId: submission.roundId,
-  });
+  const songHref =
+    submission.songHref ??
+    buildCanonicalSongMemoryHref({
+      gameId: submission.gameId ?? gameId,
+      roundId: submission.roundId,
+      songId: submission.song.id,
+    });
+  const roundHref =
+    submission.roundHref ??
+    buildArchiveHref({
+      gameId: submission.gameId ?? gameId,
+      roundId: submission.roundId,
+    });
 
   return React.createElement(
     "article",
@@ -1290,15 +1307,19 @@ function renderPlayerNotablePick(kind, submission, gameId = null) {
 }
 
 function renderPlayerHistoryRow(submission, gameId = null) {
-  const songHref = buildCanonicalSongMemoryHref({
-    gameId: submission.gameId ?? gameId,
-    roundId: submission.roundId,
-    songId: submission.song.id,
-  });
-  const roundHref = buildArchiveHref({
-    gameId: submission.gameId ?? gameId,
-    roundId: submission.roundId,
-  });
+  const songHref =
+    submission.songHref ??
+    buildCanonicalSongMemoryHref({
+      gameId: submission.gameId ?? gameId,
+      roundId: submission.roundId,
+      songId: submission.song.id,
+    });
+  const roundHref =
+    submission.roundHref ??
+    buildArchiveHref({
+      gameId: submission.gameId ?? gameId,
+      roundId: submission.roundId,
+    });
 
   return React.createElement(
     "li",
@@ -1428,11 +1449,13 @@ function renderPlayerSongView(playerModal) {
     return null;
   }
 
-  const backHref = buildArchiveHref({
-    gameId: playerModal.originGameId,
-    roundId: playerModal.originRoundId,
-    playerId: playerModal.playerId,
-  });
+  const backHref =
+    playerModal.backHref ??
+    buildArchiveHref({
+      gameId: playerModal.originGameId,
+      roundId: playerModal.originRoundId,
+      playerId: playerModal.playerId,
+    });
 
   return React.createElement(
     "div",
@@ -1491,10 +1514,12 @@ function renderPlayerSongView(playerModal) {
 
 function renderNestedPlayerModal(roundId, playerModal) {
   const dialogTitleId = `round-${roundId}-player-${playerModal.playerId}-title`;
-  const closeHref = buildArchiveHref({
-    gameId: playerModal.originGameId,
-    roundId: playerModal.originRoundId,
-  });
+  const closeHref =
+    playerModal.closeHref ??
+    buildArchiveHref({
+      gameId: playerModal.originGameId,
+      roundId: playerModal.originRoundId,
+    });
   const isSongView = Boolean(playerModal.activeSubmission);
   const contextCopy = isSongView
     ? `${playerModal.activeSubmission.title} by ${playerModal.activeSubmission.artistName}`
@@ -1567,7 +1592,7 @@ function renderNestedEntityModal(roundId, nestedEntity, openSongModal, openPlaye
 
 function renderRoundDetailDialog(round, nestedEntity, openSongModal, openPlayerModal, selectedGameId) {
   const dialogTitleId = `round-${round.id}-title`;
-  const closeHref = buildArchiveHref({ gameId: selectedGameId });
+  const closeHref = round.closeHref ?? buildArchiveHref({ gameId: selectedGameId });
 
   return React.createElement(
     "div",
