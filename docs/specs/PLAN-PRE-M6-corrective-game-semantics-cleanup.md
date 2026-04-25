@@ -11,7 +11,7 @@
 | TASK-03 | Patch song, artist, and M6 insight source contracts | `done` | TASK-01, TASK-02 |
 | TASK-04 | Add semantic fixture bundles and manifest | `done` | TASK-01, TASK-02, TASK-03 |
 | TASK-05 | Harden import and identity tests for game semantics | `done` | TASK-04 |
-| TASK-06 | Implement round vote breakdown evidence | `pending` | TASK-04, TASK-05 |
+| TASK-06 | Implement round vote breakdown evidence | `done` | TASK-04, TASK-05 |
 | TASK-07 | Add derived standings read model | `pending` | TASK-04, TASK-05 |
 | TASK-08 | Normalize player, artist, and song-memory guardrails | `pending` | TASK-04, TASK-06, TASK-07 |
 
@@ -33,10 +33,13 @@ Status values: `pending` | `active` | `done` | `fail` | `blocked` | `skipped`
 | TASK-04 | pass | null | 2 | gpt-5.5 | high | 2026-04-25T00:01:08.580Z |
 | TASK-05 | pass | null | 1 | gpt-5.5 | high | 2026-04-25T00:09:12.591Z |
 | TASK-05 | pass | null | 2 | gpt-5.5 | high | 2026-04-25T00:15:32.369Z |
+| TASK-06 | pass | null | 1 | gpt-5.5 | high | 2026-04-25T00:25:15.192Z |
 
 ## Review Notes
 
 <!-- Orchestrator review notes append below. -->
+
+- TASK-06 cycle 1: `confirmed` -> `docs/sdd/reviews/TASK-06-epoch-1-cycle-1.md`
 
 - TASK-05 cycle 2: `deferred` -> `docs/sdd/reviews/TASK-05-epoch-1-cycle-2.md`
 
