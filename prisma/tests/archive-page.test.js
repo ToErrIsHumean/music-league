@@ -3,13 +3,13 @@ const assert = require("node:assert/strict");
 const React = require("react");
 const { renderToStaticMarkup } = require("react-dom/server");
 const { createTempPrismaDb } = require("./helpers/temp-prisma-db");
+const archivePageModule = require("../../src/archive/game-archive-page");
 const {
   GameMemoryBoardPage,
   buildGameMemoryBoardPageProps,
-} = require("../../src/archive/game-archive-page");
-
-const GameArchivePage = GameMemoryBoardPage;
-const buildGameArchivePageProps = buildGameMemoryBoardPageProps;
+  GameArchivePage,
+  buildGameArchivePageProps,
+} = archivePageModule;
 
 const { prisma, cleanup } = createTempPrismaDb({
   prefix: "music-league-archive-page-",
@@ -52,6 +52,11 @@ async function findGameIdBySourceId(sourceGameId) {
 
 test.after(async () => {
   await cleanup();
+});
+
+test("route module compatibility aliases delegate to the memory board implementation", () => {
+  assert.equal(GameArchivePage, GameMemoryBoardPage);
+  assert.equal(buildGameArchivePageProps, buildGameMemoryBoardPageProps);
 });
 
 test(
@@ -112,6 +117,57 @@ test(
 );
 
 test(
+  "TASK-07 memory board render regression keeps board copy source-backed and comment-free",
+  { concurrency: false },
+  async () => {
+    const props = await buildGameArchivePageProps({ prisma });
+    const markup = renderToStaticMarkup(React.createElement(GameArchivePage, props));
+    const competitiveAnchorIndex = markup.indexOf("archive-competitive-anchor");
+    const memoryGridIndex = markup.indexOf("archive-memory-grid");
+
+    assert.ok(props.selectedGame, "expected the default route to select a game");
+    assert.ok(props.board, "expected the default route to render a board");
+    assert.match(markup, /archive-hero-title\">After Party League/);
+    assert.match(markup, /Latest game/);
+    assert.ok(competitiveAnchorIndex >= 0, "expected first viewport competitive anchor");
+    assert.ok(memoryGridIndex >= 0, "expected first viewport memory moments");
+    assert.ok(
+      competitiveAnchorIndex < memoryGridIndex,
+      "competitive anchor should precede ordinary moments",
+    );
+    assert.ok(!markup.includes("archive-submission-list"));
+    assert.ok(!markup.includes("archive-round-dialog"));
+    assert.ok(!markup.includes("<table"));
+    assert.ok(!markup.includes("all-games"));
+
+    for (const unsupportedBoardCopy of [
+      /People Reacted/i,
+      /Submission comment/i,
+      /Vote comment/i,
+      /Arcade-pop opener/i,
+      /Bonus-round favorite/i,
+      /genre/i,
+      /mood/i,
+      /audio feature/i,
+      /popularity/i,
+      /recommend/i,
+      /personalization/i,
+      /inferred taste/i,
+      /deadline/i,
+      /vote-budget/i,
+      /low-stakes/i,
+      /disqualification/i,
+      /unsupported humor/i,
+    ]) {
+      assert.ok(
+        !unsupportedBoardCopy.test(markup),
+        `memory board should omit unsupported or deferred board copy: ${unsupportedBoardCopy}`,
+      );
+    }
+  },
+);
+
+test(
   "archive page gracefully keeps the archive visible when a requested round is missing",
   { concurrency: false },
   async () => {
@@ -129,6 +185,32 @@ test(
     assert.match(markup, /Round not found\./);
     assert.match(markup, /After Party League/);
     assert.ok(!markup.includes("Second Spin"), "missing round should keep the selected board scoped");
+  },
+);
+
+test(
+  "malformed integer params are ignored without dismissing the selected board",
+  { concurrency: false },
+  async () => {
+    const props = await buildGameArchivePageProps({
+      prisma,
+      searchParams: Promise.resolve({
+        game: "abc",
+        round: "0",
+        song: "-1",
+        player: "not-a-player",
+      }),
+    });
+    const markup = renderToStaticMarkup(React.createElement(GameArchivePage, props));
+
+    assert.equal(props.selectedGame.displayLabel, "After Party League");
+    assert.equal(props.openRound, null);
+    assert.equal(props.nestedEntity, null);
+    assert.deepEqual(props.notices, []);
+    assert.match(markup, /After Party League/);
+    assert.match(markup, /Selected memory board/);
+    assert.ok(!markup.includes("Round not found"));
+    assert.ok(!markup.includes("Game not found"));
   },
 );
 

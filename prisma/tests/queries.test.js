@@ -35,6 +35,7 @@ let task03FixtureCounter = 0;
 let task04CoverageFixtureCounter = 0;
 let task05MemoryBoardFixtureCounter = 0;
 let task06FixtureCounter = 0;
+let task07TiedLeadersFixtureCounter = 0;
 
 function assertNonEmptyArray(value, message) {
   assert.ok(Array.isArray(value), message);
@@ -817,6 +818,118 @@ async function createTask05MemoryBoardFixture() {
 
   return {
     gameId: selectedGame.id,
+  };
+}
+
+async function createTask07TiedLeadersMemoryBoardFixture() {
+  task07TiedLeadersFixtureCounter += 1;
+
+  const suffix = `task-07-tied-leaders-${task07TiedLeadersFixtureCounter}`;
+  const game = await prisma.game.create({
+    data: {
+      sourceGameId: suffix,
+      displayName: `Task 07 Tied Leaders ${task07TiedLeadersFixtureCounter}`,
+    },
+  });
+  const artist = await prisma.artist.create({
+    data: {
+      name: `Task 07 Tie Artist ${task07TiedLeadersFixtureCounter}`,
+      normalizedName: `task07tieartist${task07TiedLeadersFixtureCounter}`,
+    },
+  });
+  const [alpha, beta, gamma] = await Promise.all([
+    prisma.player.create({
+      data: {
+        displayName: `Task 07 Alpha ${task07TiedLeadersFixtureCounter}`,
+        normalizedName: `task07alpha${task07TiedLeadersFixtureCounter}`,
+        sourcePlayerId: `${suffix}-alpha`,
+      },
+    }),
+    prisma.player.create({
+      data: {
+        displayName: `Task 07 Beta ${task07TiedLeadersFixtureCounter}`,
+        normalizedName: `task07beta${task07TiedLeadersFixtureCounter}`,
+        sourcePlayerId: `${suffix}-beta`,
+      },
+    }),
+    prisma.player.create({
+      data: {
+        displayName: `Task 07 Gamma ${task07TiedLeadersFixtureCounter}`,
+        normalizedName: `task07gamma${task07TiedLeadersFixtureCounter}`,
+        sourcePlayerId: `${suffix}-gamma`,
+      },
+    }),
+  ]);
+  const [alphaSong, betaSong, gammaSong] = await Promise.all([
+    prisma.song.create({
+      data: {
+        title: `Task 07 Alpha Song ${task07TiedLeadersFixtureCounter}`,
+        normalizedTitle: `task07alphasong${task07TiedLeadersFixtureCounter}`,
+        spotifyUri: `spotify:track:${suffix}-alpha`,
+        artistId: artist.id,
+      },
+    }),
+    prisma.song.create({
+      data: {
+        title: `Task 07 Beta Song ${task07TiedLeadersFixtureCounter}`,
+        normalizedTitle: `task07betasong${task07TiedLeadersFixtureCounter}`,
+        spotifyUri: `spotify:track:${suffix}-beta`,
+        artistId: artist.id,
+      },
+    }),
+    prisma.song.create({
+      data: {
+        title: `Task 07 Gamma Song ${task07TiedLeadersFixtureCounter}`,
+        normalizedTitle: `task07gammasong${task07TiedLeadersFixtureCounter}`,
+        spotifyUri: `spotify:track:${suffix}-gamma`,
+        artistId: artist.id,
+      },
+    }),
+  ]);
+  const round = await prisma.round.create({
+    data: {
+      gameId: game.id,
+      leagueSlug: game.sourceGameId,
+      sourceRoundId: `${suffix}-round`,
+      name: `Task 07 Tie Round ${task07TiedLeadersFixtureCounter}`,
+      sequenceNumber: 1,
+      occurredAt: new Date("2024-08-01T19:00:00.000Z"),
+    },
+  });
+
+  await prisma.submission.createMany({
+    data: [
+      {
+        roundId: round.id,
+        playerId: alpha.id,
+        songId: alphaSong.id,
+        score: 10,
+        rank: 1,
+        createdAt: new Date("2024-08-01T18:00:00.000Z"),
+      },
+      {
+        roundId: round.id,
+        playerId: beta.id,
+        songId: betaSong.id,
+        score: 10,
+        rank: 1,
+        createdAt: new Date("2024-08-01T18:05:00.000Z"),
+      },
+      {
+        roundId: round.id,
+        playerId: gamma.id,
+        songId: gammaSong.id,
+        score: 4,
+        rank: 2,
+        createdAt: new Date("2024-08-01T18:10:00.000Z"),
+      },
+    ],
+  });
+
+  return {
+    gameId: game.id,
+    roundId: round.id,
+    leaderNames: [alpha.displayName, beta.displayName],
   };
 }
 
@@ -2074,6 +2187,43 @@ test(
         /genre|mood|audio feature|popularity|recommendation|personalization|deadline|vote-budget|People Reacted|comment snippet/i,
       );
     }
+  },
+);
+
+test(
+  "selected game memory board preserves tied leaders as a tied competitive anchor",
+  { concurrency: false },
+  async () => {
+    const fixture = await createTask07TiedLeadersMemoryBoardFixture();
+    const recap = await getSelectedGameMemoryBoard(fixture.gameId, { prisma });
+
+    assert.ok(recap);
+    assert.equal(recap.board.competitiveAnchor.kind, "tied-leaders");
+    assert.equal(recap.board.competitiveAnchor.unavailableReason, null);
+    assert.deepEqual(
+      recap.board.competitiveAnchor.leaders.map((leader) => leader.player.displayName),
+      fixture.leaderNames,
+    );
+    assert.deepEqual(
+      recap.board.competitiveAnchor.leaders.map((leader) => leader.rank),
+      [1, 1],
+    );
+    assert.equal(
+      new Set(recap.board.competitiveAnchor.leaders.map((leader) => leader.totalScore)).size,
+      1,
+    );
+    assert.match(recap.board.competitiveAnchor.title, /Tied leaders/);
+    assert.match(recap.board.competitiveAnchor.scoreContext, /10 points each/);
+    assert.doesNotMatch(
+      `${recap.board.competitiveAnchor.title} ${recap.board.competitiveAnchor.body}`,
+      /sole|champion/i,
+    );
+
+    const tableMoment = recap.board.moments.find((moment) => moment.family === "the-table");
+
+    assert.ok(tableMoment, "expected tied complete standings to keep the table moment");
+    assert.equal(tableMoment.denominator, "complete scored submissions in the selected game");
+    assert.equal(tableMoment.evidence[0].target.roundId, fixture.roundId);
   },
 );
 
