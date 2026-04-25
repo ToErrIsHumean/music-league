@@ -1,6 +1,7 @@
 const React = require("react");
 const {
   buildArchiveHref,
+  buildCanonicalSongMemoryHref,
   getPlayerModalSubmission,
   getPlayerRoundModal,
   getRoundDetail,
@@ -430,7 +431,7 @@ function renderRoundHighlight(highlight) {
 }
 
 function renderSubmissionRow(roundId, submission) {
-  const songHref = buildArchiveHref({
+  const songHref = buildCanonicalSongMemoryHref({
     roundId,
     songId: submission.song.id,
   });
@@ -900,7 +901,7 @@ function renderPlayerNotablePick(kind, submission) {
   }
 
   const pickLabel = kind === "best" ? "Best Pick" : "Worst Pick";
-  const songHref = buildArchiveHref({
+  const songHref = buildCanonicalSongMemoryHref({
     roundId: submission.roundId,
     songId: submission.song.id,
   });
@@ -953,7 +954,7 @@ function renderPlayerNotablePick(kind, submission) {
 }
 
 function renderPlayerHistoryRow(submission) {
-  const songHref = buildArchiveHref({
+  const songHref = buildCanonicalSongMemoryHref({
     roundId: submission.roundId,
     songId: submission.song.id,
   });
