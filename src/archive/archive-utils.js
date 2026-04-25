@@ -180,6 +180,7 @@ function average(values) {
 function buildPlayerHistoryRow(submission) {
   return {
     submissionId: submission.id,
+    gameId: submission.round.gameId,
     roundId: submission.round.id,
     roundName: submission.round.name,
     occurredAt: toIsoString(submission.round.occurredAt),
@@ -949,6 +950,40 @@ function findNewestOccurredAt(rounds) {
   }, null);
 }
 
+function findOldestOccurredAt(rounds) {
+  return rounds.reduce((oldest, round) => {
+    if (round.occurredAt === null) {
+      return oldest;
+    }
+
+    if (oldest === null || round.occurredAt < oldest) {
+      return round.occurredAt;
+    }
+
+    return oldest;
+  }, null);
+}
+
+function findHighestSequenceNumber(rounds) {
+  return rounds.reduce((highest, round) => {
+    if (round.sequenceNumber === null) {
+      return highest;
+    }
+
+    if (highest === null || round.sequenceNumber > highest) {
+      return round.sequenceNumber;
+    }
+
+    return highest;
+  }, null);
+}
+
+function isScoredRoundSummary(round) {
+  return round.submissions.some(
+    (submission) => submission.score !== null || submission.rank !== null,
+  );
+}
+
 function buildRoundSummary(round) {
   const orderedSubmissions = [...round.submissions].sort(compareSubmissionOrder);
   const winningSubmissions = orderedSubmissions.filter(
@@ -961,6 +996,14 @@ function buildRoundSummary(round) {
     occurredAt: toIsoString(round.occurredAt),
     sequenceNumber: round.sequenceNumber,
     submissionCount: orderedSubmissions.length,
+    submissions: orderedSubmissions.map((submission) => ({
+      player: {
+        id: submission.player.id,
+        displayName: submission.player.displayName,
+      },
+      score: submission.score,
+      rank: submission.rank,
+    })),
     winnerLabel: resolveWinnerLabel(winningSubmissions),
     statusLabel: resolveRoundStatusLabel(orderedSubmissions),
   };
@@ -986,6 +1029,86 @@ function resolveRoundStatusLabel(submissions) {
     : "scored";
 }
 
+function compareSelectableGameOrder(left, right) {
+  const latestOccurredAtComparison = compareNullableDescending(
+    left.latestOccurredAt,
+    right.latestOccurredAt,
+  );
+
+  if (latestOccurredAtComparison !== 0) {
+    return latestOccurredAtComparison;
+  }
+
+  const sequenceComparison = compareNullableDescending(
+    left.highestSequenceNumber,
+    right.highestSequenceNumber,
+  );
+
+  if (sequenceComparison !== 0) {
+    return sequenceComparison;
+  }
+
+  const createdAtComparison = compareNullableDescending(left.createdAt, right.createdAt);
+
+  if (createdAtComparison !== 0) {
+    return createdAtComparison;
+  }
+
+  const sourceGameIdComparison = left.sourceGameId.localeCompare(right.sourceGameId);
+
+  if (sourceGameIdComparison !== 0) {
+    return sourceGameIdComparison;
+  }
+
+  return left.id - right.id;
+}
+
+async function listSelectableGames(input = {}) {
+  const { prisma, ownsPrismaClient } = resolveArchiveInput(input);
+
+  try {
+    const games = await prisma.game.findMany({
+      select: {
+        id: true,
+        sourceGameId: true,
+        displayName: true,
+        createdAt: true,
+        rounds: {
+          select: {
+            occurredAt: true,
+            sequenceNumber: true,
+            submissions: {
+              select: {
+                score: true,
+                rank: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    return games
+      .filter((game) => game.rounds.length > 0)
+      .map((game) => ({
+        id: game.id,
+        sourceGameId: game.sourceGameId,
+        displayLabel: resolveGameDisplayLabel(game),
+        roundCount: game.rounds.length,
+        scoredRoundCount: game.rounds.filter(isScoredRoundSummary).length,
+        earliestOccurredAt: toIsoString(findOldestOccurredAt(game.rounds)),
+        latestOccurredAt: toIsoString(findNewestOccurredAt(game.rounds)),
+        highestSequenceNumber: findHighestSequenceNumber(game.rounds),
+        createdAt: toIsoString(game.createdAt),
+      }))
+      .sort(compareSelectableGameOrder);
+  } finally {
+    if (ownsPrismaClient) {
+      await prisma.$disconnect();
+    }
+  }
+}
+
 async function listArchiveGames(input = {}) {
   const { prisma, ownsPrismaClient } = resolveArchiveInput(input);
 
@@ -1009,6 +1132,7 @@ async function listArchiveGames(input = {}) {
                 createdAt: true,
                 player: {
                   select: {
+                    id: true,
                     displayName: true,
                   },
                 },
@@ -1439,7 +1563,10 @@ async function getSongMemoryModal(originRoundId, songId, input = {}) {
       return null;
     }
 
-    const closeHref = buildArchiveHref({ roundId: originRound.id });
+    const closeHref = buildArchiveHref({
+      gameId: originRound.game.id,
+      roundId: originRound.id,
+    });
     const originSubmissions =
       requestedSongId === null
         ? []
@@ -1552,6 +1679,7 @@ async function getPlayerRoundModal(roundId, playerId, input = {}) {
           round: {
             select: {
               id: true,
+              gameId: true,
               name: true,
               occurredAt: true,
               sequenceNumber: true,
@@ -1732,17 +1860,24 @@ async function getPlayerModalSubmission(originRoundId, playerId, submissionId, i
 }
 
 function buildArchiveHref(input = {}) {
+  const gameId = normalizePositiveInteger(input.gameId);
   const roundId = normalizePositiveInteger(input.roundId);
+  const params = new URLSearchParams();
+
+  if (gameId !== null) {
+    params.set("game", String(gameId));
+  }
 
   if (roundId === null) {
-    return "/";
+    const query = params.toString();
+
+    return query ? `/?${query}` : "/";
   }
 
   const songId = normalizePositiveInteger(input.songId);
   const playerId = normalizePositiveInteger(input.playerId);
   const playerSubmissionId =
     playerId === null ? null : normalizePositiveInteger(input.playerSubmissionId);
-  const params = new URLSearchParams();
 
   params.set("round", String(roundId));
 
@@ -1761,6 +1896,7 @@ function buildArchiveHref(input = {}) {
 
 function buildCanonicalSongMemoryHref(input = {}) {
   return buildArchiveHref({
+    gameId: input.gameId,
     roundId: input.roundId,
     songId: input.songId,
   });
@@ -1780,6 +1916,7 @@ module.exports = {
   getSongMemoryModal,
   getSongRoundModal,
   listArchiveGames,
+  listSelectableGames,
   selectPlayerNotablePicks,
   sortSongMemoryHistory,
 };

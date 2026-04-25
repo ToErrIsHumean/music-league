@@ -7,6 +7,7 @@ const {
   getRoundDetail,
   getSongMemoryModal,
   listArchiveGames,
+  listSelectableGames,
 } = require("./archive-utils");
 
 const archiveDateFormatter = new Intl.DateTimeFormat("en-US", {
@@ -25,26 +26,6 @@ function normalizeQueryInteger(value) {
   const parsedValue = Number.parseInt(candidate, 10);
 
   return Number.isInteger(parsedValue) && parsedValue > 0 ? parsedValue : null;
-}
-
-async function resolveRoundSelection(searchParams, input) {
-  const requestedRoundId = normalizeQueryInteger(searchParams?.round);
-
-  if (requestedRoundId === null) {
-    return {
-      openRoundId: null,
-      openRound: null,
-      notFoundNotice: null,
-    };
-  }
-
-  const openRound = await getRoundDetail(requestedRoundId, input);
-
-  return {
-    openRoundId: openRound ? openRound.id : null,
-    openRound,
-    notFoundNotice: openRound ? null : "Round not found.",
-  };
 }
 
 async function resolveNestedSelection(searchParams, roundSelection, input) {
@@ -145,35 +126,485 @@ async function resolveNestedSelection(searchParams, roundSelection, input) {
   };
 }
 
-function withRoundHrefs(games) {
+function withRoundHrefs(games, selectedGameId = null) {
   return games.map((game) => ({
     ...game,
     rounds: game.rounds.map((round) => ({
       ...round,
-      href: buildArchiveHref({ roundId: round.id }),
+      href: buildArchiveHref({ gameId: selectedGameId, roundId: round.id }),
     })),
   }));
 }
 
-async function buildGameArchivePageProps(input = {}) {
-  const searchParams = (await input.searchParams) ?? {};
-  const archiveInput = input.prisma ? { prisma: input.prisma } : {};
-  const [games, roundSelection] = await Promise.all([
-    listArchiveGames(archiveInput).then(withRoundHrefs),
-    resolveRoundSelection(searchParams, archiveInput),
-  ]);
-  const nestedSelection = await resolveNestedSelection(searchParams, roundSelection, archiveInput);
+function findSelectableGame(games, gameId) {
+  if (gameId === null) {
+    return null;
+  }
+
+  return games.find((game) => game.id === gameId) ?? null;
+}
+
+function compareIsoDescending(left, right) {
+  if (left === null && right === null) {
+    return 0;
+  }
+
+  if (left === null) {
+    return 1;
+  }
+
+  if (right === null) {
+    return -1;
+  }
+
+  return left < right ? 1 : left > right ? -1 : 0;
+}
+
+function compareNullableNumberDescending(left, right) {
+  if (left === null && right === null) {
+    return 0;
+  }
+
+  if (left === null) {
+    return 1;
+  }
+
+  if (right === null) {
+    return -1;
+  }
+
+  return right - left;
+}
+
+function determineDefaultSelectionBasis(games) {
+  const selectedGame = games[0] ?? null;
+  const nextGame = games[1] ?? null;
+
+  if (!selectedGame) {
+    return "stable-source-game-id";
+  }
+
+  if (!nextGame) {
+    if (selectedGame.latestOccurredAt !== null) {
+      return "round-occurred-at";
+    }
+
+    if (selectedGame.highestSequenceNumber !== null) {
+      return "round-sequence";
+    }
+
+    return selectedGame.createdAt !== null ? "game-created-at" : "stable-source-game-id";
+  }
+
+  if (compareIsoDescending(selectedGame.latestOccurredAt, nextGame.latestOccurredAt) !== 0) {
+    return selectedGame.latestOccurredAt !== null ? "round-occurred-at" : "stable-source-game-id";
+  }
+
+  if (
+    compareNullableNumberDescending(
+      selectedGame.highestSequenceNumber,
+      nextGame.highestSequenceNumber,
+    ) !== 0
+  ) {
+    return selectedGame.highestSequenceNumber !== null
+      ? "round-sequence"
+      : "stable-source-game-id";
+  }
+
+  if (compareIsoDescending(selectedGame.createdAt, nextGame.createdAt) !== 0) {
+    return selectedGame.createdAt !== null ? "game-created-at" : "stable-source-game-id";
+  }
+
+  return "stable-source-game-id";
+}
+
+function formatFrameDate(value) {
+  return archiveDateFormatter.format(new Date(value));
+}
+
+function buildTimeframeLabel(game) {
+  if (game.earliestOccurredAt && game.latestOccurredAt) {
+    const earliest = formatFrameDate(game.earliestOccurredAt);
+    const latest = formatFrameDate(game.latestOccurredAt);
+
+    return earliest === latest ? earliest : `${earliest} - ${latest}`;
+  }
+
+  if (game.latestOccurredAt) {
+    return formatFrameDate(game.latestOccurredAt);
+  }
+
+  if (game.highestSequenceNumber !== null) {
+    return `Through round ${game.highestSequenceNumber}`;
+  }
+
+  return `${game.roundCount} round${game.roundCount === 1 ? "" : "s"}`;
+}
+
+function buildSelectionCopy(selectionBasis) {
+  return selectionBasis === "round-occurred-at" ||
+    selectionBasis === "round-sequence" ||
+    selectionBasis === "game-created-at"
+    ? "Latest game"
+    : "Selected game";
+}
+
+function buildSelectedGameFrame(game, selectionBasis) {
+  if (!game) {
+    return null;
+  }
 
   return {
-    games,
+    id: game.id,
+    sourceGameId: game.sourceGameId,
+    displayLabel: game.displayLabel,
+    timeframeLabel: buildTimeframeLabel(game),
+    roundCount: game.roundCount,
+    scoredRoundCount: game.scoredRoundCount,
+    selectionBasis,
+    selectionCopy: buildSelectionCopy(selectionBasis),
+  };
+}
+
+function buildGameSwitcherOptions(games, selectedGameId) {
+  if (games.length < 2) {
+    return [];
+  }
+
+  return games.map((game) => ({
+    id: game.id,
+    displayLabel: game.displayLabel,
+    timeframeLabel: buildTimeframeLabel(game),
+    isSelected: game.id === selectedGameId,
+    href: buildArchiveHref({ gameId: game.id }),
+  }));
+}
+
+function resolveSelectedGame({ selectableGames, requestedGameId, requestedRound }) {
+  const explicitGame = findSelectableGame(selectableGames, requestedGameId);
+
+  if (explicitGame) {
+    return {
+      selectedGame: explicitGame,
+      selectionBasis: "explicit-query",
+      invalidGameNotice: null,
+    };
+  }
+
+  if (requestedRound) {
+    const roundGame = findSelectableGame(selectableGames, requestedRound.game.id);
+
+    if (roundGame) {
+      return {
+        selectedGame: roundGame,
+        selectionBasis: "explicit-query",
+        invalidGameNotice: requestedGameId === null ? null : "Game not found.",
+      };
+    }
+  }
+
+  return {
+    selectedGame: selectableGames[0] ?? null,
+    selectionBasis: determineDefaultSelectionBasis(selectableGames),
+    invalidGameNotice: requestedGameId === null ? null : "Game not found.",
+  };
+}
+
+function resolveRoundSelection({ requestedRoundId, requestedRound, selectedGame }) {
+  if (requestedRoundId === null) {
+    return {
+      openRoundId: null,
+      openRound: null,
+      notice: null,
+    };
+  }
+
+  if (!requestedRound) {
+    return {
+      openRoundId: null,
+      openRound: null,
+      notice: "Round not found.",
+    };
+  }
+
+  if (!selectedGame || requestedRound.game.id !== selectedGame.id) {
+    return {
+      openRoundId: null,
+      openRound: null,
+      notice: "Round not found in selected game.",
+    };
+  }
+
+  return {
+    openRoundId: requestedRound.id,
+    openRound: requestedRound,
+    notice: null,
+  };
+}
+
+function addStandingScore(standings, submission) {
+  if (submission.score === null) {
+    return;
+  }
+
+  const playerKey = submission.player.id ?? submission.player.displayName;
+  const playerName = submission.player.displayName;
+  const standing = standings.get(playerKey) ?? {
+    playerName,
+    totalScore: 0,
+    scoredSubmissionCount: 0,
+    winCount: 0,
+  };
+
+  standing.totalScore += submission.score;
+  standing.scoredSubmissionCount += 1;
+
+  if (submission.rank === 1) {
+    standing.winCount += 1;
+  }
+
+  standings.set(playerKey, standing);
+}
+
+function compareStandings(left, right) {
+  if (right.totalScore !== left.totalScore) {
+    return right.totalScore - left.totalScore;
+  }
+
+  if (right.winCount !== left.winCount) {
+    return right.winCount - left.winCount;
+  }
+
+  return left.playerName.localeCompare(right.playerName);
+}
+
+function buildCompetitiveAnchor(rounds) {
+  const standings = new Map();
+
+  for (const round of rounds) {
+    for (const submission of round.submissions ?? []) {
+      addStandingScore(standings, submission);
+    }
+  }
+
+  const orderedStandings = [...standings.values()].sort(compareStandings);
+
+  if (orderedStandings.length === 0) {
+    return null;
+  }
+
+  const leaderScore = orderedStandings[0].totalScore;
+  const leaders = orderedStandings.filter((standing) => standing.totalScore === leaderScore);
+  const scoredRoundCount = rounds.filter((round) =>
+    (round.submissions ?? []).some((submission) => submission.score !== null),
+  ).length;
+  const title =
+    leaders.length === 1
+      ? `${leaders[0].playerName} leads the game`
+      : `Tied leaders: ${leaders.map((leader) => leader.playerName).join(", ")}`;
+  const body =
+    leaders.length === 1
+      ? `${leaders[0].totalScore} points across ${formatGenericCount(
+          leaders[0].scoredSubmissionCount,
+          "scored pick",
+        )}.`
+      : `${leaderScore} points each across ${formatGenericCount(
+          scoredRoundCount,
+          "scored round",
+        )}.`;
+
+  return {
+    title,
+    body,
+    leaders,
+    scoredRoundCount,
+    standings: orderedStandings.slice(0, 3),
+  };
+}
+
+function buildMoment(kind, label, title, body, href = null) {
+  return {
+    kind,
+    label,
+    title,
+    body,
+    href,
+  };
+}
+
+function buildRoundWinnerMoments(rounds) {
+  return rounds
+    .filter((round) => round.winnerLabel)
+    .slice(0, 2)
+    .map((round) =>
+      buildMoment(
+        "competitive",
+        round.sequenceNumber === null ? "Round result" : `Round ${round.sequenceNumber}`,
+        `${round.winnerLabel} took ${round.name}`,
+        `${formatRoundDate(round.occurredAt)} | ${formatSubmissionCount(round.submissionCount)}`,
+        round.href,
+      ),
+    );
+}
+
+function buildPendingRoundMoment(rounds) {
+  const pendingRounds = rounds.filter((round) => round.statusLabel === "pending");
+
+  if (pendingRounds.length === 0) {
+    return null;
+  }
+
+  const names = pendingRounds.map((round) => round.name).join(", ");
+
+  return buildMoment(
+    "participation",
+    "Still unfolding",
+    `${formatGenericCount(pendingRounds.length, "round")} awaiting votes`,
+    `${names} ${
+      pendingRounds.length === 1 ? "keeps" : "keep"
+    } the board cautious until scoring evidence lands.`,
+    pendingRounds[0].href,
+  );
+}
+
+function buildParticipationMoment(rounds) {
+  const submissionCount = rounds.reduce((total, round) => total + round.submissionCount, 0);
+
+  if (submissionCount === 0) {
+    return null;
+  }
+
+  return buildMoment(
+    "participation",
+    "Participation pulse",
+    `${formatGenericCount(submissionCount, "song")} submitted`,
+    `${formatGenericCount(rounds.length, "round")} gave this game its memory trail.`,
+  );
+}
+
+function buildChronologyMoment(rounds) {
+  const datedRounds = rounds.filter((round) => round.occurredAt !== null);
+
+  if (datedRounds.length < 2) {
+    return null;
+  }
+
+  return buildMoment(
+    "memory",
+    "Game arc",
+    `${formatRoundDate(datedRounds[0].occurredAt)} to ${formatRoundDate(
+      datedRounds[datedRounds.length - 1].occurredAt,
+    )}`,
+    `${formatGenericCount(datedRounds.length, "dated round")} anchors the selected game timeline.`,
+  );
+}
+
+function buildSparseRoundMoment(rounds) {
+  if (rounds.length === 0) {
+    return null;
+  }
+
+  return buildMoment(
+    "memory",
+    "Round evidence",
+    `${formatGenericCount(rounds.length, "round")} available`,
+    `${rounds.map((round) => round.name).join(", ")} stays available as canonical round evidence.`,
+    rounds[0].href,
+  );
+}
+
+function buildBoardPayload(selectedArchiveGame) {
+  if (!selectedArchiveGame) {
+    return null;
+  }
+
+  const rounds = selectedArchiveGame.rounds;
+  const competitiveAnchor = buildCompetitiveAnchor(rounds);
+  const moments = [
+    ...buildRoundWinnerMoments(rounds),
+    buildPendingRoundMoment(rounds),
+    buildParticipationMoment(rounds),
+    buildChronologyMoment(rounds),
+    competitiveAnchor
+      ? buildMoment(
+          "competitive",
+          "Score evidence",
+          `${formatGenericCount(competitiveAnchor.scoredRoundCount, "scored round")} counted`,
+          "The board foregrounds competitive evidence without expanding into a standings table.",
+        )
+      : null,
+    buildSparseRoundMoment(rounds),
+  ]
+    .filter(Boolean)
+    .slice(0, 6);
+
+  return {
+    competitiveAnchor,
+    moments,
+    rounds,
+  };
+}
+
+async function buildGameMemoryBoardPageProps(input = {}) {
+  const searchParams = (await input.searchParams) ?? {};
+  const archiveInput = input.prisma ? { prisma: input.prisma } : {};
+  const requestedGameId = normalizeQueryInteger(searchParams?.game);
+  const requestedRoundId = normalizeQueryInteger(searchParams?.round);
+  const [selectableGames, archiveGames, requestedRound] = await Promise.all([
+    listSelectableGames(archiveInput),
+    listArchiveGames(archiveInput),
+    requestedRoundId === null ? Promise.resolve(null) : getRoundDetail(requestedRoundId, archiveInput),
+  ]);
+
+  if (selectableGames.length === 0) {
+    return {
+      selectedGame: null,
+      games: [],
+      board: null,
+      notices: [],
+      openRoundId: null,
+      openRound: null,
+      nestedEntity: null,
+      openSongModal: null,
+      openPlayerModal: null,
+    };
+  }
+
+  const selected = resolveSelectedGame({
+    selectableGames,
+    requestedGameId,
+    requestedRound,
+  });
+  const selectedGameFrame = buildSelectedGameFrame(
+    selected.selectedGame,
+    selected.selectionBasis,
+  );
+  const selectedArchiveGame =
+    withRoundHrefs(archiveGames, selected.selectedGame?.id ?? null).find(
+      (game) => game.id === selected.selectedGame?.id,
+    ) ?? null;
+  const roundSelection = resolveRoundSelection({
+    requestedRoundId,
+    requestedRound,
+    selectedGame: selected.selectedGame,
+  });
+  const nestedSelection = await resolveNestedSelection(searchParams, roundSelection, archiveInput);
+  const notices = [selected.invalidGameNotice, roundSelection.notice].filter(Boolean);
+
+  return {
+    selectedGame: selectedGameFrame,
+    games: buildGameSwitcherOptions(selectableGames, selected.selectedGame?.id ?? null),
+    board: buildBoardPayload(selectedArchiveGame),
     openRoundId: roundSelection.openRoundId,
     openRound: roundSelection.openRound,
-    notFoundNotice: roundSelection.notFoundNotice,
+    notices,
     nestedEntity: nestedSelection.nestedEntity,
     openSongModal: nestedSelection.openSongModal,
     openPlayerModal: nestedSelection.openPlayerModal,
   };
 }
+
+const buildGameArchivePageProps = buildGameMemoryBoardPageProps;
 
 function formatRoundDate(occurredAt) {
   if (!occurredAt) {
@@ -377,30 +808,142 @@ function renderRoundCard(round, openRoundId) {
   );
 }
 
-function renderGameSection(game, openRoundId) {
+function renderGameSwitcher(games) {
+  if (games.length === 0) {
+    return null;
+  }
+
+  return React.createElement(
+    "nav",
+    { className: "archive-game-switcher", "aria-label": "Select game" },
+    games.map((game) =>
+      React.createElement(
+        "a",
+        {
+          href: game.href,
+          className: game.isSelected
+            ? "archive-game-switcher-link is-selected"
+            : "archive-game-switcher-link",
+          "aria-current": game.isSelected ? "page" : undefined,
+          key: game.id,
+        },
+        React.createElement("span", { className: "archive-game-switcher-name" }, game.displayLabel),
+        game.timeframeLabel
+          ? React.createElement(
+              "span",
+              { className: "archive-game-switcher-timeframe" },
+              game.timeframeLabel,
+            )
+          : null,
+      ),
+    ),
+  );
+}
+
+function renderCompetitiveAnchor(anchor) {
+  if (!anchor) {
+    return React.createElement(
+      "article",
+      { className: "archive-competitive-anchor archive-competitive-anchor-sparse" },
+      React.createElement("p", { className: "archive-moment-label" }, "Competitive anchor"),
+      React.createElement("h3", { className: "archive-moment-title" }, "Scores still pending"),
+      React.createElement(
+        "p",
+        { className: "archive-moment-body" },
+        "No scored submissions are available yet, so the board omits game-level result claims.",
+      ),
+    );
+  }
+
+  return React.createElement(
+    "article",
+    { className: "archive-competitive-anchor" },
+    React.createElement("p", { className: "archive-moment-label" }, "Competitive anchor"),
+    React.createElement("h3", { className: "archive-moment-title" }, anchor.title),
+    React.createElement("p", { className: "archive-moment-body" }, anchor.body),
+    React.createElement(
+      "ol",
+      { className: "archive-anchor-standings", "aria-label": "Top selected-game standings" },
+      anchor.standings.map((standing) =>
+        React.createElement(
+          "li",
+          { className: "archive-anchor-standing", key: standing.playerName },
+          React.createElement("span", null, standing.playerName),
+          React.createElement("strong", null, `${standing.totalScore} pts`),
+        ),
+      ),
+    ),
+  );
+}
+
+function renderMemoryMoment(moment) {
+  const content = React.createElement(
+    React.Fragment,
+    null,
+    React.createElement("p", { className: "archive-moment-label" }, moment.label),
+    React.createElement("h3", { className: "archive-moment-title" }, moment.title),
+    React.createElement("p", { className: "archive-moment-body" }, moment.body),
+  );
+
+  if (moment.href) {
+    return React.createElement(
+      "li",
+      { className: `archive-memory-moment archive-memory-moment-${moment.kind}`, key: moment.title },
+      React.createElement("a", { href: moment.href, className: "archive-memory-moment-link" }, content),
+    );
+  }
+
+  return React.createElement(
+    "li",
+    { className: `archive-memory-moment archive-memory-moment-${moment.kind}`, key: moment.title },
+    content,
+  );
+}
+
+function renderSelectedGameBoard(selectedGame, board, openRoundId) {
+  const rounds = board?.rounds ?? [];
+  const moments = board?.moments ?? [];
+
   return React.createElement(
     "section",
     {
-      className: "archive-game-section",
-      key: game.id,
-      "aria-labelledby": `game-${game.id}-title`,
+      className: "archive-game-section archive-selected-game-board",
+      "aria-labelledby": `game-${selectedGame.id}-title`,
     },
     React.createElement(
       "div",
       { className: "archive-game-header" },
-      React.createElement("p", { className: "archive-game-kicker" }, "Game archive"),
-      React.createElement("h2", { className: "archive-game-title", id: `game-${game.id}-title` }, game.displayLabel),
+      React.createElement("p", { className: "archive-game-kicker" }, "Selected memory board"),
+      React.createElement(
+        "h2",
+        { className: "archive-game-title", id: `game-${selectedGame.id}-title` },
+        selectedGame.displayLabel,
+      ),
       React.createElement(
         "p",
         { className: "archive-game-meta" },
-        `${game.roundCount} round${game.roundCount === 1 ? "" : "s"}`,
+        [
+          `${selectedGame.roundCount} round${selectedGame.roundCount === 1 ? "" : "s"}`,
+          `${selectedGame.scoredRoundCount} scored`,
+        ].join(" | "),
       ),
     ),
-    React.createElement(
-      "ul",
-      { className: "archive-round-list" },
-      game.rounds.map((round) => renderRoundCard(round, openRoundId)),
-    ),
+    rounds.length === 0 || moments.length === 0
+      ? React.createElement(
+          "p",
+          { className: "archive-game-meta" },
+          "This selected game has no round evidence available.",
+        )
+      : React.createElement(
+          React.Fragment,
+          null,
+          renderCompetitiveAnchor(board.competitiveAnchor),
+          React.createElement(
+            "ul",
+            { className: "archive-memory-grid", "aria-label": "Selected game memory moments" },
+            moments.map(renderMemoryMoment),
+          ),
+        ),
   );
 }
 
@@ -408,12 +951,12 @@ function renderEmptyState() {
   return React.createElement(
     "section",
     { className: "archive-empty-state" },
-    React.createElement("p", { className: "archive-empty-kicker" }, "Nothing here yet"),
-    React.createElement("h2", { className: "archive-empty-title" }, "Import a game to start the archive."),
+    React.createElement("p", { className: "archive-empty-kicker" }, "Archive unavailable"),
+    React.createElement("h2", { className: "archive-empty-title" }, "No selectable game is available."),
     React.createElement(
       "p",
       { className: "archive-empty-body" },
-      "The route is live, but there are no seeded or imported games to display yet.",
+      "Import a game with at least one round to open the selected-game memory board.",
     ),
   );
 }
@@ -430,12 +973,14 @@ function renderRoundHighlight(highlight) {
   );
 }
 
-function renderSubmissionRow(roundId, submission) {
+function renderSubmissionRow(roundId, submission, gameId = null) {
   const songHref = buildCanonicalSongMemoryHref({
+    gameId,
     roundId,
     songId: submission.song.id,
   });
   const playerHref = buildArchiveHref({
+    gameId,
     roundId,
     playerId: submission.player.id,
   });
@@ -666,10 +1211,11 @@ function renderSongEvidenceShortcuts(shortcuts) {
 
 function renderSongHistoryRow(row) {
   const playerHref = buildArchiveHref({
+    gameId: row.gameId,
     roundId: row.roundId,
     playerId: row.submitter.id,
   });
-  const roundHref = buildArchiveHref({ roundId: row.roundId });
+  const roundHref = buildArchiveHref({ gameId: row.gameId, roundId: row.roundId });
 
   return React.createElement(
     "li",
@@ -895,17 +1441,21 @@ function renderNestedSongModal(roundId, songModal) {
   );
 }
 
-function renderPlayerNotablePick(kind, submission) {
+function renderPlayerNotablePick(kind, submission, gameId = null) {
   if (!submission) {
     return null;
   }
 
   const pickLabel = kind === "best" ? "Best Pick" : "Worst Pick";
   const songHref = buildCanonicalSongMemoryHref({
+    gameId: submission.gameId ?? gameId,
     roundId: submission.roundId,
     songId: submission.song.id,
   });
-  const roundHref = buildArchiveHref({ roundId: submission.roundId });
+  const roundHref = buildArchiveHref({
+    gameId: submission.gameId ?? gameId,
+    roundId: submission.roundId,
+  });
 
   return React.createElement(
     "article",
@@ -953,12 +1503,16 @@ function renderPlayerNotablePick(kind, submission) {
   );
 }
 
-function renderPlayerHistoryRow(submission) {
+function renderPlayerHistoryRow(submission, gameId = null) {
   const songHref = buildCanonicalSongMemoryHref({
+    gameId: submission.gameId ?? gameId,
     roundId: submission.roundId,
     songId: submission.song.id,
   });
-  const roundHref = buildArchiveHref({ roundId: submission.roundId });
+  const roundHref = buildArchiveHref({
+    gameId: submission.gameId ?? gameId,
+    roundId: submission.roundId,
+  });
 
   return React.createElement(
     "li",
@@ -1024,8 +1578,8 @@ function renderPlayerHistoryRow(submission) {
 
 function renderPlayerSummaryBody(playerModal) {
   const notablePickCards = [
-    renderPlayerNotablePick("best", playerModal.notablePicks.best),
-    renderPlayerNotablePick("worst", playerModal.notablePicks.worst),
+    renderPlayerNotablePick("best", playerModal.notablePicks.best, playerModal.originGameId),
+    renderPlayerNotablePick("worst", playerModal.notablePicks.worst, playerModal.originGameId),
   ].filter(Boolean);
 
   return React.createElement(
@@ -1073,7 +1627,9 @@ function renderPlayerSummaryBody(playerModal) {
       React.createElement(
         "ol",
         { className: "archive-player-history-list" },
-        playerModal.history.map(renderPlayerHistoryRow),
+        playerModal.history.map((submission) =>
+          renderPlayerHistoryRow(submission, playerModal.originGameId),
+        ),
       ),
     ),
   );
@@ -1087,6 +1643,7 @@ function renderPlayerSongView(playerModal) {
   }
 
   const backHref = buildArchiveHref({
+    gameId: playerModal.originGameId,
     roundId: playerModal.originRoundId,
     playerId: playerModal.playerId,
   });
@@ -1148,7 +1705,10 @@ function renderPlayerSongView(playerModal) {
 
 function renderNestedPlayerModal(roundId, playerModal) {
   const dialogTitleId = `round-${roundId}-player-${playerModal.playerId}-title`;
-  const closeHref = buildArchiveHref({ roundId: playerModal.originRoundId });
+  const closeHref = buildArchiveHref({
+    gameId: playerModal.originGameId,
+    roundId: playerModal.originRoundId,
+  });
   const isSongView = Boolean(playerModal.activeSubmission);
   const contextCopy = isSongView
     ? `${playerModal.activeSubmission.title} by ${playerModal.activeSubmission.artistName}`
@@ -1219,9 +1779,9 @@ function renderNestedEntityModal(roundId, nestedEntity, openSongModal, openPlaye
   return null;
 }
 
-function renderRoundDetailDialog(round, nestedEntity, openSongModal, openPlayerModal) {
+function renderRoundDetailDialog(round, nestedEntity, openSongModal, openPlayerModal, selectedGameId) {
   const dialogTitleId = `round-${round.id}-title`;
-  const closeHref = buildArchiveHref({});
+  const closeHref = buildArchiveHref({ gameId: selectedGameId });
 
   return React.createElement(
     "div",
@@ -1277,7 +1837,7 @@ function renderRoundDetailDialog(round, nestedEntity, openSongModal, openPlayerM
             className: "archive-round-close",
             "aria-label": "Close round detail",
           },
-          "Back to archive",
+          "Back to game",
         ),
       ),
       React.createElement(
@@ -1301,7 +1861,9 @@ function renderRoundDetailDialog(round, nestedEntity, openSongModal, openPlayerM
         React.createElement(
           "ol",
           { className: "archive-submission-list" },
-          round.submissions.map((submission) => renderSubmissionRow(round.id, submission)),
+          round.submissions.map((submission) =>
+            renderSubmissionRow(round.id, submission, selectedGameId),
+          ),
         ),
       ),
       renderRoundVoteBreakdownSection(round),
@@ -1310,15 +1872,19 @@ function renderRoundDetailDialog(round, nestedEntity, openSongModal, openPlayerM
   );
 }
 
-function GameArchivePage({
+function GameMemoryBoardPage({
+  selectedGame,
   games,
+  board,
+  notices,
   openRoundId,
   openRound,
-  notFoundNotice,
   nestedEntity,
   openSongModal,
   openPlayerModal,
 }) {
+  const selectedGameId = selectedGame?.id ?? null;
+
   return React.createElement(
     React.Fragment,
     null,
@@ -1329,33 +1895,50 @@ function GameArchivePage({
         "header",
         { className: "archive-hero" },
         React.createElement("p", { className: "archive-hero-kicker" }, "Music League"),
-        React.createElement("h1", { className: "archive-hero-title" }, "Archive by game"),
+        React.createElement(
+          "h1",
+          { className: "archive-hero-title" },
+          selectedGame ? selectedGame.displayLabel : "Archive unavailable",
+        ),
         React.createElement(
           "p",
           { className: "archive-hero-body" },
-          "Browse every game as its own chapter, then dip into a round without losing the bigger picture.",
+          selectedGame
+            ? `${selectedGame.selectionCopy}${
+                selectedGame.timeframeLabel ? ` | ${selectedGame.timeframeLabel}` : ""
+              }`
+            : "No selectable game has enough round evidence for the memory board.",
         ),
+        renderGameSwitcher(games),
       ),
-      notFoundNotice
-        ? React.createElement(
-            "aside",
-            { className: "archive-notice", role: "status" },
-            notFoundNotice,
+      notices?.length > 0
+        ? notices.map((notice) =>
+            React.createElement(
+              "aside",
+              { className: "archive-notice", role: "status", key: notice },
+              notice,
+            ),
           )
         : null,
-      games.length === 0
-        ? renderEmptyState()
-        : React.createElement(
-            "div",
-            { className: "archive-game-grid" },
-            games.map((game) => renderGameSection(game, openRoundId)),
-          ),
+      selectedGame ? renderSelectedGameBoard(selectedGame, board, openRoundId) : renderEmptyState(),
     ),
-    openRound ? renderRoundDetailDialog(openRound, nestedEntity, openSongModal, openPlayerModal) : null,
+    openRound
+      ? renderRoundDetailDialog(
+          openRound,
+          nestedEntity,
+          openSongModal,
+          openPlayerModal,
+          selectedGameId,
+        )
+      : null,
   );
 }
 
+const GameArchivePage = GameMemoryBoardPage;
+
 module.exports = {
+  GameMemoryBoardPage,
+  buildGameMemoryBoardPageProps,
   GameArchivePage,
   buildGameArchivePageProps,
 };
