@@ -779,13 +779,20 @@ function mapSelectedGameVote(vote) {
 function buildSelectedGameMemoryEvidenceRow(submission) {
   return {
     id: submission.id,
+    submissionId: submission.id,
+    gameId: submission.round.gameId,
     roundId: submission.roundId,
     roundSequenceNumber: submission.round.sequenceNumber,
     songId: submission.songId,
     playerId: submission.playerId,
     playerName: submission.player.displayName,
+    artistId: submission.song.artist.id,
+    artistName: submission.song.artist.name,
     createdAt: submission.createdAt,
     roundOccurredAt: submission.round.occurredAt,
+    score: submission.score,
+    rank: submission.rank,
+    submittedAt: submission.submittedAt,
     normalizedArtistName: submission.song.artist.normalizedName,
   };
 }
@@ -846,17 +853,24 @@ async function getSelectedGameMemoryEvidence(prisma, submissions) {
       roundId: true,
       songId: true,
       playerId: true,
+      score: true,
+      rank: true,
+      submittedAt: true,
       createdAt: true,
       round: {
         select: {
+          gameId: true,
           occurredAt: true,
           sequenceNumber: true,
         },
       },
       song: {
         select: {
+          artistId: true,
           artist: {
             select: {
+              id: true,
+              name: true,
               normalizedName: true,
             },
           },
@@ -873,18 +887,367 @@ async function getSelectedGameMemoryEvidence(prisma, submissions) {
   return groupSelectedGameMemoryEvidence(evidenceSubmissions);
 }
 
-function buildSelectedSubmissionFamiliarity(submission, memoryEvidence) {
-  return deriveSongFamiliarity({
+function getArchiveEvidenceRows(archiveSongEvidence, mapName, legacyMapName, key) {
+  const evidenceMap =
+    archiveSongEvidence?.[mapName] ?? archiveSongEvidence?.[legacyMapName] ?? new Map();
+
+  return (evidenceMap.get(key) ?? []).map((row) => ({
+    ...row,
+    id: row.id ?? row.submissionId,
+    submissionId: row.submissionId ?? row.id,
+  }));
+}
+
+function buildSelectedSubmissionHistoryRow(selectedGameId, submission) {
+  return {
+    id: submission.id,
+    submissionId: submission.id,
+    gameId: selectedGameId,
+    roundId: submission.roundId,
+    roundSequenceNumber: submission.roundSequenceNumber ?? null,
     songId: submission.songId,
+    playerId: submission.playerId,
+    playerName: submission.playerName,
     artistId: submission.artistId,
-    originRoundId: submission.roundId,
-    originSubmissionId: submission.id,
-    exactSongSubmissions:
-      memoryEvidence.exactSubmissionsBySongId.get(submission.songId) ?? [],
-    artistSubmissions:
-      memoryEvidence.artistSubmissionsByNormalizedName.get(submission.normalizedArtistName) ??
-      [],
+    artistName: submission.artistName,
+    createdAt: submission.createdAt,
+    roundOccurredAt: submission.roundOccurredAt ?? null,
+    score: submission.score,
+    rank: submission.rank,
+    submittedAt: submission.submittedAt ?? null,
+    normalizedArtistName: submission.normalizedArtistName,
+  };
+}
+
+function getPriorEvidenceRows(evidenceRows, selectedRow) {
+  return sortSongMemoryHistory(evidenceRows).filter(
+    (row) =>
+      row.submissionId !== selectedRow.submissionId &&
+      compareSongMemoryHistoryOrder(row, selectedRow) < 0,
+  );
+}
+
+function buildSelectedGameRoundScoringContext(submissions) {
+  const submissionsByRoundId = new Map();
+
+  for (const submission of submissions) {
+    const roundSubmissions = submissionsByRoundId.get(submission.roundId) ?? [];
+
+    roundSubmissions.push(submission);
+    submissionsByRoundId.set(submission.roundId, roundSubmissions);
+  }
+
+  const contextByRoundId = new Map();
+
+  for (const [roundId, roundSubmissions] of submissionsByRoundId.entries()) {
+    const completeScoredSubmissions = getCompleteScoredSubmissions(roundSubmissions);
+
+    contextByRoundId.set(roundId, {
+      submissionCount: roundSubmissions.length,
+      scoredSubmissionCount: completeScoredSubmissions.length,
+      isCompleteScoredRound: completeScoredSubmissions.length === roundSubmissions.length,
+      topHalfRankCutoff:
+        completeScoredSubmissions.length === 0
+          ? null
+          : Math.ceil(completeScoredSubmissions.length / 2),
+    });
+  }
+
+  return contextByRoundId;
+}
+
+function describeLandedFact(submission, roundScoringContext) {
+  if (!isScoredSubmission(submission)) {
+    return null;
+  }
+
+  const roundContext = roundScoringContext.get(submission.roundId);
+
+  if (!roundContext?.isCompleteScoredRound) {
+    return null;
+  }
+
+  if (submission.rank === 1) {
+    return `ranked first across ${formatGenericCount(
+      roundContext.scoredSubmissionCount,
+      "scored submission",
+    )}`;
+  }
+
+  if (submission.rank === 2) {
+    return `placed second across ${formatGenericCount(
+      roundContext.scoredSubmissionCount,
+      "scored submission",
+    )}`;
+  }
+
+  if (
+    roundContext.topHalfRankCutoff !== null &&
+    submission.rank <= roundContext.topHalfRankCutoff
+  ) {
+    return `finished in the top half across ${formatGenericCount(
+      roundContext.scoredSubmissionCount,
+      "scored submission",
+    )}`;
+  }
+
+  return null;
+}
+
+function compareSongMemoryMomentCandidate(left, right) {
+  if (left.priority !== right.priority) {
+    return left.priority - right.priority;
+  }
+
+  const rankComparison = compareNullableAscending(
+    left.submission.rank,
+    right.submission.rank,
+  );
+
+  if (rankComparison !== 0) {
+    return rankComparison;
+  }
+
+  const scoreComparison = compareNullableDescending(
+    left.submission.score,
+    right.submission.score,
+  );
+
+  if (scoreComparison !== 0) {
+    return scoreComparison;
+  }
+
+  const priorCountComparison = right.priorCount - left.priorCount;
+
+  if (priorCountComparison !== 0) {
+    return priorCountComparison;
+  }
+
+  return compareSelectedSubmissionOrder(left.submission, right.submission);
+}
+
+function buildSongMemoryEvidenceLinks(gameId, submission, roundName, includeRoundEvidence) {
+  const songHref = buildMemoryBoardEvidenceHref({
+    gameId,
+    roundId: submission.roundId,
+    songId: submission.songId,
   });
+
+  if (!songHref) {
+    return [];
+  }
+
+  const links = [
+    {
+      kind: "song",
+      label: submission.songTitle,
+      href: songHref,
+      requiresGameContext: true,
+      target: {
+        gameId,
+        roundId: submission.roundId,
+        songId: submission.songId,
+        submissionId: submission.id,
+      },
+    },
+  ];
+
+  if (includeRoundEvidence) {
+    const roundHref = buildMemoryBoardEvidenceHref({
+      gameId,
+      roundId: submission.roundId,
+    });
+
+    if (!roundHref) {
+      return [];
+    }
+
+    links.push({
+      kind: "round",
+      label: roundName,
+      href: roundHref,
+      requiresGameContext: true,
+      target: {
+        gameId,
+        roundId: submission.roundId,
+      },
+    });
+  }
+
+  return links;
+}
+
+function buildSongDiscoveryMoment(candidate, selectedGameId, roundsById) {
+  const { submission, landedFact } = candidate;
+  const roundName = roundsById.get(submission.roundId)?.name ?? "this round";
+  const evidence = buildSongMemoryEvidenceLinks(
+    selectedGameId,
+    submission,
+    roundName,
+    true,
+  );
+
+  if (evidence.length === 0) {
+    return null;
+  }
+
+  return buildMemoryBoardMoment(
+    "song",
+    "Discovery memory",
+    `${submission.songTitle} was new to us and landed`,
+    `${submission.playerName} brought it into ${roundName}; it had no earlier exact-song or exported-artist history before this pick and ${landedFact}.`,
+    evidence[0].href,
+    {
+      id: `new-to-us-that-landed-${submission.id}`,
+      family: "new-to-us-that-landed",
+      lens: "song-discovery",
+      sourceFacts: [
+        "games",
+        "rounds",
+        "submissions",
+        "songs",
+        "exported-artist-labels",
+        "scores",
+        "ranks",
+      ],
+      denominator: "archive history before the selected-game submission",
+      evidence,
+    },
+  );
+}
+
+function buildSongRecurrenceMoment(candidate, selectedGameId, roundsById) {
+  const { submission, recurrenceKind, priorCount } = candidate;
+  const roundName = roundsById.get(submission.roundId)?.name ?? "this round";
+  const evidence = buildSongMemoryEvidenceLinks(
+    selectedGameId,
+    submission,
+    roundName,
+    false,
+  );
+
+  if (evidence.length === 0) {
+    return null;
+  }
+
+  if (recurrenceKind === "exact-song") {
+    return buildMemoryBoardMoment(
+      "song",
+      "Song memory",
+      `${submission.songTitle} came back`,
+      `${submission.playerName} brought it into ${roundName} after ${formatGenericCount(
+        priorCount,
+        "prior exact-song appearance",
+      )}.`,
+      evidence[0].href,
+      {
+        id: `back-again-familiar-face-${submission.id}`,
+        family: "back-again-familiar-face",
+        lens: "song-discovery",
+        sourceFacts: ["games", "rounds", "submissions", "songs", "exported-artist-labels"],
+        denominator: "exact-song submissions across archive history",
+        evidence,
+      },
+    );
+  }
+
+  return buildMemoryBoardMoment(
+    "song",
+    "Artist memory",
+    `${submission.artistName} returned with a different song`,
+    `${submission.playerName} brought ${submission.songTitle} into ${roundName} after ${formatGenericCount(
+      priorCount,
+      "prior exported-artist appearance",
+    )}.`,
+    evidence[0].href,
+    {
+      id: `back-again-familiar-face-${submission.id}`,
+      family: "back-again-familiar-face",
+      lens: "song-discovery",
+      sourceFacts: ["games", "rounds", "submissions", "songs", "exported-artist-labels"],
+      denominator: "exported-artist submissions across archive history",
+      evidence,
+    },
+  );
+}
+
+function deriveSongMemoryMoments(input = {}) {
+  const selectedGameId = normalizePositiveInteger(input.selectedGameId);
+  const selectedGameSubmissions = input.selectedGameSubmissions ?? [];
+  const archiveSongEvidence = input.archiveSongEvidence ?? {};
+
+  if (selectedGameId === null || selectedGameSubmissions.length === 0) {
+    return [];
+  }
+
+  const roundsById = new Map(
+    (input.rounds ?? []).map((round) => [
+      round.id,
+      {
+        name: round.name,
+      },
+    ]),
+  );
+  const roundScoringContext =
+    input.roundScoringContext ?? buildSelectedGameRoundScoringContext(selectedGameSubmissions);
+  const discoveryCandidates = [];
+  const recurrenceCandidates = [];
+
+  for (const submission of selectedGameSubmissions) {
+    const selectedRow = buildSelectedSubmissionHistoryRow(selectedGameId, submission);
+    const exactEvidenceRows = getArchiveEvidenceRows(
+      archiveSongEvidence,
+      "exactSongSubmissionsBySongId",
+      "exactSubmissionsBySongId",
+      submission.songId,
+    ).filter((row) => row.songId === undefined || row.songId === submission.songId);
+    const artistEvidenceRows = getArchiveEvidenceRows(
+      archiveSongEvidence,
+      "artistSubmissionsByNormalizedArtistName",
+      "artistSubmissionsByNormalizedName",
+      submission.normalizedArtistName,
+    ).filter((row) => row.songId !== undefined);
+    const priorExactRows = getPriorEvidenceRows(exactEvidenceRows, selectedRow);
+    const priorArtistRows = getPriorEvidenceRows(artistEvidenceRows, selectedRow);
+    const priorOtherArtistRows = priorArtistRows.filter(
+      (row) => row.songId !== submission.songId,
+    );
+    const landedFact = describeLandedFact(submission, roundScoringContext);
+
+    if (priorExactRows.length === 0 && priorArtistRows.length === 0 && landedFact) {
+      discoveryCandidates.push({
+        priority: 0,
+        submission,
+        landedFact,
+        priorCount: 0,
+      });
+    }
+
+    if (priorExactRows.length > 0) {
+      recurrenceCandidates.push({
+        priority: 1,
+        submission,
+        recurrenceKind: "exact-song",
+        priorCount: priorExactRows.length,
+      });
+    } else if (priorOtherArtistRows.length > 0) {
+      recurrenceCandidates.push({
+        priority: 2,
+        submission,
+        recurrenceKind: "exported-artist",
+        priorCount: priorOtherArtistRows.length,
+      });
+    }
+  }
+
+  return [
+    ...discoveryCandidates
+      .sort(compareSongMemoryMomentCandidate)
+      .map((candidate) => buildSongDiscoveryMoment(candidate, selectedGameId, roundsById)),
+    ...recurrenceCandidates
+      .sort(compareSongMemoryMomentCandidate)
+      .map((candidate) => buildSongRecurrenceMoment(candidate, selectedGameId, roundsById)),
+  ].filter(Boolean);
 }
 
 function buildSelectedRoundSummary(round, submissions, gameId) {
@@ -1088,14 +1451,22 @@ function buildSelectedGameCompetitiveMoment(competitiveAnchor, gameId) {
   );
 }
 
-function getCompleteScoredRoundSubmissions(submissions) {
-  if (submissions.length < 2) {
+function getCompleteScoredSubmissions(submissions) {
+  if (submissions.length === 0) {
     return [];
   }
 
   return submissions.every((submission) => isScoredSubmission(submission))
     ? [...submissions].sort(compareSelectedSubmissionOrder)
     : [];
+}
+
+function getCompleteScoredRoundSubmissions(submissions) {
+  if (submissions.length < 2) {
+    return [];
+  }
+
+  return getCompleteScoredSubmissions(submissions);
 }
 
 function deriveGameSwingMoment(input) {
@@ -1224,143 +1595,129 @@ function deriveGameSwingMoment(input) {
   });
 }
 
-function buildSelectedGameSongMoment(submissions, roundsById, memoryEvidence, gameId) {
-  const candidates = submissions
-    .map((submission) => ({
-      submission,
-      familiarity: buildSelectedSubmissionFamiliarity(submission, memoryEvidence),
-    }))
-    .sort((left, right) => compareSelectedSubmissionOrder(left.submission, right.submission));
-  const priority = {
-    "brought-back": 0,
-    "known-artist": 1,
-    debut: 2,
-  };
-  const selectedCandidate = candidates.sort((left, right) => {
-    const priorityComparison =
-      priority[left.familiarity.kind] - priority[right.familiarity.kind];
-
-    if (priorityComparison !== 0) {
-      return priorityComparison;
-    }
-
-    return compareSelectedSubmissionOrder(left.submission, right.submission);
-  })[0];
-
-  if (!selectedCandidate) {
-    return null;
+function joinDisplayNames(names) {
+  if (names.length <= 2) {
+    return names.join(" and ");
   }
 
-  const { submission, familiarity } = selectedCandidate;
-  const roundName = roundsById.get(submission.roundId)?.name ?? "this round";
-  const href = buildMemoryBoardEvidenceHref({
-    gameId,
-    roundId: submission.roundId,
-    songId: submission.songId,
-  });
-
-  if (!href) {
-    return null;
-  }
-
-  if (familiarity.kind === "brought-back") {
-    return buildMemoryBoardMoment(
-      "song",
-      "Song memory",
-      `${submission.songTitle} came back`,
-      `${submission.playerName} brought it into ${roundName} after ${formatGenericCount(
-        familiarity.priorExactSongSubmissionCount,
-        "prior exact-song appearance",
-      )}.`,
-      href,
-      {
-        id: `back-again-familiar-face-${submission.id}`,
-        family: "back-again-familiar-face",
-        lens: "song-discovery",
-        sourceFacts: ["games", "rounds", "submissions", "songs", "exported-artist-labels"],
-        denominator: "exact-song submissions across archive history",
-        evidenceKind: "song",
-        target: {
-          gameId,
-          roundId: submission.roundId,
-          songId: submission.songId,
-        },
-      },
-    );
-  }
-
-  if (familiarity.kind === "known-artist") {
-    return buildMemoryBoardMoment(
-      "song",
-      "Discovery memory",
-      `${submission.artistName} felt familiar`,
-      `${submission.songTitle} had ${formatGenericCount(
-        familiarity.priorArtistSubmissionCount,
-        "prior exported-artist appearance",
-      )} before ${roundName}.`,
-      href,
-      {
-        id: `back-again-familiar-face-${submission.id}`,
-        family: "back-again-familiar-face",
-        lens: "song-discovery",
-        sourceFacts: ["games", "rounds", "submissions", "songs", "exported-artist-labels"],
-        denominator: "exported-artist submissions across archive history",
-        evidenceKind: "song",
-        target: {
-          gameId,
-          roundId: submission.roundId,
-          songId: submission.songId,
-        },
-      },
-    );
-  }
-
-  return buildMemoryBoardMoment(
-    "song",
-    "Discovery memory",
-    `${submission.songTitle} was new to this archive`,
-    `No earlier exact-song or exported-artist history appeared before ${roundName}.`,
-    href,
-    {
-      id: `new-to-us-that-landed-${submission.id}`,
-      family: "new-to-us-that-landed",
-      lens: "song-discovery",
-      sourceFacts: ["games", "rounds", "submissions", "songs", "exported-artist-labels"],
-      denominator: "archive history before the selected-game submission",
-      evidenceKind: "song",
-      target: {
-        gameId,
-        roundId: submission.roundId,
-        songId: submission.songId,
-      },
-    },
-  );
+  return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
 }
 
-function buildSelectedGameParticipationMoment(rounds, submissions, votes, gameId) {
+function deriveParticipationPulse(input = {}) {
+  const selectedGameId = normalizePositiveInteger(input.selectedGameId);
+  const rounds = input.rounds ?? [];
+  const submissions = input.submissions ?? [];
+
+  if (selectedGameId === null || submissions.length === 0) {
+    return null;
+  }
+
+  const playerIds = new Set(submissions.map((submission) => submission.playerId));
+  const submittedRoundIds = new Set(submissions.map((submission) => submission.roundId));
+  const submissionsByPlayerId = new Map();
+
+  for (const submission of submissions) {
+    const playerSubmissions = submissionsByPlayerId.get(submission.playerId) ?? {
+      playerId: submission.playerId,
+      playerName: submission.playerName,
+      submissions: [],
+    };
+
+    playerSubmissions.submissions.push(submission);
+    submissionsByPlayerId.set(submission.playerId, playerSubmissions);
+  }
+
+  const busiestCount = Math.max(
+    ...[...submissionsByPlayerId.values()].map(
+      (playerSubmissions) => playerSubmissions.submissions.length,
+    ),
+  );
+  const busiestPlayers = [...submissionsByPlayerId.values()]
+    .filter((playerSubmissions) => playerSubmissions.submissions.length === busiestCount)
+    .sort((left, right) => left.playerName.localeCompare(right.playerName));
+  const broadParticipation =
+    rounds.length > 0 && submittedRoundIds.size === rounds.length
+      ? `Submissions appeared in every selected-game round.`
+      : `${formatGenericCount(
+          submittedRoundIds.size,
+          "round",
+        )} had submitted songs.`;
+  const busiestCopy =
+    busiestPlayers.length === 1
+      ? `${busiestPlayers[0].playerName} had the busiest slate with ${formatGenericCount(
+          busiestCount,
+          "submission",
+        )}.`
+      : `${joinDisplayNames(
+          busiestPlayers.map((playerSubmissions) => playerSubmissions.playerName),
+        )} shared the busiest slate with ${formatGenericCount(
+          busiestCount,
+          "submission",
+        )} each.`;
+  const gameHref = buildMemoryBoardEvidenceHref({ gameId: selectedGameId });
+
+  if (!gameHref) {
+    return null;
+  }
+
+  const evidence = [
+    {
+      kind: "game",
+      label: "Selected game",
+      href: gameHref,
+      requiresGameContext: true,
+      target: { gameId: selectedGameId },
+    },
+  ];
+
+  for (const playerSubmissions of busiestPlayers.slice(0, 3)) {
+    const evidenceSubmission = [...playerSubmissions.submissions].sort(
+      compareSelectedSubmissionOrder,
+    )[0];
+    const playerHref = buildMemoryBoardEvidenceHref({
+      gameId: selectedGameId,
+      roundId: evidenceSubmission.roundId,
+      playerId: playerSubmissions.playerId,
+    });
+
+    if (playerHref) {
+      evidence.push({
+        kind: "player",
+        label: playerSubmissions.playerName,
+        href: playerHref,
+        requiresGameContext: true,
+        target: {
+          gameId: selectedGameId,
+          roundId: evidenceSubmission.roundId,
+          playerId: playerSubmissions.playerId,
+        },
+      });
+    }
+  }
+
   if (submissions.length === 0) {
     return null;
   }
-
-  const playerCount = new Set(submissions.map((submission) => submission.playerId)).size;
 
   return buildMemoryBoardMoment(
     "participation",
     "Participation pulse",
     `${formatGenericCount(submissions.length, "song")} submitted`,
-    `${formatGenericCount(playerCount, "player")} shaped ${formatGenericCount(
-      rounds.length,
+    `${formatGenericCount(playerIds.size, "player")} submitted ${formatGenericCount(
+      submissions.length,
+      "song",
+    )} across ${formatGenericCount(
+      submittedRoundIds.size,
       "round",
-    )}; ${formatGenericCount(votes.length, "vote")} imported where scoring exists.`,
-    buildMemoryBoardEvidenceHref({ gameId }),
+    )}. ${broadParticipation} ${busiestCopy}`,
+    gameHref,
     {
       id: "participation-pulse",
       family: "participation-pulse",
       lens: "social-participation",
       sourceFacts: ["players", "rounds", "submissions"],
       denominator: "submitted songs, submitted rounds, and participating players in the selected game",
-      evidenceKind: "game",
-      target: { gameId },
+      evidence,
     },
   );
 }
@@ -1396,7 +1753,7 @@ function buildSelectedGameRoundWinnerMoments(rounds) {
     );
 }
 
-function buildSelectedGameSparseState(competitiveAnchor, submissions) {
+function buildSelectedGameSparseState(competitiveAnchor, submissions, momentsByFamily) {
   if (submissions.length === 0) {
     return {
       title: "No submissions yet",
@@ -1411,19 +1768,79 @@ function buildSelectedGameSparseState(competitiveAnchor, submissions) {
     };
   }
 
+  const omittedFamilies = [];
+
   if (competitiveAnchor?.kind === "unavailable") {
-    return {
-      title: "Some result claims are unavailable",
-      copy:
-        "Incomplete score or rank evidence suppresses game-level table claims while preserving unrelated selected-game memories.",
-      omittedFamilies: ["the-table"],
-    };
+    omittedFamilies.push("the-table");
   }
 
-  return null;
+  for (const family of [
+    "game-swing",
+    "new-to-us-that-landed",
+    "back-again-familiar-face",
+    "participation-pulse",
+  ]) {
+    if (!momentsByFamily.has(family)) {
+      omittedFamilies.push(family);
+    }
+  }
+
+  if (omittedFamilies.length === 0) {
+    return null;
+  }
+
+  return {
+    title:
+      omittedFamilies.length === 1 && omittedFamilies[0] === "the-table"
+        ? "Some result claims are unavailable"
+        : "Some memory angles are unavailable",
+    copy:
+      omittedFamilies.includes("the-table")
+        ? "Incomplete score or rank evidence suppresses outcome-dependent claims while preserving unrelated selected-game memories."
+        : "The board omits unsupported moment families instead of filling them with unevidenced recap copy.",
+    omittedFamilies,
+  };
 }
 
-function buildSelectedGameBoard({ gameId, rounds, submissions, votes, memoryEvidence }) {
+function selectPriorityMemoryBoardMoments({
+  competitiveMoment,
+  swingMoment,
+  songMoments,
+  participationMoment,
+}) {
+  const selectedMoments = [];
+  const selectedIds = new Set();
+  const addMoment = (moment) => {
+    if (!moment || selectedIds.has(moment.id) || selectedMoments.length >= 6) {
+      return;
+    }
+
+    selectedMoments.push(moment);
+    selectedIds.add(moment.id);
+  };
+  const discoveryMoment =
+    songMoments.find((moment) => moment.family === "new-to-us-that-landed") ?? null;
+  const recurrenceMoment =
+    songMoments.find(
+      (moment) =>
+        moment.family === "back-again-familiar-face" && moment.id !== discoveryMoment?.id,
+    ) ?? null;
+  const songDiscoverySlot = discoveryMoment ?? recurrenceMoment;
+
+  addMoment(competitiveMoment);
+  addMoment(swingMoment);
+  addMoment(songDiscoverySlot);
+  addMoment(recurrenceMoment);
+  addMoment(participationMoment);
+
+  for (const moment of songMoments) {
+    addMoment(moment);
+  }
+
+  return selectedMoments;
+}
+
+function buildSelectedGameBoard({ gameId, rounds, submissions, memoryEvidence }) {
   const roundsById = new Map(rounds.map((round) => [round.id, round]));
   const submissionsByRoundId = new Map();
 
@@ -1438,25 +1855,46 @@ function buildSelectedGameBoard({ gameId, rounds, submissions, votes, memoryEvid
     buildSelectedRoundSummary(round, submissionsByRoundId.get(round.id) ?? [], gameId),
   );
   const competitiveAnchor = buildSelectedGameCompetitiveAnchor(submissions, gameId);
+  const submissionsWithRoundContext = submissions.map((submission) => {
+    const round = roundsById.get(submission.roundId);
+
+    return {
+      ...submission,
+      roundSequenceNumber: round?.sequenceNumber ?? null,
+      roundOccurredAt: round?.occurredAt ?? null,
+    };
+  });
   const swingMoment = deriveGameSwingMoment({
     gameId,
     rounds,
     submissions,
   });
-  const coreMoments = [
-    buildSelectedGameCompetitiveMoment(competitiveAnchor, gameId),
+  const competitiveMoment = buildSelectedGameCompetitiveMoment(competitiveAnchor, gameId);
+  const songMoments = deriveSongMemoryMoments({
+    selectedGameId: gameId,
+    selectedGameSubmissions: submissionsWithRoundContext,
+    archiveSongEvidence: memoryEvidence,
+    rounds,
+  });
+  const participationMoment = deriveParticipationPulse({
+    selectedGameId: gameId,
+    rounds: boardRounds,
+    submissions,
+  });
+  const moments = selectPriorityMemoryBoardMoments({
+    competitiveMoment,
     swingMoment,
-    buildSelectedGameSongMoment(submissions, roundsById, memoryEvidence, gameId),
-    buildSelectedGameParticipationMoment(boardRounds, submissions, votes, gameId),
-  ].filter(Boolean);
-  const moments = coreMoments.slice(0, 6);
+    songMoments,
+    participationMoment,
+  });
+  const momentsByFamily = new Set(moments.map((moment) => moment.family));
 
   return {
     selectedGameId: gameId,
     anchor: competitiveAnchor,
     competitiveAnchor,
     moments,
-    sparseState: buildSelectedGameSparseState(competitiveAnchor, submissions),
+    sparseState: buildSelectedGameSparseState(competitiveAnchor, submissions, momentsByFamily),
     rounds: boardRounds,
   };
 }
@@ -1583,7 +2021,6 @@ async function getSelectedGameMemoryBoard(gameId, input = {}) {
         gameId: game.id,
         rounds,
         submissions,
-        votes,
         memoryEvidence,
       }),
     };
@@ -3099,6 +3536,8 @@ module.exports = {
   deriveGameSwingMoment,
   derivePlayerPerformanceMetrics,
   derivePlayerTrait,
+  deriveParticipationPulse,
+  deriveSongMemoryMoments,
   getPlayerModalSubmission,
   getPlayerRoundModal,
   getRoundDetail,

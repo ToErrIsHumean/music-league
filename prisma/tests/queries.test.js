@@ -8,8 +8,10 @@ const {
   buildMemoryBoardEvidenceHref,
   deriveGameStandings,
   deriveGameSwingMoment,
+  deriveParticipationPulse,
   derivePlayerPerformanceMetrics,
   derivePlayerTrait,
+  deriveSongMemoryMoments,
   getPlayerModalSubmission,
   getPlayerRoundModal,
   getRoundDetail,
@@ -31,6 +33,7 @@ let task01SameNameFixtureCounter = 0;
 let task02FixtureCounter = 0;
 let task03FixtureCounter = 0;
 let task04CoverageFixtureCounter = 0;
+let task05MemoryBoardFixtureCounter = 0;
 let task06FixtureCounter = 0;
 
 function assertNonEmptyArray(value, message) {
@@ -617,6 +620,203 @@ async function createTask06VoteBreakdownFixture() {
     roundId: round.id,
     targetSubmissionId: targetSubmission.id,
     emptySubmissionId: emptySubmission.id,
+  };
+}
+
+async function createTask05MemoryBoardFixture() {
+  task05MemoryBoardFixtureCounter += 1;
+
+  const suffix = `task-05-memory-board-${task05MemoryBoardFixtureCounter}`;
+  const [priorGame, selectedGame] = await Promise.all([
+    prisma.game.create({
+      data: {
+        sourceGameId: `${suffix}-prior`,
+        displayName: `Task 05 Prior ${task05MemoryBoardFixtureCounter}`,
+      },
+    }),
+    prisma.game.create({
+      data: {
+        sourceGameId: `${suffix}-selected`,
+        displayName: `Task 05 Selected ${task05MemoryBoardFixtureCounter}`,
+      },
+    }),
+  ]);
+  const [newArtist, recurringArtist, otherArtist] = await Promise.all([
+    prisma.artist.create({
+      data: {
+        name: `Task 05 New Artist ${task05MemoryBoardFixtureCounter}`,
+        normalizedName: `task05newartist${task05MemoryBoardFixtureCounter}`,
+      },
+    }),
+    prisma.artist.create({
+      data: {
+        name: `Task 05 Returning Artist ${task05MemoryBoardFixtureCounter}`,
+        normalizedName: `task05returningartist${task05MemoryBoardFixtureCounter}`,
+      },
+    }),
+    prisma.artist.create({
+      data: {
+        name: `Task 05 Other Artist ${task05MemoryBoardFixtureCounter}`,
+        normalizedName: `task05otherartist${task05MemoryBoardFixtureCounter}`,
+      },
+    }),
+  ]);
+  const [newSong, recurringSong, artistReturnSong, otherSong, closerSong] =
+    await Promise.all([
+      prisma.song.create({
+        data: {
+          title: `Task 05 New Song ${task05MemoryBoardFixtureCounter}`,
+          normalizedTitle: `task05newsong${task05MemoryBoardFixtureCounter}`,
+          spotifyUri: `spotify:track:${suffix}-new`,
+          artistId: newArtist.id,
+        },
+      }),
+      prisma.song.create({
+        data: {
+          title: `Task 05 Recurring Song ${task05MemoryBoardFixtureCounter}`,
+          normalizedTitle: `task05recurringsong${task05MemoryBoardFixtureCounter}`,
+          spotifyUri: `spotify:track:${suffix}-recurring`,
+          artistId: recurringArtist.id,
+        },
+      }),
+      prisma.song.create({
+        data: {
+          title: `Task 05 Artist Return ${task05MemoryBoardFixtureCounter}`,
+          normalizedTitle: `task05artistreturn${task05MemoryBoardFixtureCounter}`,
+          spotifyUri: `spotify:track:${suffix}-artist-return`,
+          artistId: recurringArtist.id,
+        },
+      }),
+      prisma.song.create({
+        data: {
+          title: `Task 05 Other Song ${task05MemoryBoardFixtureCounter}`,
+          normalizedTitle: `task05othersong${task05MemoryBoardFixtureCounter}`,
+          spotifyUri: `spotify:track:${suffix}-other`,
+          artistId: otherArtist.id,
+        },
+      }),
+      prisma.song.create({
+        data: {
+          title: `Task 05 Closer Song ${task05MemoryBoardFixtureCounter}`,
+          normalizedTitle: `task05closersong${task05MemoryBoardFixtureCounter}`,
+          spotifyUri: `spotify:track:${suffix}-closer`,
+          artistId: otherArtist.id,
+        },
+      }),
+    ]);
+  const [alpha, beta, gamma] = await Promise.all([
+    prisma.player.create({
+      data: {
+        displayName: `Task 05 Alpha ${task05MemoryBoardFixtureCounter}`,
+        normalizedName: `task05alpha${task05MemoryBoardFixtureCounter}`,
+        sourcePlayerId: `${suffix}-alpha`,
+      },
+    }),
+    prisma.player.create({
+      data: {
+        displayName: `Task 05 Beta ${task05MemoryBoardFixtureCounter}`,
+        normalizedName: `task05beta${task05MemoryBoardFixtureCounter}`,
+        sourcePlayerId: `${suffix}-beta`,
+      },
+    }),
+    prisma.player.create({
+      data: {
+        displayName: `Task 05 Gamma ${task05MemoryBoardFixtureCounter}`,
+        normalizedName: `task05gamma${task05MemoryBoardFixtureCounter}`,
+        sourcePlayerId: `${suffix}-gamma`,
+      },
+    }),
+  ]);
+  const [priorRound, openingRound, finaleRound] = await Promise.all([
+    prisma.round.create({
+      data: {
+        gameId: priorGame.id,
+        leagueSlug: priorGame.sourceGameId,
+        sourceRoundId: `${suffix}-prior-r1`,
+        name: `Task 05 Prior Round ${task05MemoryBoardFixtureCounter}`,
+        sequenceNumber: 1,
+        occurredAt: new Date("2024-06-01T19:00:00.000Z"),
+      },
+    }),
+    prisma.round.create({
+      data: {
+        gameId: selectedGame.id,
+        leagueSlug: selectedGame.sourceGameId,
+        sourceRoundId: `${suffix}-selected-r1`,
+        name: `Task 05 Opening ${task05MemoryBoardFixtureCounter}`,
+        sequenceNumber: 1,
+        occurredAt: new Date("2024-07-01T19:00:00.000Z"),
+      },
+    }),
+    prisma.round.create({
+      data: {
+        gameId: selectedGame.id,
+        leagueSlug: selectedGame.sourceGameId,
+        sourceRoundId: `${suffix}-selected-r2`,
+        name: `Task 05 Finale ${task05MemoryBoardFixtureCounter}`,
+        sequenceNumber: 2,
+        occurredAt: new Date("2024-07-08T19:00:00.000Z"),
+      },
+    }),
+  ]);
+
+  await prisma.submission.create({
+    data: {
+      roundId: priorRound.id,
+      playerId: gamma.id,
+      songId: recurringSong.id,
+      score: 8,
+      rank: 1,
+      createdAt: new Date("2024-06-01T18:00:00.000Z"),
+    },
+  });
+  await prisma.submission.createMany({
+    data: [
+      {
+        roundId: openingRound.id,
+        playerId: alpha.id,
+        songId: newSong.id,
+        score: 12,
+        rank: 1,
+        createdAt: new Date("2024-07-01T18:00:00.000Z"),
+      },
+      {
+        roundId: openingRound.id,
+        playerId: beta.id,
+        songId: recurringSong.id,
+        score: 11,
+        rank: 2,
+        createdAt: new Date("2024-07-01T18:05:00.000Z"),
+      },
+      {
+        roundId: openingRound.id,
+        playerId: gamma.id,
+        songId: otherSong.id,
+        score: 5,
+        rank: 3,
+        createdAt: new Date("2024-07-01T18:10:00.000Z"),
+      },
+      {
+        roundId: finaleRound.id,
+        playerId: alpha.id,
+        songId: artistReturnSong.id,
+        score: 9,
+        rank: 1,
+        createdAt: new Date("2024-07-08T18:00:00.000Z"),
+      },
+      {
+        roundId: finaleRound.id,
+        playerId: beta.id,
+        songId: closerSong.id,
+        score: 4,
+        rank: 2,
+        createdAt: new Date("2024-07-08T18:05:00.000Z"),
+      },
+    ],
+  });
+
+  return {
+    gameId: selectedGame.id,
   };
 }
 
@@ -1656,6 +1856,227 @@ test("game swing moment uses complete selected-game round evidence only", () => 
   });
 });
 
+test("song memory moments require supported novelty and distinguish exact recurrence", () => {
+  const moments = deriveSongMemoryMoments({
+    selectedGameId: 7,
+    rounds: [{ id: 10, name: "Close Call" }],
+    selectedGameSubmissions: [
+      {
+        id: 1,
+        roundId: 10,
+        roundSequenceNumber: 1,
+        roundOccurredAt: "2024-02-01T19:00:00.000Z",
+        playerId: 1,
+        playerName: "Alpha Array",
+        songId: 100,
+        songTitle: "New Winner",
+        artistId: 200,
+        artistName: "Fresh Artist",
+        normalizedArtistName: "fresh-artist",
+        score: 12,
+        rank: 1,
+        createdAt: "2024-02-01T18:00:00.000Z",
+      },
+      {
+        id: 2,
+        roundId: 10,
+        roundSequenceNumber: 1,
+        roundOccurredAt: "2024-02-01T19:00:00.000Z",
+        playerId: 2,
+        playerName: "Beta Bridge",
+        songId: 101,
+        songTitle: "Returning Song",
+        artistId: 201,
+        artistName: "Known Artist",
+        normalizedArtistName: "known-artist",
+        score: 11,
+        rank: 2,
+        createdAt: "2024-02-01T18:05:00.000Z",
+      },
+      {
+        id: 3,
+        roundId: 10,
+        roundSequenceNumber: 1,
+        roundOccurredAt: "2024-02-01T19:00:00.000Z",
+        playerId: 3,
+        playerName: "Gamma Grid",
+        songId: 102,
+        songTitle: "Unsupported Debut",
+        artistId: 202,
+        artistName: "Quiet Artist",
+        normalizedArtistName: "quiet-artist",
+        score: 5,
+        rank: 3,
+        createdAt: "2024-02-01T18:10:00.000Z",
+      },
+    ],
+    archiveSongEvidence: {
+      exactSongSubmissionsBySongId: new Map([
+        [
+          101,
+          [
+            {
+              id: 90,
+              submissionId: 90,
+              gameId: 6,
+              roundId: 9,
+              roundSequenceNumber: 1,
+              roundOccurredAt: "2024-01-01T19:00:00.000Z",
+              playerId: 9,
+              songId: 101,
+              createdAt: "2024-01-01T18:00:00.000Z",
+            },
+          ],
+        ],
+      ]),
+      artistSubmissionsByNormalizedArtistName: new Map(),
+    },
+  });
+
+  assert.deepEqual(
+    moments.map((moment) => moment.family),
+    ["new-to-us-that-landed", "back-again-familiar-face"],
+  );
+  assert.match(moments[0].copy, /no earlier exact-song or exported-artist history/);
+  assert.match(moments[0].copy, /ranked first across 3 scored submissions/);
+  assert.deepEqual(
+    moments[0].evidence.map((link) => link.kind),
+    ["song", "round"],
+  );
+  assert.equal(moments[0].href, "/?game=7&round=10&song=100");
+  assert.equal(moments[1].denominator, "exact-song submissions across archive history");
+  assert.match(moments[1].copy, /prior exact-song appearance/);
+  assert.equal(
+    moments.some((moment) => moment.title.includes("Unsupported Debut")),
+    false,
+    "debut songs without a supported current outcome fact are omitted",
+  );
+});
+
+test("song discovery moments allow one eligible scored submission", () => {
+  const moments = deriveSongMemoryMoments({
+    selectedGameId: 7,
+    rounds: [{ id: 10, name: "Solo Spotlight" }],
+    selectedGameSubmissions: [
+      {
+        id: 1,
+        roundId: 10,
+        roundSequenceNumber: 1,
+        roundOccurredAt: "2024-02-01T19:00:00.000Z",
+        playerId: 1,
+        playerName: "Alpha Array",
+        songId: 100,
+        songTitle: "New Winner",
+        artistId: 200,
+        artistName: "Fresh Artist",
+        normalizedArtistName: "fresh-artist",
+        score: 12,
+        rank: 1,
+        createdAt: "2024-02-01T18:00:00.000Z",
+      },
+    ],
+    archiveSongEvidence: {
+      exactSongSubmissionsBySongId: new Map(),
+      artistSubmissionsByNormalizedArtistName: new Map(),
+    },
+  });
+
+  assert.equal(moments.length, 1);
+  assert.equal(moments[0].family, "new-to-us-that-landed");
+  assert.match(moments[0].copy, /ranked first across 1 scored submission/);
+  assert.deepEqual(
+    moments[0].evidence.map((link) => link.kind),
+    ["song", "round"],
+  );
+});
+
+test("participation pulse keeps busiest-submitters ties non-competitive", () => {
+  const moment = deriveParticipationPulse({
+    selectedGameId: 7,
+    rounds: [{ id: 10 }, { id: 11 }],
+    submissions: [
+      { id: 1, roundId: 10, playerId: 1, playerName: "Alpha Array", createdAt: "2024-01-01T18:00:00.000Z" },
+      { id: 2, roundId: 11, playerId: 1, playerName: "Alpha Array", createdAt: "2024-01-08T18:00:00.000Z" },
+      { id: 3, roundId: 10, playerId: 2, playerName: "Beta Bridge", createdAt: "2024-01-01T18:05:00.000Z" },
+      { id: 4, roundId: 11, playerId: 2, playerName: "Beta Bridge", createdAt: "2024-01-08T18:05:00.000Z" },
+    ],
+  });
+
+  assert.ok(moment);
+  assert.equal(moment.family, "participation-pulse");
+  assert.equal(moment.lens, "social-participation");
+  assert.match(moment.copy, /shared the busiest slate/);
+  assert.doesNotMatch(moment.copy, /won|leader|champion/i);
+  assert.equal(moment.evidence[0].href, "/?game=7");
+  assert.deepEqual(
+    moment.evidence.map((link) => link.kind),
+    ["game", "player", "player"],
+  );
+});
+
+test(
+  "completed selected game memory board balances competitive song and participation lenses",
+  { concurrency: false },
+  async () => {
+    const { gameId } = await createTask05MemoryBoardFixture();
+    const recap = await getSelectedGameMemoryBoard(gameId, { prisma });
+
+    assert.ok(recap);
+    assert.equal(recap.board.competitiveAnchor.kind, "leader");
+    assert.equal(recap.board.sparseState, null);
+    assert.deepEqual(
+      recap.board.moments.slice(0, 5).map((moment) => moment.family),
+      [
+        "the-table",
+        "game-swing",
+        "new-to-us-that-landed",
+        "back-again-familiar-face",
+        "participation-pulse",
+      ],
+    );
+    assert.deepEqual(
+      new Set(recap.board.moments.map((moment) => moment.lens)),
+      new Set(["competitive", "song-discovery", "social-participation"]),
+    );
+
+    const discoveryMoment = recap.board.moments.find(
+      (moment) => moment.family === "new-to-us-that-landed",
+    );
+    const recurrenceMoment = recap.board.moments.find(
+      (moment) => moment.family === "back-again-familiar-face",
+    );
+    const participationMoment = recap.board.moments.find(
+      (moment) => moment.family === "participation-pulse",
+    );
+
+    assert.ok(discoveryMoment);
+    assert.ok(recurrenceMoment);
+    assert.ok(participationMoment);
+    assert.deepEqual(
+      discoveryMoment.evidence.map((link) => link.kind),
+      ["song", "round"],
+    );
+    assert.equal(recurrenceMoment.evidence[0].kind, "song");
+    assert.match(recurrenceMoment.copy, /exact-song|exported-artist/);
+    assert.doesNotMatch(participationMoment.copy, /won|leader|champion/i);
+
+    for (const moment of recap.board.moments) {
+      assertNonEmptyArray(moment.evidence, `expected evidence for ${moment.family}`);
+
+      for (const evidence of moment.evidence) {
+        assert.match(evidence.href, new RegExp(`^/\\?game=${gameId}`));
+        assert.equal(evidence.requiresGameContext, true);
+        assert.ok(evidence.target?.gameId, "evidence target keeps selected-game context");
+      }
+
+      assert.doesNotMatch(
+        `${moment.title} ${moment.copy}`,
+        /genre|mood|audio feature|popularity|recommendation|personalization|deadline|vote-budget|People Reacted|comment snippet/i,
+      );
+    }
+  },
+);
+
 test(
   "selected game memory board read model scopes recap projections to one game",
   { concurrency: false },
@@ -1701,7 +2122,10 @@ test(
       "partial-score-rank-evidence",
     );
     assert.match(recap.board.competitiveAnchor.body, /incomplete score or rank data/);
-    assert.deepEqual(recap.board.sparseState.omittedFamilies, ["the-table"]);
+    assert.deepEqual(recap.board.sparseState.omittedFamilies, [
+      "the-table",
+      "new-to-us-that-landed",
+    ]);
     assert.deepEqual(
       recap.board.moments.slice(0, 3).map((moment) => moment.family),
       ["game-swing", "back-again-familiar-face", "participation-pulse"],

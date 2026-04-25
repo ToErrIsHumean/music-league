@@ -77,7 +77,12 @@ test(
       ["Wildcard Waltz", "Sunset Static"],
     );
     assert.equal(props.board.competitiveAnchor.title, "Results need complete score evidence");
-    assert.equal(props.board.moments.length, 3);
+    assert.ok(props.board.moments.length >= 3);
+    assert.ok(props.board.moments.length <= 6);
+    assert.deepEqual(
+      props.board.moments.slice(0, 3).map((moment) => moment.family),
+      ["game-swing", "back-again-familiar-face", "participation-pulse"],
+    );
     assert.equal(props.openRoundId, null);
     assert.equal(props.openRound, null);
     assert.deepEqual(props.notices, []);
