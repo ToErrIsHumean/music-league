@@ -459,6 +459,133 @@ async function createTask02DuplicateSongFixture() {
   };
 }
 
+async function createTask06VoteBreakdownFixture() {
+  task06FixtureCounter += 1;
+
+  const suffix = `task-06-vote-breakdown-${task06FixtureCounter}`;
+  const game = await prisma.game.create({
+    data: {
+      sourceGameId: suffix,
+      displayName: `Task 06 Vote Breakdown ${task06FixtureCounter}`,
+    },
+  });
+  const round = await prisma.round.create({
+    data: {
+      gameId: game.id,
+      leagueSlug: game.sourceGameId,
+      sourceRoundId: suffix,
+      name: `Task 06 Vote Evidence ${task06FixtureCounter}`,
+      sequenceNumber: 1,
+      occurredAt: new Date("2024-08-01T19:00:00.000Z"),
+    },
+  });
+  const artist = await prisma.artist.create({
+    data: {
+      name: `Task 06 Vote Artist ${task06FixtureCounter}`,
+      normalizedName: `task06voteartist${task06FixtureCounter}`,
+    },
+  });
+  const [targetSong, emptySong] = await Promise.all([
+    prisma.song.create({
+      data: {
+        title: `Task 06 Voted Song ${task06FixtureCounter}`,
+        normalizedTitle: `task06votedsong${task06FixtureCounter}`,
+        spotifyUri: `spotify:track:${suffix}-voted`,
+        artistId: artist.id,
+      },
+    }),
+    prisma.song.create({
+      data: {
+        title: `Task 06 Empty Song ${task06FixtureCounter}`,
+        normalizedTitle: `task06emptysong${task06FixtureCounter}`,
+        spotifyUri: `spotify:track:${suffix}-empty`,
+        artistId: artist.id,
+      },
+    }),
+  ]);
+  const [submitter, emptySubmitter, positiveVoter, negativeVoter] = await Promise.all([
+    prisma.player.create({
+      data: {
+        displayName: `Task 06 Submitter ${task06FixtureCounter}`,
+        normalizedName: `task06submitter${task06FixtureCounter}`,
+        sourcePlayerId: `${suffix}-submitter`,
+      },
+    }),
+    prisma.player.create({
+      data: {
+        displayName: `Task 06 Empty Submitter ${task06FixtureCounter}`,
+        normalizedName: `task06emptysubmitter${task06FixtureCounter}`,
+        sourcePlayerId: `${suffix}-empty-submitter`,
+      },
+    }),
+    prisma.player.create({
+      data: {
+        displayName: `Task 06 Positive Voter ${task06FixtureCounter}`,
+        normalizedName: `task06positivevoter${task06FixtureCounter}`,
+        sourcePlayerId: `${suffix}-positive-voter`,
+      },
+    }),
+    prisma.player.create({
+      data: {
+        displayName: `Task 06 Negative Voter ${task06FixtureCounter}`,
+        normalizedName: `task06negativevoter${task06FixtureCounter}`,
+        sourcePlayerId: `${suffix}-negative-voter`,
+      },
+    }),
+  ]);
+  const [targetSubmission, emptySubmission] = await Promise.all([
+    prisma.submission.create({
+      data: {
+        roundId: round.id,
+        playerId: submitter.id,
+        songId: targetSong.id,
+        score: 1,
+        rank: 1,
+        comment: "Submission comment stays separate.",
+        createdAt: new Date("2024-08-01T18:00:00.000Z"),
+      },
+    }),
+    prisma.submission.create({
+      data: {
+        roundId: round.id,
+        playerId: emptySubmitter.id,
+        songId: emptySong.id,
+        score: null,
+        rank: null,
+        comment: null,
+        createdAt: new Date("2024-08-01T18:05:00.000Z"),
+      },
+    }),
+  ]);
+
+  await prisma.vote.createMany({
+    data: [
+      {
+        roundId: round.id,
+        voterId: negativeVoter.id,
+        songId: targetSong.id,
+        pointsAssigned: -1,
+        comment: "Downvote edge",
+        votedAt: new Date("2024-08-02T09:05:00.000Z"),
+      },
+      {
+        roundId: round.id,
+        voterId: positiveVoter.id,
+        songId: targetSong.id,
+        pointsAssigned: 2,
+        comment: "Positive edge",
+        votedAt: new Date("2024-08-02T09:00:00.000Z"),
+      },
+    ],
+  });
+
+  return {
+    roundId: round.id,
+    targetSubmissionId: targetSubmission.id,
+    emptySubmissionId: emptySubmission.id,
+  };
+}
+
 async function createTask03SparseSongFixture() {
   task03FixtureCounter += 1;
 
@@ -1404,6 +1531,37 @@ test(
       round.submissions.map((submission) => submission.rank),
       [1, 1, 1, 2],
     );
+    assert.deepEqual(
+      round.voteBreakdown.map((group) => group.submissionId),
+      round.submissions.map((submission) => submission.id),
+    );
+    assert.equal(round.voteBreakdown.length, round.submissions.length);
+    assert.equal(round.voteBreakdown[0].song.title, "Mr. Brightside");
+    assert.equal(round.voteBreakdown[0].submissionComment, "Arcade-pop opener with a bright chorus.");
+    assert.deepEqual(
+      round.voteBreakdown[0].votes.map((vote) => ({
+        voter: vote.voter.displayName,
+        pointsAssigned: vote.pointsAssigned,
+        voteComment: vote.voteComment,
+      })),
+      [
+        {
+          voter: "Benny Beats",
+          pointsAssigned: 10,
+          voteComment: "Bright and ridiculously replayable.",
+        },
+        {
+          voter: "Casey Chorus",
+          pointsAssigned: 7,
+          voteComment: null,
+        },
+        {
+          voter: "Drew Delay",
+          pointsAssigned: 7,
+          voteComment: "Massive chorus, no notes.",
+        },
+      ],
+    );
     assert.ok(
       round.submissions.every(
         (submission) =>
@@ -1434,12 +1592,54 @@ test(
       ),
       "expected pending round detail to preserve unscored submissions",
     );
+    assert.equal(round.voteBreakdown.length, round.submissions.length);
+    assert.ok(
+      round.voteBreakdown.every((group) => group.votes.length === 0),
+      "expected pending submissions to remain visible with empty vote lists",
+    );
     assert.deepEqual(
       round.submissions.map((submission) => submission.song.familiarity.label),
       ["Known artist", "Brought back", "Known artist", "Brought back"],
     );
     assert.match(round.highlights[0].value, /Awaiting votes/);
     assert.equal(await getRoundDetail(999999, { prisma }), null);
+  },
+);
+
+test(
+  "round detail vote breakdown preserves negative points and empty vote groups",
+  { concurrency: false },
+  async () => {
+    const fixture = await createTask06VoteBreakdownFixture();
+    const round = await getRoundDetail(fixture.roundId, { prisma });
+
+    assert.ok(round);
+    assert.deepEqual(
+      round.voteBreakdown.map((group) => group.submissionId),
+      [fixture.targetSubmissionId, fixture.emptySubmissionId],
+    );
+
+    const votedGroup = round.voteBreakdown[0];
+    const emptyGroup = round.voteBreakdown[1];
+
+    assert.equal(votedGroup.submissionComment, "Submission comment stays separate.");
+    assert.deepEqual(
+      votedGroup.votes.map((vote) => ({
+        pointsAssigned: vote.pointsAssigned,
+        voteComment: vote.voteComment,
+      })),
+      [
+        {
+          pointsAssigned: 2,
+          voteComment: "Positive edge",
+        },
+        {
+          pointsAssigned: -1,
+          voteComment: "Downvote edge",
+        },
+      ],
+    );
+    assert.equal(emptyGroup.votes.length, 0);
   },
 );
 

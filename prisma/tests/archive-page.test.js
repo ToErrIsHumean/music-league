@@ -140,6 +140,28 @@ test(
       ),
     );
     assert.match(submissionMarkup, /New to us/);
+    assert.match(markup, /Vote evidence/);
+    assert.match(markup, /12 imported votes/);
+    assert.match(markup, /Submission comment/);
+    assert.match(markup, /Arcade-pop opener with a bright chorus\./);
+    assert.match(markup, /Vote comment/);
+    assert.match(markup, /Bright and ridiculously replayable\./);
+    assert.match(markup, /\+10 pts/);
+    assert.equal(
+      (markup.match(/class=\"archive-vote-breakdown-card/g) ?? []).length,
+      props.openRound.submissions.length,
+    );
+    assert.equal(
+      (markup.match(/class=\"archive-vote-row/g) ?? []).length,
+      props.openRound.voteBreakdown.reduce((count, group) => count + group.votes.length, 0),
+    );
+
+    for (const unsupportedCopy of [/budget/i, /deadline/i, /disqualification/i, /low-stakes/i]) {
+      assert.ok(
+        !unsupportedCopy.test(markup),
+        `round detail should not infer source settings: ${unsupportedCopy}`,
+      );
+    }
   },
 );
 
