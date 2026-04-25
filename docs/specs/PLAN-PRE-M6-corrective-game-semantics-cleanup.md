@@ -13,7 +13,7 @@
 | TASK-05 | Harden import and identity tests for game semantics | `done` | TASK-04 |
 | TASK-06 | Implement round vote breakdown evidence | `done` | TASK-04, TASK-05 |
 | TASK-07 | Add derived standings read model | `done` | TASK-04, TASK-05 |
-| TASK-08 | Normalize player, artist, and song-memory guardrails | `pending` | TASK-04, TASK-06, TASK-07 |
+| TASK-08 | Normalize player, artist, and song-memory guardrails | `done` | TASK-04, TASK-06, TASK-07 |
 
 Status values: `pending` | `active` | `done` | `fail` | `blocked` | `skipped`
 
@@ -35,10 +35,13 @@ Status values: `pending` | `active` | `done` | `fail` | `blocked` | `skipped`
 | TASK-05 | pass | null | 2 | gpt-5.5 | high | 2026-04-25T00:15:32.369Z |
 | TASK-06 | pass | null | 1 | gpt-5.5 | high | 2026-04-25T00:25:15.192Z |
 | TASK-07 | pass | null | 1 | gpt-5.5 | high | 2026-04-25T00:30:04.551Z |
+| TASK-08 | pass | null | 1 | gpt-5.5 | high | 2026-04-25T00:41:10.263Z |
 
 ## Review Notes
 
 <!-- Orchestrator review notes append below. -->
+
+- TASK-08 cycle 1: `confirmed` -> `docs/sdd/reviews/TASK-08-epoch-1-cycle-1.md`
 
 - TASK-07 cycle 1: `deferred` -> `docs/sdd/reviews/TASK-07-epoch-1-cycle-1.md`
 
