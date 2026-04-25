@@ -10,6 +10,7 @@ const {
   getPlayerModalSubmission,
   getPlayerRoundModal,
   getRoundDetail,
+  getSelectedGameMemoryBoard,
   getSongMemoryModal,
   getSongRoundModal,
   listArchiveGames,
@@ -74,6 +75,20 @@ async function findSongIdBySpotifyUri(spotifyUri) {
 
   assert.ok(song, `expected seeded song ${spotifyUri} to exist`);
   return song.id;
+}
+
+async function findGameIdBySourceId(sourceGameId) {
+  const game = await prisma.game.findUnique({
+    where: {
+      sourceGameId,
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  assert.ok(game, `expected seeded game ${sourceGameId} to exist`);
+  return game.id;
 }
 
 async function createTask01Fixture() {
@@ -1526,6 +1541,109 @@ test("derived game standings total scoped scored submissions with dense ties", (
       tied: false,
     },
   ]);
+});
+
+test(
+  "selected game memory board read model scopes recap projections to one game",
+  { concurrency: false },
+  async () => {
+    const afterpartyGameId = await findGameIdBySourceId("afterparty");
+    const recap = await getSelectedGameMemoryBoard(afterpartyGameId, { prisma });
+
+    assert.ok(recap);
+    const roundIds = new Set(recap.rounds.map((round) => round.id));
+
+    assert.equal(recap.frame.displayLabel, "After Party League");
+    assert.deepEqual(
+      recap.rounds.map((round) => round.name),
+      ["Wildcard Waltz", "Sunset Static"],
+    );
+    assert.equal(recap.submissions.length, 8);
+    assert.equal(recap.votes.length, 12);
+    assert.ok(
+      recap.submissions.every((submission) => roundIds.has(submission.roundId)),
+      "selected-game submissions must not include another game's rounds",
+    );
+    assert.ok(
+      recap.votes.every((vote) => roundIds.has(vote.roundId)),
+      "selected-game votes must not include another game's rounds",
+    );
+    assert.ok(
+      recap.submissions.every(
+        (submission) =>
+          typeof submission.normalizedArtistName === "string" &&
+          submission.normalizedArtistName.length > 0,
+      ),
+      "selected-game submissions expose normalized exported artist labels",
+    );
+    assert.deepEqual(
+      recap.board.rounds.map((round) => round.name),
+      ["Wildcard Waltz", "Sunset Static"],
+    );
+    assert.equal(recap.board.competitiveAnchor.title, "Alice Arcade leads the game");
+    assert.match(recap.board.competitiveAnchor.body, /30 points/);
+    assert.match(recap.board.competitiveAnchor.body, /4 unscored picks omitted/);
+    assert.deepEqual(
+      recap.board.moments.slice(0, 3).map((moment) => moment.kind),
+      ["competitive", "song", "participation"],
+    );
+
+    const songMoment = recap.board.moments.find((moment) => moment.kind === "song");
+
+    assert.ok(songMoment, "expected selected-game song or discovery memory moment");
+    assert.equal(songMoment.label, "Song memory");
+    assert.match(songMoment.title, /came back/);
+    assert.match(songMoment.body, /prior exact-song appearance/);
+    assert.match(
+      songMoment.href,
+      new RegExp(`^/\\?game=${afterpartyGameId}&round=\\d+&song=\\d+$`),
+    );
+    assert.ok(
+      !recap.board.rounds.some((round) => round.name === "Opening Night"),
+      "selected board rounds must not blend the main game",
+    );
+  },
+);
+
+test(
+  "selected game memory board preserves tied leaders and partial-score caveats",
+  { concurrency: false },
+  async () => {
+    const mainGameId = await findGameIdBySourceId("main");
+    const recap = await getSelectedGameMemoryBoard(mainGameId, { prisma });
+
+    assert.ok(recap);
+    assert.deepEqual(
+      recap.board.rounds.map((round) => [round.name, round.statusLabel]),
+      [
+        ["Opening Night", "scored"],
+        ["Second Spin", "pending"],
+      ],
+    );
+    assert.equal(
+      recap.board.competitiveAnchor.title,
+      "Tied leaders: Alice Arcade, Benny Beats, Casey Chorus",
+    );
+    assert.match(recap.board.competitiveAnchor.body, /24 points each/);
+    assert.match(recap.board.competitiveAnchor.body, /4 unscored picks omitted/);
+    assert.deepEqual(
+      recap.board.competitiveAnchor.leaders.map((leader) => leader.player.displayName),
+      ["Alice Arcade", "Benny Beats", "Casey Chorus"],
+    );
+    assert.ok(
+      recap.board.moments.some((moment) => moment.label === "Still unfolding"),
+      "partial score evidence should caveat outcome-dependent claims without removing other moments",
+    );
+    assert.ok(
+      recap.board.moments.some((moment) => moment.kind === "song"),
+      "unrelated song/discovery moments remain eligible when scores are partial",
+    );
+  },
+);
+
+test("selected game memory board returns null for unselectable game ids", async () => {
+  assert.equal(await getSelectedGameMemoryBoard(999999, { prisma }), null);
+  assert.equal(await getSelectedGameMemoryBoard(null, { prisma }), null);
 });
 
 test(

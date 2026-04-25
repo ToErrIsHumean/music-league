@@ -660,6 +660,634 @@ function deriveGameStandings(submissions) {
   return standings;
 }
 
+function formatGenericCount(count, singular, plural = `${singular}s`) {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+function buildSelectedGameFrame(game, rounds) {
+  return {
+    id: game.id,
+    sourceGameId: game.sourceGameId,
+    displayLabel: resolveGameDisplayLabel(game),
+    roundCount: rounds.length,
+    scoredRoundCount: rounds.filter((round) =>
+      round.submissions.some((submission) => isScoredSubmission(submission)),
+    ).length,
+    earliestOccurredAt: toIsoString(findOldestOccurredAt(rounds)),
+    latestOccurredAt: toIsoString(findNewestOccurredAt(rounds)),
+    highestSequenceNumber: findHighestSequenceNumber(rounds),
+    createdAt: toIsoString(game.createdAt),
+  };
+}
+
+function compareRoundOrder(left, right) {
+  const sequenceComparison = compareNullableAscending(
+    left.sequenceNumber,
+    right.sequenceNumber,
+  );
+
+  if (sequenceComparison !== 0) {
+    return sequenceComparison;
+  }
+
+  const occurredAtComparison = compareNullableAscending(left.occurredAt, right.occurredAt);
+
+  if (occurredAtComparison !== 0) {
+    return occurredAtComparison;
+  }
+
+  return left.id - right.id;
+}
+
+function compareSelectedSubmissionOrder(left, right) {
+  const rankComparison = compareNullableAscending(left.rank, right.rank);
+
+  if (rankComparison !== 0) {
+    return rankComparison;
+  }
+
+  const createdAtComparison = compareNullableAscending(left.createdAt, right.createdAt);
+
+  if (createdAtComparison !== 0) {
+    return createdAtComparison;
+  }
+
+  return left.id - right.id;
+}
+
+function mapSelectedGameSubmission(submission) {
+  return {
+    id: submission.id,
+    roundId: submission.roundId,
+    playerId: submission.playerId,
+    playerName: submission.player.displayName,
+    songId: submission.songId,
+    songTitle: submission.song.title,
+    artistId: submission.song.artist.id,
+    artistName: submission.song.artist.name,
+    normalizedArtistName: submission.song.artist.normalizedName,
+    score: submission.score,
+    rank: submission.rank,
+    submittedAt: toIsoString(submission.submittedAt),
+    createdAt: toIsoString(submission.createdAt),
+  };
+}
+
+function mapSelectedGameVote(vote) {
+  return {
+    id: vote.id,
+    roundId: vote.roundId,
+    voterId: vote.voterId,
+    songId: vote.songId,
+    pointsAssigned: vote.pointsAssigned,
+    votedAt: toIsoString(vote.votedAt),
+  };
+}
+
+function buildSelectedGameMemoryEvidenceRow(submission) {
+  return {
+    id: submission.id,
+    roundId: submission.roundId,
+    roundSequenceNumber: submission.round.sequenceNumber,
+    songId: submission.songId,
+    playerId: submission.playerId,
+    playerName: submission.player.displayName,
+    createdAt: submission.createdAt,
+    roundOccurredAt: submission.round.occurredAt,
+    normalizedArtistName: submission.song.artist.normalizedName,
+  };
+}
+
+function groupSelectedGameMemoryEvidence(evidenceSubmissions) {
+  const exactSubmissionsBySongId = new Map();
+  const artistSubmissionsByNormalizedName = new Map();
+
+  for (const submission of evidenceSubmissions) {
+    const evidenceRow = buildSelectedGameMemoryEvidenceRow(submission);
+    const exactSubmissions = exactSubmissionsBySongId.get(submission.songId) ?? [];
+    const artistKey = submission.song.artist.normalizedName;
+    const artistSubmissions = artistSubmissionsByNormalizedName.get(artistKey) ?? [];
+
+    exactSubmissions.push(evidenceRow);
+    artistSubmissions.push(evidenceRow);
+    exactSubmissionsBySongId.set(submission.songId, exactSubmissions);
+    artistSubmissionsByNormalizedName.set(artistKey, artistSubmissions);
+  }
+
+  return {
+    exactSubmissionsBySongId,
+    artistSubmissionsByNormalizedName,
+  };
+}
+
+async function getSelectedGameMemoryEvidence(prisma, submissions) {
+  const songIds = [...new Set(submissions.map((submission) => submission.songId))];
+  const normalizedArtistNames = [
+    ...new Set(submissions.map((submission) => submission.normalizedArtistName)),
+  ];
+
+  if (songIds.length === 0 && normalizedArtistNames.length === 0) {
+    return groupSelectedGameMemoryEvidence([]);
+  }
+
+  const evidenceSubmissions = await prisma.submission.findMany({
+    where: {
+      OR: [
+        {
+          songId: {
+            in: songIds,
+          },
+        },
+        {
+          song: {
+            artist: {
+              normalizedName: {
+                in: normalizedArtistNames,
+              },
+            },
+          },
+        },
+      ],
+    },
+    select: {
+      id: true,
+      roundId: true,
+      songId: true,
+      playerId: true,
+      createdAt: true,
+      round: {
+        select: {
+          occurredAt: true,
+          sequenceNumber: true,
+        },
+      },
+      song: {
+        select: {
+          artist: {
+            select: {
+              normalizedName: true,
+            },
+          },
+        },
+      },
+      player: {
+        select: {
+          displayName: true,
+        },
+      },
+    },
+  });
+
+  return groupSelectedGameMemoryEvidence(evidenceSubmissions);
+}
+
+function buildSelectedSubmissionFamiliarity(submission, memoryEvidence) {
+  return deriveSongFamiliarity({
+    songId: submission.songId,
+    artistId: submission.artistId,
+    originRoundId: submission.roundId,
+    originSubmissionId: submission.id,
+    exactSongSubmissions:
+      memoryEvidence.exactSubmissionsBySongId.get(submission.songId) ?? [],
+    artistSubmissions:
+      memoryEvidence.artistSubmissionsByNormalizedName.get(submission.normalizedArtistName) ??
+      [],
+  });
+}
+
+function buildSelectedRoundSummary(round, submissions, gameId) {
+  const orderedSubmissions = [...submissions].sort(compareSelectedSubmissionOrder);
+  const winningSubmissions = orderedSubmissions.filter(
+    (submission) => submission.rank === 1,
+  );
+
+  return {
+    id: round.id,
+    gameId: round.gameId,
+    name: round.name,
+    description: round.description,
+    playlistUrl: round.playlistUrl,
+    occurredAt: round.occurredAt,
+    sequenceNumber: round.sequenceNumber,
+    submissionCount: orderedSubmissions.length,
+    href: buildArchiveHref({ gameId, roundId: round.id }),
+    submissions: orderedSubmissions.map((submission) => ({
+      id: submission.id,
+      player: {
+        id: submission.playerId,
+        displayName: submission.playerName,
+      },
+      song: {
+        id: submission.songId,
+        title: submission.songTitle,
+        artistName: submission.artistName,
+      },
+      score: submission.score,
+      rank: submission.rank,
+    })),
+    winnerLabel:
+      winningSubmissions.length === 1
+        ? winningSubmissions[0].playerName
+        : winningSubmissions.length > 1
+          ? "Tied winners"
+          : null,
+    statusLabel: orderedSubmissions.every(
+      (submission) => submission.rank === null && submission.score === null,
+    )
+      ? "pending"
+      : orderedSubmissions.some(
+            (submission) => submission.rank === null || submission.score === null,
+          )
+        ? "partial"
+        : "scored",
+  };
+}
+
+function buildSelectedGameCompetitiveAnchor(submissions) {
+  const standings = deriveGameStandings(submissions);
+
+  if (standings.length === 0) {
+    return null;
+  }
+
+  const leaderScore = standings[0].totalScore;
+  const leaders = standings.filter((standing) => standing.totalScore === leaderScore);
+  const incompleteSubmissionCount = submissions.filter(
+    (submission) => submission.score === null || submission.rank === null,
+  ).length;
+  const scoredRoundCount = new Set(
+    submissions
+      .filter((submission) => isScoredSubmission(submission))
+      .map((submission) => submission.roundId),
+  ).size;
+  const title =
+    leaders.length === 1
+      ? `${leaders[0].player.displayName} leads the game`
+      : `Tied leaders: ${leaders
+          .map((leader) => leader.player.displayName)
+          .join(", ")}`;
+  const baseBody =
+    leaders.length === 1
+      ? `${leaders[0].totalScore} points across ${formatGenericCount(
+          leaders[0].scoredSubmissionCount,
+          "scored pick",
+        )}.`
+      : `${leaderScore} points each across ${formatGenericCount(
+          scoredRoundCount,
+          "scored round",
+        )}.`;
+  const caveat =
+    incompleteSubmissionCount > 0
+      ? ` ${formatGenericCount(
+          incompleteSubmissionCount,
+          "unscored pick",
+        )} omitted from outcome claims.`
+      : "";
+
+  return {
+    title,
+    body: `${baseBody}${caveat}`,
+    leaders: leaders.map((leader) => ({
+      ...leader,
+      playerName: leader.player.displayName,
+    })),
+    scoredRoundCount,
+    incompleteSubmissionCount,
+    standings: standings.slice(0, 3).map((standing) => ({
+      ...standing,
+      playerName: standing.player.displayName,
+    })),
+  };
+}
+
+function buildMemoryBoardMoment(kind, label, title, body, href = null) {
+  return {
+    kind,
+    label,
+    title,
+    body,
+    href,
+  };
+}
+
+function buildSelectedGameCompetitiveMoment(competitiveAnchor) {
+  if (!competitiveAnchor) {
+    return null;
+  }
+
+  return buildMemoryBoardMoment(
+    "competitive",
+    "Score evidence",
+    `${formatGenericCount(competitiveAnchor.scoredRoundCount, "scored round")} counted`,
+    competitiveAnchor.incompleteSubmissionCount > 0
+      ? `${formatGenericCount(
+          competitiveAnchor.incompleteSubmissionCount,
+          "unscored pick",
+        )} stayed out of result claims.`
+      : "The board uses selected-game scored submissions for the result.",
+  );
+}
+
+function buildSelectedGameSongMoment(submissions, roundsById, memoryEvidence, gameId) {
+  const candidates = submissions
+    .map((submission) => ({
+      submission,
+      familiarity: buildSelectedSubmissionFamiliarity(submission, memoryEvidence),
+    }))
+    .sort((left, right) => compareSelectedSubmissionOrder(left.submission, right.submission));
+  const priority = {
+    "brought-back": 0,
+    "known-artist": 1,
+    debut: 2,
+  };
+  const selectedCandidate = candidates.sort((left, right) => {
+    const priorityComparison =
+      priority[left.familiarity.kind] - priority[right.familiarity.kind];
+
+    if (priorityComparison !== 0) {
+      return priorityComparison;
+    }
+
+    return compareSelectedSubmissionOrder(left.submission, right.submission);
+  })[0];
+
+  if (!selectedCandidate) {
+    return null;
+  }
+
+  const { submission, familiarity } = selectedCandidate;
+  const roundName = roundsById.get(submission.roundId)?.name ?? "this round";
+  const href = buildArchiveHref({
+    gameId,
+    roundId: submission.roundId,
+    songId: submission.songId,
+  });
+
+  if (familiarity.kind === "brought-back") {
+    return buildMemoryBoardMoment(
+      "song",
+      "Song memory",
+      `${submission.songTitle} came back`,
+      `${submission.playerName} brought it into ${roundName} after ${formatGenericCount(
+        familiarity.priorExactSongSubmissionCount,
+        "prior exact-song appearance",
+      )}.`,
+      href,
+    );
+  }
+
+  if (familiarity.kind === "known-artist") {
+    return buildMemoryBoardMoment(
+      "song",
+      "Discovery memory",
+      `${submission.artistName} felt familiar`,
+      `${submission.songTitle} had ${formatGenericCount(
+        familiarity.priorArtistSubmissionCount,
+        "prior exported-artist appearance",
+      )} before ${roundName}.`,
+      href,
+    );
+  }
+
+  return buildMemoryBoardMoment(
+    "song",
+    "Discovery memory",
+    `${submission.songTitle} was new to this archive`,
+    `No earlier exact-song or exported-artist history appeared before ${roundName}.`,
+    href,
+  );
+}
+
+function buildSelectedGameParticipationMoment(rounds, submissions, votes) {
+  if (submissions.length === 0) {
+    return null;
+  }
+
+  const playerCount = new Set(submissions.map((submission) => submission.playerId)).size;
+
+  return buildMemoryBoardMoment(
+    "participation",
+    "Participation pulse",
+    `${formatGenericCount(submissions.length, "song")} submitted`,
+    `${formatGenericCount(playerCount, "player")} shaped ${formatGenericCount(
+      rounds.length,
+      "round",
+    )}; ${formatGenericCount(votes.length, "vote")} imported where scoring exists.`,
+  );
+}
+
+function buildSelectedGamePendingMoment(rounds) {
+  const pendingRounds = rounds.filter((round) => round.statusLabel !== "scored");
+
+  if (pendingRounds.length === 0) {
+    return null;
+  }
+
+  return buildMemoryBoardMoment(
+    "participation",
+    "Still unfolding",
+    `${formatGenericCount(pendingRounds.length, "round")} with incomplete scoring`,
+    `${pendingRounds.map((round) => round.name).join(", ")} keeps outcome copy cautious.`,
+    pendingRounds[0].href,
+  );
+}
+
+function buildSelectedGameRoundWinnerMoments(rounds) {
+  return rounds
+    .filter((round) => round.winnerLabel)
+    .slice(0, 2)
+    .map((round) =>
+      buildMemoryBoardMoment(
+        "competitive",
+        round.sequenceNumber === null ? "Round result" : `Round ${round.sequenceNumber}`,
+        `${round.winnerLabel} took ${round.name}`,
+        `${formatGenericCount(round.submissionCount, "submission")} counted in this selected game round.`,
+        round.href,
+      ),
+    );
+}
+
+function buildSelectedGameSparseMoment(rounds) {
+  if (rounds.length === 0) {
+    return null;
+  }
+
+  return buildMemoryBoardMoment(
+    "memory",
+    "Round evidence",
+    `${formatGenericCount(rounds.length, "round")} available`,
+    `${rounds.map((round) => round.name).join(", ")} remains available as canonical round evidence.`,
+    rounds[0].href,
+  );
+}
+
+function buildSelectedGameBoard({ gameId, rounds, submissions, votes, memoryEvidence }) {
+  const roundsById = new Map(rounds.map((round) => [round.id, round]));
+  const submissionsByRoundId = new Map();
+
+  for (const submission of submissions) {
+    const roundSubmissions = submissionsByRoundId.get(submission.roundId) ?? [];
+
+    roundSubmissions.push(submission);
+    submissionsByRoundId.set(submission.roundId, roundSubmissions);
+  }
+
+  const boardRounds = rounds.map((round) =>
+    buildSelectedRoundSummary(round, submissionsByRoundId.get(round.id) ?? [], gameId),
+  );
+  const competitiveAnchor = buildSelectedGameCompetitiveAnchor(submissions);
+  const coreMoments = [
+    buildSelectedGameCompetitiveMoment(competitiveAnchor),
+    buildSelectedGameSongMoment(submissions, roundsById, memoryEvidence, gameId),
+    buildSelectedGameParticipationMoment(boardRounds, submissions, votes),
+    buildSelectedGamePendingMoment(boardRounds),
+    ...buildSelectedGameRoundWinnerMoments(boardRounds),
+  ].filter(Boolean);
+  const moments =
+    coreMoments.length > 0
+      ? coreMoments.slice(0, 6)
+      : [buildSelectedGameSparseMoment(boardRounds)].filter(Boolean);
+
+  return {
+    competitiveAnchor,
+    moments,
+    rounds: boardRounds,
+  };
+}
+
+async function getSelectedGameMemoryBoard(gameId, input = {}) {
+  const normalizedGameId = normalizePositiveInteger(gameId);
+  const { prisma, ownsPrismaClient } = resolveArchiveInput(input);
+
+  try {
+    if (normalizedGameId === null) {
+      return null;
+    }
+
+    const game = await prisma.game.findUnique({
+      where: {
+        id: normalizedGameId,
+      },
+      select: {
+        id: true,
+        sourceGameId: true,
+        displayName: true,
+        createdAt: true,
+        rounds: {
+          select: {
+            id: true,
+            gameId: true,
+            name: true,
+            description: true,
+            playlistUrl: true,
+            sequenceNumber: true,
+            occurredAt: true,
+            submissions: {
+              select: {
+                id: true,
+                roundId: true,
+                playerId: true,
+                songId: true,
+                score: true,
+                rank: true,
+                submittedAt: true,
+                createdAt: true,
+                player: {
+                  select: {
+                    displayName: true,
+                  },
+                },
+                song: {
+                  select: {
+                    title: true,
+                    artist: {
+                      select: {
+                        id: true,
+                        name: true,
+                        normalizedName: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            votes: {
+              select: {
+                id: true,
+                roundId: true,
+                voterId: true,
+                songId: true,
+                pointsAssigned: true,
+                votedAt: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!game || game.rounds.length === 0) {
+      return null;
+    }
+
+    const rounds = [...game.rounds].sort(compareRoundOrder).map((round) => ({
+      id: round.id,
+      gameId: round.gameId,
+      name: round.name,
+      description: round.description,
+      playlistUrl: round.playlistUrl,
+      sequenceNumber: round.sequenceNumber,
+      occurredAt: toIsoString(round.occurredAt),
+    }));
+    const roundOrder = new Map(rounds.map((round, index) => [round.id, index]));
+    const submissions = game.rounds
+      .flatMap((round) => round.submissions.map(mapSelectedGameSubmission))
+      .sort((left, right) => {
+        const roundComparison = roundOrder.get(left.roundId) - roundOrder.get(right.roundId);
+
+        if (roundComparison !== 0) {
+          return roundComparison;
+        }
+
+        return compareSelectedSubmissionOrder(left, right);
+      });
+    const votes = game.rounds
+      .flatMap((round) => round.votes.map(mapSelectedGameVote))
+      .sort((left, right) => {
+        const roundComparison = roundOrder.get(left.roundId) - roundOrder.get(right.roundId);
+
+        if (roundComparison !== 0) {
+          return roundComparison;
+        }
+
+        if (left.songId !== right.songId) {
+          return left.songId - right.songId;
+        }
+
+        return left.id - right.id;
+      });
+    const memoryEvidence = await getSelectedGameMemoryEvidence(prisma, submissions);
+
+    return {
+      frame: buildSelectedGameFrame(game, game.rounds),
+      rounds,
+      submissions,
+      votes,
+      board: buildSelectedGameBoard({
+        gameId: game.id,
+        rounds,
+        submissions,
+        votes,
+        memoryEvidence,
+      }),
+    };
+  } finally {
+    if (ownsPrismaClient) {
+      await prisma.$disconnect();
+    }
+  }
+}
+
 function buildGameBaselines(metricsByPlayer) {
   const playerMetrics = [...metricsByPlayer.values()].filter(
     (metrics) =>
@@ -1913,6 +2541,7 @@ module.exports = {
   getPlayerModalSubmission,
   getPlayerRoundModal,
   getRoundDetail,
+  getSelectedGameMemoryBoard,
   getSongMemoryModal,
   getSongRoundModal,
   listArchiveGames,
