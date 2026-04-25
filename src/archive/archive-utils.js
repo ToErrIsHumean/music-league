@@ -1,5 +1,9 @@
 const { PrismaClient } = require("@prisma/client");
 const {
+  derivePlayerPerformanceMetrics,
+  isScoredSubmission,
+} = require("./player-metrics");
+const {
   compareSongMemoryHistoryOrder,
   compareSongMemoryHistoryRecencyOrder,
   deriveSongFamiliarity,
@@ -165,27 +169,12 @@ function toIsoString(value) {
   return value instanceof Date ? value.toISOString() : null;
 }
 
-function isScoredSubmission(submission) {
-  return submission.score !== null && submission.rank !== null;
-}
-
 function average(values) {
   if (values.length === 0) {
     return 0;
   }
 
   return values.reduce((sum, value) => sum + value, 0) / values.length;
-}
-
-function calculateScoreStdDev(scores) {
-  if (scores.length < 2) {
-    return 0;
-  }
-
-  const mean = average(scores);
-  const variance = average(scores.map((score) => (score - mean) ** 2));
-
-  return Math.sqrt(variance);
 }
 
 function buildPlayerHistoryRow(submission) {
@@ -592,45 +581,7 @@ function buildRoundSubmissionFamiliarity({
 }
 
 function buildGameMetricsByPlayer(gameSubmissions) {
-  const scoredSubmissions = gameSubmissions.filter(isScoredSubmission);
-  const scoredRoundSizes = new Map();
-
-  for (const submission of scoredSubmissions) {
-    scoredRoundSizes.set(submission.roundId, (scoredRoundSizes.get(submission.roundId) ?? 0) + 1);
-  }
-
-  const submissionsByPlayer = new Map();
-
-  for (const submission of scoredSubmissions) {
-    const scoredRoundSize = scoredRoundSizes.get(submission.roundId) ?? 0;
-    const finishPercentile = (submission.rank - 1) / Math.max(scoredRoundSize - 1, 1);
-    const playerSubmissions = submissionsByPlayer.get(submission.playerId) ?? [];
-
-    playerSubmissions.push({
-      finishPercentile,
-      rank: submission.rank,
-      score: submission.score,
-    });
-    submissionsByPlayer.set(submission.playerId, playerSubmissions);
-  }
-
-  const metricsByPlayer = new Map();
-
-  for (const [playerId, playerSubmissions] of submissionsByPlayer.entries()) {
-    const wins = playerSubmissions.filter((submission) => submission.rank === 1).length;
-    const scores = playerSubmissions.map((submission) => submission.score);
-    const finishPercentiles = playerSubmissions.map((submission) => submission.finishPercentile);
-
-    metricsByPlayer.set(playerId, {
-      scoredCount: playerSubmissions.length,
-      wins,
-      averageFinishPercentile: average(finishPercentiles),
-      scoreStdDev: calculateScoreStdDev(scores),
-      winRate: wins / playerSubmissions.length,
-    });
-  }
-
-  return metricsByPlayer;
+  return derivePlayerPerformanceMetrics(gameSubmissions);
 }
 
 function deriveGameStandings(submissions) {
@@ -709,15 +660,18 @@ function deriveGameStandings(submissions) {
 }
 
 function buildGameBaselines(metricsByPlayer) {
-  const playerMetrics = [...metricsByPlayer.values()];
+  const playerMetrics = [...metricsByPlayer.values()].filter(
+    (metrics) =>
+      metrics.scoredSubmissionCount > 0 && metrics.averageFinishPercentile !== null,
+  );
 
   return {
     playerCount: playerMetrics.length,
     averageFinishPercentile: average(
       playerMetrics.map((metrics) => metrics.averageFinishPercentile),
     ),
-    scoreStdDev: average(playerMetrics.map((metrics) => metrics.scoreStdDev)),
-    winRate: average(playerMetrics.map((metrics) => metrics.winRate)),
+    scoreStdDev: average(playerMetrics.map((metrics) => metrics.rawScoreStdDev ?? 0)),
+    winRate: average(playerMetrics.map((metrics) => metrics.winRate ?? 0)),
   };
 }
 
@@ -788,42 +742,79 @@ function selectPlayerNotablePicks(scoredHistory) {
   };
 }
 
+function formatScoredSubmissionCount(count) {
+  return `${count} scored submission${count === 1 ? "" : "s"}`;
+}
+
+function buildPlayerTraitLine(kind, playerMetrics) {
+  const scoredSubmissionCount =
+    playerMetrics.scoredSubmissionCount ?? playerMetrics.scoredCount ?? 0;
+  const countLabel = formatScoredSubmissionCount(scoredSubmissionCount);
+  const winRate = playerMetrics.winRate ?? 0;
+  const wins = playerMetrics.wins ?? Math.round(winRate * scoredSubmissionCount);
+
+  if (kind === "win-rate") {
+    return `Won ${wins} of ${countLabel}.`;
+  }
+
+  if (kind === "variance") {
+    return `Scores varied widely across ${countLabel}.`;
+  }
+
+  if (kind === "top-finish" && scoredSubmissionCount === 1) {
+    return "One scored submission landed near the top.";
+  }
+
+  if (kind === "top-finish") {
+    return `Average finish stayed near the top across ${countLabel}.`;
+  }
+
+  if (scoredSubmissionCount === 1) {
+    return "One scored submission landed lower in the table.";
+  }
+
+  return `Average finish sat lower in the table across ${countLabel}.`;
+}
+
 function derivePlayerTrait(input) {
   const { playerMetrics, gameBaselines } = input;
+  const scoredSubmissionCount =
+    playerMetrics.scoredSubmissionCount ?? playerMetrics.scoredCount ?? 0;
+  const averageFinishPercentile = playerMetrics.averageFinishPercentile;
+  const rawScoreStdDev = playerMetrics.rawScoreStdDev ?? playerMetrics.scoreStdDev ?? 0;
+  const winRate = playerMetrics.winRate ?? 0;
+  const wins =
+    playerMetrics.wins ?? Math.round(winRate * Math.max(scoredSubmissionCount, 0));
 
-  if (playerMetrics.scoredCount === 0) {
+  if (scoredSubmissionCount === 0 || averageFinishPercentile === null) {
     return null;
   }
 
   const candidates = [
     {
       kind: "win-rate",
-      line: "Wins more rounds than anyone likes to admit.",
-      eligible: playerMetrics.wins >= 2,
-      dominanceDelta: playerMetrics.winRate - gameBaselines.winRate,
+      eligible: wins >= 2,
+      dominanceDelta: winRate - gameBaselines.winRate,
       priority: 0,
     },
     {
       kind: "variance",
-      line: "Could be first, could be last. You never know.",
-      eligible: playerMetrics.scoredCount >= 2,
-      dominanceDelta: playerMetrics.scoreStdDev - gameBaselines.scoreStdDev,
+      eligible: scoredSubmissionCount >= 2,
+      dominanceDelta: rawScoreStdDev - gameBaselines.scoreStdDev,
       priority: 1,
     },
     {
       kind: "top-finish",
-      line: "Consistently near the top - plays it safe, plays it well.",
       eligible: true,
       dominanceDelta:
-        gameBaselines.averageFinishPercentile - playerMetrics.averageFinishPercentile,
+        gameBaselines.averageFinishPercentile - averageFinishPercentile,
       priority: 2,
     },
     {
       kind: "low-finish",
-      line: "Bravely marches to their own drummer.",
       eligible: true,
       dominanceDelta:
-        playerMetrics.averageFinishPercentile - gameBaselines.averageFinishPercentile,
+        averageFinishPercentile - gameBaselines.averageFinishPercentile,
       priority: 3,
     },
   ];
@@ -841,19 +832,29 @@ function derivePlayerTrait(input) {
   if (dominantCandidate) {
     return {
       kind: dominantCandidate.kind,
-      line: dominantCandidate.line,
+      line: buildPlayerTraitLine(dominantCandidate.kind, {
+        ...playerMetrics,
+        scoredSubmissionCount,
+        winRate,
+        wins,
+      }),
     };
   }
 
   const fallbackCandidate =
-    playerMetrics.averageFinishPercentile <= gameBaselines.averageFinishPercentile
+    averageFinishPercentile <= gameBaselines.averageFinishPercentile
       ? candidates.find((candidate) => candidate.kind === "top-finish")
       : candidates.find((candidate) => candidate.kind === "low-finish");
 
   return fallbackCandidate
     ? {
         kind: fallbackCandidate.kind,
-        line: fallbackCandidate.line,
+        line: buildPlayerTraitLine(fallbackCandidate.kind, {
+          ...playerMetrics,
+          scoredSubmissionCount,
+          winRate,
+          wins,
+        }),
       }
     : null;
 }
@@ -1612,11 +1613,13 @@ async function getPlayerRoundModal(roundId, playerId, input = {}) {
 
     const metricsByPlayer = buildGameMetricsByPlayer(gameSubmissions);
     const playerMetrics = metricsByPlayer.get(playerId) ?? {
-      scoredCount: 0,
-      wins: 0,
+      playerId,
+      scoredSubmissionCount: 0,
+      submittedRoundCount: 0,
       averageFinishPercentile: 0,
-      scoreStdDev: 0,
-      winRate: 0,
+      rawScoreStdDev: 0,
+      winRate: null,
+      minimumSampleMet: false,
     };
     const trait = derivePlayerTrait({
       playerMetrics,
@@ -1756,11 +1759,20 @@ function buildArchiveHref(input = {}) {
   return `/?${params.toString()}`;
 }
 
+function buildCanonicalSongMemoryHref(input = {}) {
+  return buildArchiveHref({
+    roundId: input.roundId,
+    songId: input.songId,
+  });
+}
+
 module.exports = {
   buildArchiveHref,
+  buildCanonicalSongMemoryHref,
   compareSongMemoryHistoryOrder,
   deriveSongFamiliarity,
   deriveGameStandings,
+  derivePlayerPerformanceMetrics,
   derivePlayerTrait,
   getPlayerModalSubmission,
   getPlayerRoundModal,

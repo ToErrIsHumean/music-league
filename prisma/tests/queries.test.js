@@ -3,7 +3,9 @@ const assert = require("node:assert/strict");
 const { createTempPrismaDb } = require("./helpers/temp-prisma-db");
 const {
   buildArchiveHref,
+  buildCanonicalSongMemoryHref,
   deriveGameStandings,
+  derivePlayerPerformanceMetrics,
   derivePlayerTrait,
   getPlayerModalSubmission,
   getPlayerRoundModal,
@@ -2244,7 +2246,7 @@ test("derivePlayerTrait follows the dominance and fallback rules", () => {
     }),
     {
       kind: "win-rate",
-      line: "Wins more rounds than anyone likes to admit.",
+      line: "Won 2 of 4 scored submissions.",
     },
   );
 
@@ -2266,7 +2268,7 @@ test("derivePlayerTrait follows the dominance and fallback rules", () => {
     }),
     {
       kind: "variance",
-      line: "Could be first, could be last. You never know.",
+      line: "Scores varied widely across 3 scored submissions.",
     },
   );
 
@@ -2288,7 +2290,7 @@ test("derivePlayerTrait follows the dominance and fallback rules", () => {
     }),
     {
       kind: "top-finish",
-      line: "Consistently near the top - plays it safe, plays it well.",
+      line: "One scored submission landed near the top.",
     },
   );
 
@@ -2310,9 +2312,50 @@ test("derivePlayerTrait follows the dominance and fallback rules", () => {
     }),
     {
       kind: "low-finish",
-      line: "Bravely marches to their own drummer.",
+      line: "One scored submission landed lower in the table.",
     },
   );
+});
+
+test("derivePlayerPerformanceMetrics follows the overview player metric contract", () => {
+  const metricsByPlayer = derivePlayerPerformanceMetrics([
+    { playerId: 1, roundId: 10, score: 12, rank: 1 },
+    { playerId: 1, roundId: 10, score: 3, rank: 3 },
+    { playerId: 2, roundId: 10, score: 8, rank: 2 },
+    { playerId: 1, roundId: 20, score: null, rank: null },
+    { playerId: 3, roundId: 20, score: null, rank: null },
+    { playerId: 1, roundId: 30, score: 7, rank: 1 },
+  ]);
+
+  const playerOneMetrics = metricsByPlayer.get(1);
+
+  assert.deepEqual(
+    {
+      ...playerOneMetrics,
+      rawScoreStdDev: null,
+    },
+    {
+      playerId: 1,
+      scoredSubmissionCount: 3,
+      submittedRoundCount: 3,
+      averageFinishPercentile: 1 / 3,
+      winRate: 2 / 3,
+      rawScoreStdDev: null,
+      minimumSampleMet: true,
+    },
+  );
+  assert.ok(
+    Math.abs(playerOneMetrics.rawScoreStdDev - Math.sqrt(122 / 9)) < 1e-12,
+  );
+  assert.deepEqual(metricsByPlayer.get(3), {
+    playerId: 3,
+    scoredSubmissionCount: 0,
+    submittedRoundCount: 1,
+    averageFinishPercentile: null,
+    winRate: null,
+    rawScoreStdDev: null,
+    minimumSampleMet: false,
+  });
 });
 
 test("selectPlayerNotablePicks sorts deterministically and omits duplicate worst picks", () => {
@@ -2435,7 +2478,7 @@ test(
     assert.equal(winRateModal.traitKind, "win-rate");
     assert.equal(
       winRateModal.traitLine,
-      "Wins more rounds than anyone likes to admit.",
+      "Won 2 of 3 scored submissions.",
     );
     assert.equal(winRateModal.history.length, fixture.scoredHistoryCounts.winRate);
     assert.equal(
@@ -2451,7 +2494,7 @@ test(
     assert.equal(varianceModal.traitKind, "variance");
     assert.equal(
       varianceModal.traitLine,
-      "Could be first, could be last. You never know.",
+      "Scores varied widely across 3 scored submissions.",
     );
     assert.equal(varianceModal.history.length, fixture.scoredHistoryCounts.variance);
 
@@ -2459,7 +2502,7 @@ test(
     assert.equal(topFinishModal.traitKind, "top-finish");
     assert.equal(
       topFinishModal.traitLine,
-      "Consistently near the top - plays it safe, plays it well.",
+      "One scored submission landed near the top.",
     );
     assert.equal(topFinishModal.history.length, fixture.scoredHistoryCounts.topFinish);
     assert.equal(
@@ -2472,7 +2515,7 @@ test(
     assert.equal(lowFinishModal.traitKind, "low-finish");
     assert.equal(
       lowFinishModal.traitLine,
-      "Bravely marches to their own drummer.",
+      "Average finish sat lower in the table across 3 scored submissions.",
     );
     assert.equal(lowFinishModal.history.length, fixture.scoredHistoryCounts.lowFinish);
 
@@ -2562,6 +2605,15 @@ test("archive href helper canonicalizes round-first URL state", () => {
   assert.equal(buildArchiveHref({ roundId: 5, playerSubmissionId: 9 }), "/?round=5");
   assert.equal(buildArchiveHref({ roundId: 5, songId: 2 }), "/?round=5&song=2");
   assert.equal(buildArchiveHref({ roundId: -1, playerId: 3 }), "/");
+  assert.equal(
+    buildCanonicalSongMemoryHref({
+      roundId: 5,
+      songId: 2,
+      playerId: 3,
+      playerSubmissionId: 9,
+    }),
+    "/?round=5&song=2",
+  );
 });
 
 test(
