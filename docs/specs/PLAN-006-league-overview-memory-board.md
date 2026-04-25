@@ -11,7 +11,7 @@
 | TASK-03 | Build route-aware evidence navigation | `done` | TASK-01 |
 | TASK-04 | Derive competitive board facts | `done` | TASK-02 |
 | TASK-05 | Derive song, recurrence, and participation moments | `done` | TASK-02, TASK-03 |
-| TASK-06 | Render the Memory Board route | `pending` | TASK-03, TASK-04, TASK-05 |
+| TASK-06 | Render the Memory Board route | `done` | TASK-03, TASK-04, TASK-05 |
 | TASK-07 | Close the regression matrix | `pending` | TASK-06 |
 
 Status values: `pending` | `active` | `done` | `fail` | `blocked` | `skipped`
@@ -40,10 +40,13 @@ elevated override.
 | TASK-04 | pass | null | 3 | gpt-5.5 | high | 2026-04-25T11:59:31.839Z |
 | TASK-05 | pass | null | 1 | gpt-5.5 | high | 2026-04-25T12:14:16.443Z |
 | TASK-05 | pass | null | 2 | gpt-5.5 | high | 2026-04-25T12:20:36.626Z |
+| TASK-06 | pass | null | 1 | gpt-5.5 | high | 2026-04-25T12:26:12.589Z |
 
 ## Review Notes
 
 <!-- Orchestrator review notes append below. -->
+
+- TASK-06 cycle 1: `deferred` -> `docs/sdd/reviews/TASK-06-epoch-1-cycle-1.md`
 
 - TASK-05 cycle 2: `confirmed` -> `docs/sdd/reviews/TASK-05-epoch-1-cycle-2.md`
 
