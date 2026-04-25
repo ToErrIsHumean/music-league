@@ -251,6 +251,12 @@ function formatGenericCount(count, singular) {
   return `${count} ${singular}${count === 1 ? "" : "s"}`;
 }
 
+function formatVotePoints(pointsAssigned) {
+  const prefix = pointsAssigned > 0 ? "+" : "";
+
+  return `${prefix}${pointsAssigned} pts`;
+}
+
 function formatSongArtistFootprint(artistFootprint) {
   if (artistFootprint.submissionCount === 0) {
     return "No other songs by this artist";
@@ -497,6 +503,132 @@ function renderSubmissionRow(roundId, submission) {
           submission.comment,
         )
       : null,
+  );
+}
+
+function renderRoundVote(vote, index) {
+  return React.createElement(
+    "li",
+    {
+      className: "archive-vote-row",
+      key: `${vote.voter.id}-${vote.pointsAssigned}-${vote.votedAt ?? "no-date"}-${index}`,
+    },
+    React.createElement(
+      "div",
+      { className: "archive-vote-main" },
+      React.createElement(
+        "div",
+        { className: "archive-vote-copy" },
+        React.createElement("p", { className: "archive-vote-voter" }, vote.voter.displayName),
+        vote.votedAt
+          ? React.createElement(
+              "p",
+              { className: "archive-vote-date" },
+              formatRoundDate(vote.votedAt),
+            )
+          : null,
+      ),
+      React.createElement(
+        "span",
+        { className: "archive-vote-points" },
+        formatVotePoints(vote.pointsAssigned),
+      ),
+    ),
+    vote.voteComment
+      ? React.createElement(
+          "p",
+          { className: "archive-vote-comment" },
+          React.createElement("span", { className: "archive-evidence-label" }, "Vote comment"),
+          vote.voteComment,
+        )
+      : null,
+  );
+}
+
+function renderRoundVoteBreakdownGroup(group) {
+  return React.createElement(
+    "li",
+    { className: "archive-vote-breakdown-item", key: group.submissionId },
+    React.createElement(
+      "article",
+      { className: "archive-vote-breakdown-card" },
+      React.createElement(
+        "div",
+        { className: "archive-vote-breakdown-main" },
+        React.createElement(
+          "div",
+          { className: "archive-vote-breakdown-copy" },
+          React.createElement("h3", { className: "archive-vote-song" }, group.song.title),
+          React.createElement("p", { className: "archive-vote-artist" }, group.song.artistName),
+          React.createElement(
+            "p",
+            { className: "archive-vote-submitter" },
+            `Submitted by ${group.submitter.displayName}`,
+          ),
+        ),
+        React.createElement(
+          "div",
+          { className: "archive-vote-result", "aria-label": `${group.song.title} result` },
+          React.createElement(
+            "span",
+            { className: "archive-submission-rank" },
+            formatSubmissionRank(group.rank),
+          ),
+          React.createElement(
+            "span",
+            { className: "archive-submission-score" },
+            formatSubmissionScore(group.score),
+          ),
+        ),
+      ),
+      group.submissionComment
+        ? React.createElement(
+            "p",
+            { className: "archive-submission-comment archive-submission-evidence-comment" },
+            React.createElement("span", { className: "archive-evidence-label" }, "Submission comment"),
+            group.submissionComment,
+          )
+        : null,
+      group.votes.length > 0
+        ? React.createElement(
+            "ol",
+            {
+              className: "archive-vote-list",
+              "aria-label": `${group.song.title} votes`,
+            },
+            group.votes.map(renderRoundVote),
+          )
+        : React.createElement(
+            "p",
+            { className: "archive-vote-empty" },
+            "No imported votes for this submission.",
+          ),
+    ),
+  );
+}
+
+function renderRoundVoteBreakdownSection(round) {
+  const voteBreakdown = round.voteBreakdown ?? [];
+  const voteCount = voteBreakdown.reduce((count, group) => count + group.votes.length, 0);
+
+  return React.createElement(
+    "div",
+    { className: "archive-vote-breakdown-section" },
+    React.createElement(
+      "div",
+      { className: "archive-submission-section-header" },
+      React.createElement("p", { className: "archive-round-dialog-kicker" }, "Vote evidence"),
+      React.createElement(
+        "p",
+        { className: "archive-submission-section-meta" },
+        formatGenericCount(voteCount, "imported vote"),
+      ),
+    ),
+    React.createElement(
+      "ol",
+      { className: "archive-vote-breakdown-list" },
+      voteBreakdown.map(renderRoundVoteBreakdownGroup),
+    ),
   );
 }
 
@@ -1171,6 +1303,7 @@ function renderRoundDetailDialog(round, nestedEntity, openSongModal, openPlayerM
           round.submissions.map((submission) => renderSubmissionRow(round.id, submission)),
         ),
       ),
+      renderRoundVoteBreakdownSection(round),
     ),
     renderNestedEntityModal(round.id, nestedEntity, openSongModal, openPlayerModal),
   );

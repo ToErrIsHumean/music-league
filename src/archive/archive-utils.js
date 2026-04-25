@@ -97,6 +97,20 @@ function compareSubmissionOrder(left, right) {
   return compareByCreatedAtAscending(left, right);
 }
 
+function compareRoundVoteOrder(left, right) {
+  if (left.pointsAssigned !== right.pointsAssigned) {
+    return right.pointsAssigned - left.pointsAssigned;
+  }
+
+  const voterNameComparison = left.voter.displayName.localeCompare(right.voter.displayName);
+
+  if (voterNameComparison !== 0) {
+    return voterNameComparison;
+  }
+
+  return left.id - right.id;
+}
+
 function comparePlayerHistoryOrder(left, right) {
   const occurredAtComparison = compareNullableDescending(
     left.round.occurredAt,
@@ -425,6 +439,72 @@ function groupSongMemoryEvidence(evidenceSubmissions) {
     exactSubmissionsBySongId,
     artistSubmissionsByArtistId,
   };
+}
+
+function buildSubmissionSongIndex(submissions) {
+  const submissionGroupsBySongId = new Map();
+
+  for (const submission of submissions) {
+    const submissionGroup = submissionGroupsBySongId.get(submission.song.id) ?? [];
+
+    submissionGroup.push(submission);
+    submissionGroupsBySongId.set(submission.song.id, submissionGroup);
+  }
+
+  return submissionGroupsBySongId;
+}
+
+function buildRoundVoteBreakdown(orderedSubmissions, votes) {
+  const submissionGroupsBySongId = buildSubmissionSongIndex(orderedSubmissions);
+  const votesBySongId = new Map();
+
+  for (const vote of votes) {
+    const submissionGroup = submissionGroupsBySongId.get(vote.songId);
+
+    if (!submissionGroup) {
+      throw new Error(
+        `Round vote ${vote.id} targets song ${vote.songId} without a same-round submission`,
+      );
+    }
+
+    if (submissionGroup.length > 1) {
+      throw new Error(
+        `Round vote ${vote.id} targets duplicate same-round song ${vote.songId}`,
+      );
+    }
+
+    const songVotes = votesBySongId.get(vote.songId) ?? [];
+
+    songVotes.push(vote);
+    votesBySongId.set(vote.songId, songVotes);
+  }
+
+  return orderedSubmissions.map((submission) => ({
+    submissionId: submission.id,
+    song: {
+      id: submission.song.id,
+      title: submission.song.title,
+      artistName: submission.song.artist.name,
+    },
+    submitter: {
+      id: submission.player.id,
+      displayName: submission.player.displayName,
+    },
+    rank: submission.rank,
+    score: submission.score,
+    submissionComment: submission.comment,
+    votes: [...(votesBySongId.get(submission.song.id) ?? [])]
+      .sort(compareRoundVoteOrder)
+      .map((vote) => ({
+        voter: {
+          id: vote.voter.id,
+          displayName: vote.voter.displayName,
+        },
+        pointsAssigned: vote.pointsAssigned,
+        votedAt: toIsoString(vote.votedAt),
+        voteComment: vote.comment,
+      })),
+  }));
 }
 
 function buildRepresentativeOriginSubmissions(submissions) {
@@ -1043,8 +1123,28 @@ async function getRoundDetail(roundId, input = {}) {
 
     const orderedSubmissions = [...round.submissions].sort(compareSubmissionOrder);
     const representativeOriginsBySongId = buildRepresentativeOriginSubmissions(orderedSubmissions);
-    const { exactSubmissionsBySongId, artistSubmissionsByArtistId } =
-      await getRoundFamiliarityEvidence(prisma, orderedSubmissions);
+    const [{ exactSubmissionsBySongId, artistSubmissionsByArtistId }, votes] =
+      await Promise.all([
+        getRoundFamiliarityEvidence(prisma, orderedSubmissions),
+        prisma.vote.findMany({
+          where: {
+            roundId: round.id,
+          },
+          select: {
+            id: true,
+            songId: true,
+            pointsAssigned: true,
+            comment: true,
+            votedAt: true,
+            voter: {
+              select: {
+                id: true,
+                displayName: true,
+              },
+            },
+          },
+        }),
+      ]);
 
     return {
       id: round.id,
@@ -1054,6 +1154,8 @@ async function getRoundDetail(roundId, input = {}) {
       playlistUrl: round.playlistUrl,
       game: {
         id: round.game.id,
+        sourceGameId: round.game.sourceGameId,
+        displayName: round.game.displayName,
         displayLabel: resolveGameDisplayLabel(round.game),
       },
       highlights: buildRoundHighlights(orderedSubmissions),
@@ -1079,6 +1181,7 @@ async function getRoundDetail(roundId, input = {}) {
         rank: submission.rank,
         comment: submission.comment,
       })),
+      voteBreakdown: buildRoundVoteBreakdown(orderedSubmissions, votes),
     };
   } finally {
     if (ownsPrismaClient) {

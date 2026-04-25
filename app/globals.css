@@ -282,7 +282,9 @@ a {
 }
 
 .archive-highlight-list,
-.archive-submission-list {
+.archive-submission-list,
+.archive-vote-breakdown-list,
+.archive-vote-list {
   list-style: none;
   margin: 0;
   padding: 0;
@@ -397,6 +399,100 @@ a {
   font-size: 0.72rem;
   font-weight: 700;
   line-height: 1.2;
+}
+
+.archive-vote-breakdown-section {
+  display: grid;
+  gap: 14px;
+  margin-top: 22px;
+  padding-top: 22px;
+  border-top: 1px solid rgba(104, 90, 77, 0.14);
+}
+
+.archive-vote-breakdown-list,
+.archive-vote-list,
+.archive-vote-breakdown-card,
+.archive-vote-breakdown-copy {
+  display: grid;
+  gap: 10px;
+}
+
+.archive-vote-breakdown-card {
+  padding: 16px;
+  border-radius: 22px;
+  border: 1px solid rgba(104, 90, 77, 0.14);
+  background: rgba(255, 255, 255, 0.54);
+}
+
+.archive-vote-breakdown-main,
+.archive-vote-main {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.archive-vote-song,
+.archive-vote-artist,
+.archive-vote-submitter,
+.archive-vote-voter,
+.archive-vote-date,
+.archive-vote-comment,
+.archive-vote-empty {
+  margin: 0;
+}
+
+.archive-vote-song {
+  font-size: 1.02rem;
+}
+
+.archive-vote-artist,
+.archive-vote-submitter,
+.archive-vote-date,
+.archive-vote-comment,
+.archive-vote-empty {
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.archive-vote-result,
+.archive-vote-main {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.archive-vote-row {
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(104, 90, 77, 0.12);
+  background: rgba(247, 240, 225, 0.48);
+}
+
+.archive-vote-voter {
+  color: var(--ink);
+  font-weight: 800;
+}
+
+.archive-vote-points {
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: rgba(164, 63, 47, 0.1);
+  color: var(--ink);
+  font-size: 0.88rem;
+  font-weight: 800;
+}
+
+.archive-evidence-label {
+  display: block;
+  color: var(--accent);
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.archive-submission-evidence-comment {
+  padding-top: 4px;
 }
 
 .archive-nested-shell-layer {
@@ -870,7 +966,9 @@ a {
 
   .archive-round-dialog-header,
   .archive-submission-main,
-  .archive-submission-section-header {
+  .archive-submission-section-header,
+  .archive-vote-breakdown-main,
+  .archive-vote-main {
     flex-direction: column;
   }
 
