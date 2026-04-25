@@ -5,8 +5,8 @@ const {
   getPlayerModalSubmission,
   getPlayerRoundModal,
   getRoundDetail,
+  getSelectedGameMemoryBoard,
   getSongMemoryModal,
-  listArchiveGames,
   listSelectableGames,
 } = require("./archive-utils");
 
@@ -124,16 +124,6 @@ async function resolveNestedSelection(searchParams, roundSelection, input) {
     openSongModal: null,
     openPlayerModal: null,
   };
-}
-
-function withRoundHrefs(games, selectedGameId = null) {
-  return games.map((game) => ({
-    ...game,
-    rounds: game.rounds.map((round) => ({
-      ...round,
-      href: buildArchiveHref({ gameId: selectedGameId, roundId: round.id }),
-    })),
-  }));
 }
 
 function findSelectableGame(games, gameId) {
@@ -342,217 +332,13 @@ function resolveRoundSelection({ requestedRoundId, requestedRound, selectedGame 
   };
 }
 
-function addStandingScore(standings, submission) {
-  if (submission.score === null) {
-    return;
-  }
-
-  const playerKey = submission.player.id ?? submission.player.displayName;
-  const playerName = submission.player.displayName;
-  const standing = standings.get(playerKey) ?? {
-    playerName,
-    totalScore: 0,
-    scoredSubmissionCount: 0,
-    winCount: 0,
-  };
-
-  standing.totalScore += submission.score;
-  standing.scoredSubmissionCount += 1;
-
-  if (submission.rank === 1) {
-    standing.winCount += 1;
-  }
-
-  standings.set(playerKey, standing);
-}
-
-function compareStandings(left, right) {
-  if (right.totalScore !== left.totalScore) {
-    return right.totalScore - left.totalScore;
-  }
-
-  if (right.winCount !== left.winCount) {
-    return right.winCount - left.winCount;
-  }
-
-  return left.playerName.localeCompare(right.playerName);
-}
-
-function buildCompetitiveAnchor(rounds) {
-  const standings = new Map();
-
-  for (const round of rounds) {
-    for (const submission of round.submissions ?? []) {
-      addStandingScore(standings, submission);
-    }
-  }
-
-  const orderedStandings = [...standings.values()].sort(compareStandings);
-
-  if (orderedStandings.length === 0) {
-    return null;
-  }
-
-  const leaderScore = orderedStandings[0].totalScore;
-  const leaders = orderedStandings.filter((standing) => standing.totalScore === leaderScore);
-  const scoredRoundCount = rounds.filter((round) =>
-    (round.submissions ?? []).some((submission) => submission.score !== null),
-  ).length;
-  const title =
-    leaders.length === 1
-      ? `${leaders[0].playerName} leads the game`
-      : `Tied leaders: ${leaders.map((leader) => leader.playerName).join(", ")}`;
-  const body =
-    leaders.length === 1
-      ? `${leaders[0].totalScore} points across ${formatGenericCount(
-          leaders[0].scoredSubmissionCount,
-          "scored pick",
-        )}.`
-      : `${leaderScore} points each across ${formatGenericCount(
-          scoredRoundCount,
-          "scored round",
-        )}.`;
-
-  return {
-    title,
-    body,
-    leaders,
-    scoredRoundCount,
-    standings: orderedStandings.slice(0, 3),
-  };
-}
-
-function buildMoment(kind, label, title, body, href = null) {
-  return {
-    kind,
-    label,
-    title,
-    body,
-    href,
-  };
-}
-
-function buildRoundWinnerMoments(rounds) {
-  return rounds
-    .filter((round) => round.winnerLabel)
-    .slice(0, 2)
-    .map((round) =>
-      buildMoment(
-        "competitive",
-        round.sequenceNumber === null ? "Round result" : `Round ${round.sequenceNumber}`,
-        `${round.winnerLabel} took ${round.name}`,
-        `${formatRoundDate(round.occurredAt)} | ${formatSubmissionCount(round.submissionCount)}`,
-        round.href,
-      ),
-    );
-}
-
-function buildPendingRoundMoment(rounds) {
-  const pendingRounds = rounds.filter((round) => round.statusLabel === "pending");
-
-  if (pendingRounds.length === 0) {
-    return null;
-  }
-
-  const names = pendingRounds.map((round) => round.name).join(", ");
-
-  return buildMoment(
-    "participation",
-    "Still unfolding",
-    `${formatGenericCount(pendingRounds.length, "round")} awaiting votes`,
-    `${names} ${
-      pendingRounds.length === 1 ? "keeps" : "keep"
-    } the board cautious until scoring evidence lands.`,
-    pendingRounds[0].href,
-  );
-}
-
-function buildParticipationMoment(rounds) {
-  const submissionCount = rounds.reduce((total, round) => total + round.submissionCount, 0);
-
-  if (submissionCount === 0) {
-    return null;
-  }
-
-  return buildMoment(
-    "participation",
-    "Participation pulse",
-    `${formatGenericCount(submissionCount, "song")} submitted`,
-    `${formatGenericCount(rounds.length, "round")} gave this game its memory trail.`,
-  );
-}
-
-function buildChronologyMoment(rounds) {
-  const datedRounds = rounds.filter((round) => round.occurredAt !== null);
-
-  if (datedRounds.length < 2) {
-    return null;
-  }
-
-  return buildMoment(
-    "memory",
-    "Game arc",
-    `${formatRoundDate(datedRounds[0].occurredAt)} to ${formatRoundDate(
-      datedRounds[datedRounds.length - 1].occurredAt,
-    )}`,
-    `${formatGenericCount(datedRounds.length, "dated round")} anchors the selected game timeline.`,
-  );
-}
-
-function buildSparseRoundMoment(rounds) {
-  if (rounds.length === 0) {
-    return null;
-  }
-
-  return buildMoment(
-    "memory",
-    "Round evidence",
-    `${formatGenericCount(rounds.length, "round")} available`,
-    `${rounds.map((round) => round.name).join(", ")} stays available as canonical round evidence.`,
-    rounds[0].href,
-  );
-}
-
-function buildBoardPayload(selectedArchiveGame) {
-  if (!selectedArchiveGame) {
-    return null;
-  }
-
-  const rounds = selectedArchiveGame.rounds;
-  const competitiveAnchor = buildCompetitiveAnchor(rounds);
-  const moments = [
-    ...buildRoundWinnerMoments(rounds),
-    buildPendingRoundMoment(rounds),
-    buildParticipationMoment(rounds),
-    buildChronologyMoment(rounds),
-    competitiveAnchor
-      ? buildMoment(
-          "competitive",
-          "Score evidence",
-          `${formatGenericCount(competitiveAnchor.scoredRoundCount, "scored round")} counted`,
-          "The board foregrounds competitive evidence without expanding into a standings table.",
-        )
-      : null,
-    buildSparseRoundMoment(rounds),
-  ]
-    .filter(Boolean)
-    .slice(0, 6);
-
-  return {
-    competitiveAnchor,
-    moments,
-    rounds,
-  };
-}
-
 async function buildGameMemoryBoardPageProps(input = {}) {
   const searchParams = (await input.searchParams) ?? {};
   const archiveInput = input.prisma ? { prisma: input.prisma } : {};
   const requestedGameId = normalizeQueryInteger(searchParams?.game);
   const requestedRoundId = normalizeQueryInteger(searchParams?.round);
-  const [selectableGames, archiveGames, requestedRound] = await Promise.all([
+  const [selectableGames, requestedRound] = await Promise.all([
     listSelectableGames(archiveInput),
-    listArchiveGames(archiveInput),
     requestedRoundId === null ? Promise.resolve(null) : getRoundDetail(requestedRoundId, archiveInput),
   ]);
 
@@ -579,10 +365,10 @@ async function buildGameMemoryBoardPageProps(input = {}) {
     selected.selectedGame,
     selected.selectionBasis,
   );
-  const selectedArchiveGame =
-    withRoundHrefs(archiveGames, selected.selectedGame?.id ?? null).find(
-      (game) => game.id === selected.selectedGame?.id,
-    ) ?? null;
+  const selectedGameMemoryBoard =
+    selected.selectedGame === null
+      ? null
+      : await getSelectedGameMemoryBoard(selected.selectedGame.id, archiveInput);
   const roundSelection = resolveRoundSelection({
     requestedRoundId,
     requestedRound,
@@ -594,7 +380,7 @@ async function buildGameMemoryBoardPageProps(input = {}) {
   return {
     selectedGame: selectedGameFrame,
     games: buildGameSwitcherOptions(selectableGames, selected.selectedGame?.id ?? null),
-    board: buildBoardPayload(selectedArchiveGame),
+    board: selectedGameMemoryBoard?.board ?? null,
     openRoundId: roundSelection.openRoundId,
     openRound: roundSelection.openRound,
     notices,
