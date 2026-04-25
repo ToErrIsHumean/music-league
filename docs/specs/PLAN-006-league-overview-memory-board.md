@@ -10,7 +10,7 @@
 | TASK-02 | Add selected-game recap read model | `done` | TASK-01 |
 | TASK-03 | Build route-aware evidence navigation | `done` | TASK-01 |
 | TASK-04 | Derive competitive board facts | `done` | TASK-02 |
-| TASK-05 | Derive song, recurrence, and participation moments | `pending` | TASK-02, TASK-03 |
+| TASK-05 | Derive song, recurrence, and participation moments | `done` | TASK-02, TASK-03 |
 | TASK-06 | Render the Memory Board route | `pending` | TASK-03, TASK-04, TASK-05 |
 | TASK-07 | Close the regression matrix | `pending` | TASK-06 |
 
@@ -38,10 +38,16 @@ elevated override.
 | TASK-04 | pass | null | 1 | gpt-5.5 | high | 2026-04-25T11:44:07.212Z |
 | TASK-04 | pass | null | 2 | gpt-5.5 | high | 2026-04-25T11:50:29.181Z |
 | TASK-04 | pass | null | 3 | gpt-5.5 | high | 2026-04-25T11:59:31.839Z |
+| TASK-05 | pass | null | 1 | gpt-5.5 | high | 2026-04-25T12:14:16.443Z |
+| TASK-05 | pass | null | 2 | gpt-5.5 | high | 2026-04-25T12:20:36.626Z |
 
 ## Review Notes
 
 <!-- Orchestrator review notes append below. -->
+
+- TASK-05 cycle 2: `confirmed` -> `docs/sdd/reviews/TASK-05-epoch-1-cycle-2.md`
+
+- TASK-05 cycle 1: `contested` -> `docs/sdd/reviews/TASK-05-epoch-1-cycle-1.md`
 
 - TASK-04 cycle 3: `confirmed` -> `docs/sdd/reviews/TASK-04-epoch-1-cycle-3.md`
 
