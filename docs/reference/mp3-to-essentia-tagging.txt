@@ -1,0 +1,32 @@
+Download music (legally of course 😳)
+
+Use mp3tag to make sure tags are good.
+
+Python code to rename all my files to remove certain characters from the file name (essentia doesn’t like certain characters like ‘ and -)
+
+Run essentia in the command line, I set it to do 12 tracks at a time as to not fry my cpu. This will create a json file for each track.
+
+Run python code to ensure that every track has a json file associated with it.
+
+Run python code to write moods, BPM and dancability.
+
+Delete json files as they are no longer needed.
+
+Use tag to file to rename the files back to what they should be using mp3tag.
+
+
+Please, credit your use of Essentia properly! If you use the Essentia library in your software, please acknowledge it and specify its origin as http://essentia.upf.edu.
+
+
+https://github.com/rachel-howell/spotify-playlist-curator
+https://github.com/rachel-howell/spotify-playlist-curator/blob/main/skills/spotify-playlist-curator/references/implementation-notes.md
+
+ReccoBeats API notes
+No auth required — standalone calls work without Spotify tokens
+Accepts Spotify track IDs via /v1/track?ids= — the ID bridge
+Max 5 seeds for recommendations — /v1/track/recommendation returns 400 ("size must be between 1 and 5") if seeds contains more than 5 UUIDs. The client caps at 5 automatically. Previously caused noisy 400 errors when playlist-seeded recommendations resolved 6+ seed tracks.
+No genre concept — genres are converted to seed tracks via Spotify search
+No track search — must resolve through Spotify first
+Rate limits undisclosed — no issues observed in testing (~300ms response times)
+size not limit — recommendation endpoint uses size parameter
+Audio feature filters silently return empty — don't use them; fetch features separately

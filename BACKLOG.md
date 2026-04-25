@@ -19,6 +19,27 @@
 **Dependencies:** Milestone 3 archive route, round detail overlay, and round-scoped song modal shell
 **Notes:** Milestone 3 intentionally ships the song modal as a round-scoped shell only; preserve URL-state close/back behavior when expanding it.
 
+---
+
+## Extracted Music Feature Enrichment
+
+**Outcome:** Users can see richer Memory Board moments based on extracted music characteristics such as mood, energy, genre/style clusters, tempo, duration outliers, similarity, diversity, or theme-fit analysis.
+**Trigger:** After M6 basic-data Memory Board ships and a future product/spec decision accepts extracted music features as canonical source facts
+**Complexity:** High
+**Dependencies:** M6 Memory Board, accepted extracted-music-feature data contract, fixture coverage for enriched claims
+**Notes:** Do not retrofit v1 moments to imply unavailable music-feature truth; enriched moments should be additive and evidence-backed.
+
+---
+
+## Memory Board Moment Deferral Review
+
+**Outcome:** Deferred v1 Memory Board moment families can be reconsidered with known reasons, expected value, and implementation cost instead of being forgotten.
+**Trigger:** After SPEC-006 or M6 implementation records a moment family as deferred for unavailable facts, low sample quality, copy ambiguity, fixture complexity, or implementation complexity
+**Complexity:** Low
+**Dependencies:** FSD-006/SPEC-006 moment-family disposition notes
+**Notes:** Preserve the deferral reason; only promote a moment when it can satisfy source facts, evidence link, omission behavior, and copy guardrails.
+**Notes:** SPEC-006 bootstrap defers comment-backed `People Reacted` board moments and direct board comment snippets for risk reduction; Participation Pulse remains the v1 social/participation moment, and later promotion requires provenance, denominator, fixture, and copy-safety contracts.
+
 <!-- SKILL CONTRACT
   Location: First comment block in the file, immediately after the # Title line. Must not appear elsewhere.
   Purpose: Holding pen for Music League work that is real but not yet sequenced. Exists to prevent scope creep and amnesia.
