@@ -51,6 +51,7 @@ const FILE_SPECS = {
       "Round ID",
       "Visible To Voters",
     ],
+    optionalHeaders: ["Score", "Rank"],
     buildRow(record, issues) {
       const submittedAt = coerceTimestamp(
         record,
@@ -60,8 +61,27 @@ const FILE_SPECS = {
         issues,
       );
       const visibleToVoters = coerceVisibleToVoters(record, issues);
+      const score = coerceOptionalInteger(
+        record,
+        "Score",
+        "score",
+        "submissions",
+        issues,
+      );
+      const rank = coerceOptionalInteger(
+        record,
+        "Rank",
+        "rank",
+        "submissions",
+        issues,
+      );
 
-      if (submittedAt === INVALID_ROW || visibleToVoters === INVALID_ROW) {
+      if (
+        submittedAt === INVALID_ROW ||
+        visibleToVoters === INVALID_ROW ||
+        score === INVALID_ROW ||
+        rank === INVALID_ROW
+      ) {
         return INVALID_ROW;
       }
 
@@ -75,6 +95,8 @@ const FILE_SPECS = {
         comment: nullableString(record.values.Comment),
         sourceRoundId: record.values["Round ID"],
         visibleToVoters,
+        score,
+        rank,
       };
     },
   },
@@ -192,7 +214,14 @@ function parseMusicLeagueBundle(input) {
     const requiredHeaderLookup = new Map(
       spec.requiredHeaders.map((header) => [normalizeHeader(header), header]),
     );
+    const optionalHeaderLookup = new Map(
+      (spec.optionalHeaders ?? []).map((header) => [
+        normalizeHeader(header),
+        header,
+      ]),
+    );
     const resolvedHeaders = new Map();
+    const resolvedOptionalHeaders = new Map();
 
     for (const header of parsedFile.header) {
       const normalizedHeader = normalizeHeader(header);
@@ -202,6 +231,16 @@ function parseMusicLeagueBundle(input) {
         !resolvedHeaders.has(requiredHeaderLookup.get(normalizedHeader))
       ) {
         resolvedHeaders.set(requiredHeaderLookup.get(normalizedHeader), header);
+      }
+
+      if (
+        optionalHeaderLookup.has(normalizedHeader) &&
+        !resolvedOptionalHeaders.has(optionalHeaderLookup.get(normalizedHeader))
+      ) {
+        resolvedOptionalHeaders.set(
+          optionalHeaderLookup.get(normalizedHeader),
+          header,
+        );
       }
     }
 
@@ -230,6 +269,11 @@ function parseMusicLeagueBundle(input) {
 
       for (const header of spec.requiredHeaders) {
         canonicalValues[header] = record.values[resolvedHeaders.get(header)] ?? "";
+      }
+
+      for (const header of spec.optionalHeaders ?? []) {
+        canonicalValues[header] =
+          record.values[resolvedOptionalHeaders.get(header)] ?? "";
       }
 
       fileResult.sourceKeyRows.push({
@@ -586,6 +630,22 @@ function coerceInteger(record, columnName, fieldName, sourceFileKind, issues) {
   }
 
   return Number.parseInt(trimmedValue, 10);
+}
+
+function coerceOptionalInteger(
+  record,
+  columnName,
+  fieldName,
+  sourceFileKind,
+  issues,
+) {
+  const rawValue = record.values[columnName] ?? "";
+
+  if (rawValue.trim() === "") {
+    return null;
+  }
+
+  return coerceInteger(record, columnName, fieldName, sourceFileKind, issues);
 }
 
 function nullableString(value) {

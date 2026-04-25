@@ -1,0 +1,16 @@
+Spotify URI,Voter ID,Created,Points Assigned,Comment,Round ID
+spotify:track:semantic-repeat,alpha-bob,2026-02-02T09:00:00Z,5,Landed perfectly,semantic-game-alpha
+spotify:track:semantic-repeat,alpha-cara,2026-02-02T09:05:00Z,3,,semantic-game-alpha
+spotify:track:semantic-repeat,alpha-dev,2026-02-02T09:10:00Z,-1,Downvote edge,semantic-game-alpha
+spotify:track:semantic-title-a,alpha-alice,2026-02-02T09:15:00Z,2,,semantic-game-alpha
+spotify:track:semantic-title-a,alpha-cara,2026-02-02T09:20:00Z,1,,semantic-game-alpha
+spotify:track:semantic-title-b,alpha-alice,2026-02-02T09:25:00Z,2,,semantic-game-alpha
+spotify:track:semantic-title-b,alpha-bob,2026-02-02T09:30:00Z,2,Same title but different song,semantic-game-alpha
+spotify:track:semantic-artist-a,alpha-alice,2026-02-02T09:35:00Z,1,,semantic-game-alpha
+spotify:track:semantic-repeat,alpha-bob,2026-02-09T09:00:00Z,4,Exact song remembered,alpha-round-02
+spotify:track:semantic-repeat,alpha-dev,2026-02-09T09:05:00Z,2,,alpha-round-02
+spotify:track:semantic-repeat,alpha-alice,2026-02-09T09:10:00Z,1,,alpha-round-02
+spotify:track:semantic-multi-label,alpha-bob,2026-02-09T09:15:00Z,2,,alpha-round-02
+spotify:track:semantic-multi-label,alpha-cara,2026-02-09T09:20:00Z,2,Lead artist appears in a combined label,alpha-round-02
+spotify:track:semantic-artist-b,alpha-alice,2026-02-09T09:25:00Z,3,,alpha-round-02
+spotify:track:semantic-artist-b,alpha-cara,2026-02-09T09:30:00Z,-1,Negative points remain source fact,alpha-round-02
