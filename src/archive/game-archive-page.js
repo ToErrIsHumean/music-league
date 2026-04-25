@@ -692,6 +692,20 @@ function renderMemoryMoment(moment) {
   );
 }
 
+function renderSparseState(sparseState) {
+  if (!sparseState) {
+    return null;
+  }
+
+  return React.createElement(
+    "article",
+    { className: "archive-memory-moment archive-memory-sparse-state" },
+    React.createElement("p", { className: "archive-moment-label" }, "Sparse board"),
+    React.createElement("h3", { className: "archive-moment-title" }, sparseState.title),
+    React.createElement("p", { className: "archive-moment-body" }, sparseState.copy),
+  );
+}
+
 function renderSelectedGameBoard(selectedGame, board, openRoundId) {
   const rounds = board?.rounds ?? [];
   const moments = board?.moments ?? [];
@@ -720,7 +734,7 @@ function renderSelectedGameBoard(selectedGame, board, openRoundId) {
         ].join(" | "),
       ),
     ),
-    rounds.length === 0 || moments.length === 0
+    rounds.length === 0
       ? React.createElement(
           "p",
           { className: "archive-game-meta" },
@@ -730,11 +744,14 @@ function renderSelectedGameBoard(selectedGame, board, openRoundId) {
           React.Fragment,
           null,
           renderCompetitiveAnchor(board.competitiveAnchor),
-          React.createElement(
-            "ul",
-            { className: "archive-memory-grid", "aria-label": "Selected game memory moments" },
-            moments.map(renderMemoryMoment),
-          ),
+          renderSparseState(board.sparseState),
+          moments.length === 0
+            ? null
+            : React.createElement(
+                "ul",
+                { className: "archive-memory-grid", "aria-label": "Selected game memory moments" },
+                moments.map(renderMemoryMoment),
+              ),
         ),
   );
 }
