@@ -1,0 +1,5 @@
+Spotify URI,Title,Artist(s),Submitter ID,Created,Comment,Round ID,Visible To Voters,Score,Rank
+spotify:track:bravo-tie-one,Tie One,Artist Tie,bravo-ava,2026-03-01T12:00:00Z,Standings tie candidate,semantic-game-bravo,Yes,4,1
+spotify:track:bravo-tie-two,Tie Two,Artist Other,bravo-ben,2026-03-01T12:05:00Z,,semantic-game-bravo,No,4,1
+spotify:track:bravo-unvoted,Quiet Ledger,Artist Quiet,bravo-cy,2026-03-01T12:10:00Z,Unvoted bravo submission,semantic-game-bravo,Yes,,
+spotify:track:bravo-single,One Shot,Artist Sparse,bravo-dee,2026-03-08T12:00:00Z,One scored submission history,bravo-round-02,Yes,2,1

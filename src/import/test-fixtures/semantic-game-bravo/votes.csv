@@ -1,0 +1,5 @@
+Spotify URI,Voter ID,Created,Points Assigned,Comment,Round ID
+spotify:track:bravo-tie-one,bravo-ben,2026-03-02T09:00:00Z,3,Tie setup,semantic-game-bravo
+spotify:track:bravo-tie-one,bravo-cy,2026-03-02T09:05:00Z,1,,semantic-game-bravo
+spotify:track:bravo-tie-two,bravo-ava,2026-03-02T09:10:00Z,4,Equal total,semantic-game-bravo
+spotify:track:bravo-single,bravo-ava,2026-03-09T09:00:00Z,2,Sparse history scored once,bravo-round-02

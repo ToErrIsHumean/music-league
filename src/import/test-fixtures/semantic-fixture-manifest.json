@@ -1,0 +1,69 @@
+[
+  {
+    "fixtureName": "semantic-game-alpha",
+    "files": [
+      "competitors.csv",
+      "rounds.csv",
+      "submissions.csv",
+      "votes.csv"
+    ],
+    "covers": [
+      "CP-01",
+      "CP-02",
+      "CP-03",
+      "CP-04",
+      "CP-05",
+      "CP-06",
+      "CP-07",
+      "CP-08",
+      "CP-09",
+      "CP-10"
+    ],
+    "behaviors": [
+      "overlapping-round-names-across-games",
+      "repeat-canonical-song-across-rounds",
+      "same-title-distinct-song-ids",
+      "same-exported-artist-label-new-song",
+      "lead-artist-alone-and-multi-artist-label",
+      "negative-vote-points",
+      "vote-breakdown-voter-target-points-comment",
+      "submission-and-vote-comments-distinct",
+      "standings-clear-leader",
+      "unvoted-submission-missing-score-rank",
+      "completed-snapshot-legacy-visibility-flags",
+      "sparse-player-history",
+      "stale-origin-context-modal-route"
+    ]
+  },
+  {
+    "fixtureName": "semantic-game-bravo",
+    "files": [
+      "competitors.csv",
+      "rounds.csv",
+      "submissions.csv",
+      "votes.csv"
+    ],
+    "covers": [
+      "CP-01",
+      "CP-02",
+      "CP-03",
+      "CP-04",
+      "CP-05",
+      "CP-06",
+      "CP-07",
+      "CP-08",
+      "CP-09",
+      "CP-10"
+    ],
+    "behaviors": [
+      "overlapping-round-names-across-games",
+      "vote-breakdown-voter-target-points-comment",
+      "submission-and-vote-comments-distinct",
+      "standings-tie",
+      "unvoted-submission-missing-score-rank",
+      "completed-snapshot-legacy-visibility-flags",
+      "sparse-player-history",
+      "stale-origin-context-modal-route"
+    ]
+  }
+]

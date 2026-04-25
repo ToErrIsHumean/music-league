@@ -1,0 +1,9 @@
+Spotify URI,Title,Artist(s),Submitter ID,Created,Comment,Round ID,Visible To Voters,Score,Rank
+spotify:track:semantic-repeat,Silver Lines,Mono Echo,alpha-alice,2026-02-01T12:00:00Z,Submission comment repeat,semantic-game-alpha,Yes,7,1
+spotify:track:semantic-title-a,Open Window,The Lanterns,alpha-bob,2026-02-01T12:05:00Z,,semantic-game-alpha,No,3,3
+spotify:track:semantic-title-b,Open Window,North Pier,alpha-cara,2026-02-01T12:10:00Z,Same title distinct URI,semantic-game-alpha,Yes,4,2
+spotify:track:semantic-artist-a,Paper Signal,Familiar Faces,alpha-dev,2026-02-01T12:15:00Z,,semantic-game-alpha,Yes,1,4
+spotify:track:semantic-repeat,Silver Lines,Mono Echo,alpha-erin,2026-02-08T12:00:00Z,Repeat exact song different round,alpha-round-02,Yes,7,1
+spotify:track:semantic-multi-label,Signal Boost,Familiar Faces feat. Guest Ray,alpha-alice,2026-02-08T12:05:00Z,,alpha-round-02,No,4,2
+spotify:track:semantic-unvoted-alpha,Quiet Exit,Sparse Artist,alpha-cara,2026-02-08T12:10:00Z,Unvoted submission,alpha-round-02,Yes,,
+spotify:track:semantic-artist-b,Paper Signal Two,Familiar Faces,alpha-bob,2026-02-08T12:15:00Z,,alpha-round-02,Yes,2,3
