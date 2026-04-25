@@ -5,8 +5,8 @@
 > **Status:** `pending`
 
 | Task | Title | Status | Depends-on |
-|------|-------|--------|------------|
-| TASK-01 | Establish selected-game route foundation | `pending` | — |
+| ---- | ----- | ------ | ---------- |
+| TASK-01 | Establish selected-game route foundation | `done` | — |
 | TASK-02 | Add selected-game recap read model | `pending` | TASK-01 |
 | TASK-03 | Build route-aware evidence navigation | `pending` | TASK-01 |
 | TASK-04 | Derive competitive board facts | `pending` | TASK-02 |
@@ -30,5 +30,14 @@ elevated override.
 <!-- Append signals as tasks complete. -->
 
 | Task | Signal | Discovery | Cycle | Model | Reasoning-Effort | Timestamp |
-|------|--------|-----------|-------|-------|------------------|-----------|
-| | | | | | | |
+| ---- | ------ | --------- | ----- | ----- | ---------------- | --------- |
+| TASK-01 | pass | null | 1 | gpt-5.5 | high | 2026-04-25T11:03:31.730Z |
+| TASK-01 | pass | null | 2 | gpt-5.5 | high | 2026-04-25T11:13:21.926Z |
+
+## Review Notes
+
+<!-- Orchestrator review notes append below. -->
+
+- TASK-01 cycle 2: `confirmed` -> `docs/sdd/reviews/TASK-01-epoch-1-cycle-2.md`
+
+- TASK-01 cycle 1: `contested` -> `docs/sdd/reviews/TASK-01-epoch-1-cycle-1.md`
