@@ -76,8 +76,8 @@ test(
       props.board.rounds.map((round) => round.name),
       ["Wildcard Waltz", "Sunset Static"],
     );
-    assert.equal(props.board.competitiveAnchor.title, "Alice Arcade leads the game");
-    assert.equal(props.board.moments.length, 5);
+    assert.equal(props.board.competitiveAnchor.title, "Results need complete score evidence");
+    assert.equal(props.board.moments.length, 3);
     assert.equal(props.openRoundId, null);
     assert.equal(props.openRound, null);
     assert.deepEqual(props.notices, []);
@@ -85,8 +85,8 @@ test(
     assert.match(markup, /main/);
     assert.match(markup, /Wildcard Waltz/);
     assert.match(markup, /Competitive anchor/);
-    assert.match(markup, /Alice Arcade leads the game/);
-    assert.match(markup, /Still unfolding/);
+    assert.match(markup, /Results need complete score evidence/);
+    assert.match(markup, /Runaway Pick/);
     assert.match(markup, /Participation pulse/);
     assert.ok(!markup.includes("Second Spin"), "default board must not blend another game");
     assert.ok(
@@ -182,7 +182,18 @@ test(
 
       assert.equal(props.selectedGame.id, game.id);
       assert.deepEqual(props.games, []);
+      assert.deepEqual(props.board.moments, []);
+      assert.deepEqual(props.board.sparseState.omittedFamilies, [
+        "the-table",
+        "game-swing",
+        "new-to-us-that-landed",
+        "back-again-familiar-face",
+        "participation-pulse",
+      ]);
       assert.match(markup, /Single Game/);
+      assert.match(markup, /No submissions yet/);
+      assert.match(markup, /no submitted songs are available for board moments/);
+      assert.ok(!markup.includes("Round evidence"));
       assert.ok(!markup.includes("archive-game-switcher"));
     } finally {
       await singleDb.cleanup();
@@ -434,9 +445,13 @@ test(
       assert.match(markup, new RegExp(`id=\"submission-${submission.id}\"`));
     }
 
-    assert.match(
-      markup,
-      new RegExp(`href=\"/\\?game=${props.selectedGame.id}&amp;round=${roundId}#vote-breakdown\"`),
+    assert.ok(
+      props.board.moments.every(
+        (moment) =>
+          Array.isArray(moment.evidence) &&
+          moment.evidence.every((evidence) => evidence.requiresGameContext === true),
+      ),
+      "rendered board moments should expose selected-game evidence metadata",
     );
     assert.ok(!markup.includes('href="/"'));
   },

@@ -7,6 +7,7 @@ const {
   buildCanonicalSongMemoryHref,
   buildMemoryBoardEvidenceHref,
   deriveGameStandings,
+  deriveGameSwingMoment,
   derivePlayerPerformanceMetrics,
   derivePlayerTrait,
   getPlayerModalSubmission,
@@ -1508,7 +1509,8 @@ test("derived game standings total scoped scored submissions with dense ties", (
     },
   ]);
 
-  assert.deepEqual(standings, [
+  assert.equal(standings.completeness, "partial");
+  assert.deepEqual(standings.rows, [
     {
       player: {
         id: 1,
@@ -1543,6 +1545,115 @@ test("derived game standings total scoped scored submissions with dense ties", (
       tied: false,
     },
   ]);
+});
+
+test("derived game standings report complete, partial, and none completeness states", () => {
+  const completeStandings = deriveGameStandings([
+    {
+      playerId: 1,
+      playerName: "Alpha Array",
+      roundId: 10,
+      score: 12,
+      rank: 1,
+    },
+    {
+      playerId: 2,
+      playerName: "Beta Bridge",
+      roundId: 10,
+      score: 11,
+      rank: 2,
+    },
+  ]);
+  const unscoredStandings = deriveGameStandings([
+    {
+      playerId: 1,
+      playerName: "Alpha Array",
+      roundId: 10,
+      score: null,
+      rank: null,
+    },
+  ]);
+  const partialPairStandings = deriveGameStandings([
+    {
+      playerId: 1,
+      playerName: "Alpha Array",
+      roundId: 10,
+      score: 12,
+      rank: null,
+    },
+  ]);
+  const emptyStandings = deriveGameStandings([]);
+
+  assert.equal(completeStandings.completeness, "complete");
+  assert.deepEqual(
+    completeStandings.rows.map((row) => [row.player.displayName, row.totalScore, row.rank]),
+    [
+      ["Alpha Array", 12, 1],
+      ["Beta Bridge", 11, 2],
+    ],
+  );
+  assert.equal(unscoredStandings.completeness, "partial");
+  assert.deepEqual(unscoredStandings.rows, []);
+  assert.equal(partialPairStandings.completeness, "partial");
+  assert.deepEqual(partialPairStandings.rows, []);
+  assert.equal(emptyStandings.completeness, "none");
+  assert.deepEqual(emptyStandings.rows, []);
+});
+
+test("game swing moment uses complete selected-game round evidence only", () => {
+  const moment = deriveGameSwingMoment({
+    gameId: 7,
+    rounds: [
+      { id: 10, gameId: 7, name: "Close Call", sequenceNumber: 1, occurredAt: null },
+      { id: 11, gameId: 7, name: "Unfinished", sequenceNumber: 2, occurredAt: null },
+    ],
+    submissions: [
+      {
+        id: 1,
+        roundId: 10,
+        playerId: 1,
+        playerName: "Alpha Array",
+        songId: 100,
+        songTitle: "Narrow Winner",
+        score: 12,
+        rank: 1,
+        createdAt: "2024-01-01T00:00:00.000Z",
+      },
+      {
+        id: 2,
+        roundId: 10,
+        playerId: 2,
+        playerName: "Beta Bridge",
+        songId: 101,
+        songTitle: "Runner Up",
+        score: 11,
+        rank: 2,
+        createdAt: "2024-01-01T00:01:00.000Z",
+      },
+      {
+        id: 3,
+        roundId: 11,
+        playerId: 3,
+        playerName: "Gamma Grid",
+        songId: 102,
+        songTitle: "Pending Pick",
+        score: 40,
+        rank: null,
+        createdAt: "2024-01-01T00:02:00.000Z",
+      },
+    ],
+  });
+
+  assert.ok(moment);
+  assert.equal(moment.family, "game-swing");
+  assert.equal(moment.title, "Photo Finish");
+  assert.match(moment.copy, /1 point ahead/);
+  assert.equal(moment.href, "/?game=7&round=10#vote-breakdown");
+  assert.deepEqual(moment.evidence[0].target, {
+    gameId: 7,
+    roundId: 10,
+    section: "vote-breakdown",
+  });
 });
 
 test(
@@ -1582,20 +1693,41 @@ test(
       recap.board.rounds.map((round) => round.name),
       ["Wildcard Waltz", "Sunset Static"],
     );
-    assert.equal(recap.board.competitiveAnchor.title, "Alice Arcade leads the game");
-    assert.match(recap.board.competitiveAnchor.body, /30 points/);
-    assert.match(recap.board.competitiveAnchor.body, /4 unscored picks omitted/);
+    assert.equal(recap.board.selectedGameId, afterpartyGameId);
+    assert.equal(recap.board.anchor, recap.board.competitiveAnchor);
+    assert.equal(recap.board.competitiveAnchor.kind, "unavailable");
+    assert.equal(
+      recap.board.competitiveAnchor.unavailableReason,
+      "partial-score-rank-evidence",
+    );
+    assert.match(recap.board.competitiveAnchor.body, /incomplete score or rank data/);
+    assert.deepEqual(recap.board.sparseState.omittedFamilies, ["the-table"]);
+    assert.deepEqual(
+      recap.board.moments.slice(0, 3).map((moment) => moment.family),
+      ["game-swing", "back-again-familiar-face", "participation-pulse"],
+    );
     assert.deepEqual(
       recap.board.moments.slice(0, 3).map((moment) => moment.kind),
       ["competitive", "song", "participation"],
     );
 
+    const swingMoment = recap.board.moments.find(
+      (moment) => moment.family === "game-swing",
+    );
     const songMoment = recap.board.moments.find((moment) => moment.kind === "song");
 
+    assert.ok(swingMoment, "expected a selected-game swing moment");
+    assert.match(swingMoment.copy, /points ahead/);
+    assert.equal(swingMoment.evidence[0].kind, "vote-breakdown");
+    assert.match(
+      swingMoment.href,
+      new RegExp(`^/\\?game=${afterpartyGameId}&round=\\d+#vote-breakdown$`),
+    );
     assert.ok(songMoment, "expected selected-game song or discovery memory moment");
     assert.equal(songMoment.label, "Song memory");
     assert.match(songMoment.title, /came back/);
     assert.match(songMoment.body, /prior exact-song appearance/);
+    assert.equal(songMoment.evidence[0].kind, "song");
     assert.match(
       songMoment.href,
       new RegExp(`^/\\?game=${afterpartyGameId}&round=\\d+&song=\\d+$`),
@@ -1608,7 +1740,7 @@ test(
 );
 
 test(
-  "selected game memory board preserves tied leaders and partial-score caveats",
+  "selected game memory board suppresses game-level leaders when score evidence is partial",
   { concurrency: false },
   async () => {
     const mainGameId = await findGameIdBySourceId("main");
@@ -1622,19 +1754,16 @@ test(
         ["Second Spin", "pending"],
       ],
     );
+    assert.equal(recap.board.competitiveAnchor.kind, "unavailable");
     assert.equal(
-      recap.board.competitiveAnchor.title,
-      "Tied leaders: Alice Arcade, Benny Beats, Casey Chorus",
+      recap.board.competitiveAnchor.unavailableReason,
+      "partial-score-rank-evidence",
     );
-    assert.match(recap.board.competitiveAnchor.body, /24 points each/);
-    assert.match(recap.board.competitiveAnchor.body, /4 unscored picks omitted/);
-    assert.deepEqual(
-      recap.board.competitiveAnchor.leaders.map((leader) => leader.player.displayName),
-      ["Alice Arcade", "Benny Beats", "Casey Chorus"],
-    );
-    assert.ok(
-      recap.board.moments.some((moment) => moment.label === "Still unfolding"),
-      "partial score evidence should caveat outcome-dependent claims without removing other moments",
+    assert.deepEqual(recap.board.competitiveAnchor.leaders, []);
+    assert.equal(
+      recap.board.moments.some((moment) => moment.family === "the-table"),
+      false,
+      "partial score evidence should suppress selected-game table claims",
     );
     assert.ok(
       recap.board.moments.some((moment) => moment.kind === "song"),

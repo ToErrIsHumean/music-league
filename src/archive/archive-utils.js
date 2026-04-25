@@ -587,6 +587,19 @@ function buildGameMetricsByPlayer(gameSubmissions) {
 
 function deriveGameStandings(submissions) {
   const rowsByPlayer = new Map();
+  const submissionsByRoundId = new Map();
+  let scoredSubmissionCount = 0;
+
+  for (const submission of submissions) {
+    const roundSubmissions = submissionsByRoundId.get(submission.roundId) ?? [];
+
+    roundSubmissions.push(submission);
+    submissionsByRoundId.set(submission.roundId, roundSubmissions);
+
+    if (isScoredSubmission(submission)) {
+      scoredSubmissionCount += 1;
+    }
+  }
 
   for (const submission of submissions) {
     if (!isScoredSubmission(submission)) {
@@ -657,7 +670,26 @@ function deriveGameStandings(submissions) {
     }
   }
 
-  return standings;
+  const hasIncompleteSubmittedRound = [...submissionsByRoundId.values()].some(
+    (roundSubmissions) =>
+      roundSubmissions.length > 0 &&
+      roundSubmissions.some((submission) => !isScoredSubmission(submission)),
+  );
+  const hasPartialScoreRankPair = submissions.some(
+    (submission) =>
+      (submission.score === null && submission.rank !== null) ||
+      (submission.score !== null && submission.rank === null),
+  );
+  const completeness = hasIncompleteSubmittedRound
+    ? "partial"
+    : scoredSubmissionCount === 0 && !hasPartialScoreRankPair
+      ? "none"
+      : "complete";
+
+  return {
+    rows: standings,
+    completeness,
+  };
 }
 
 function formatGenericCount(count, singular, plural = `${singular}s`) {
@@ -903,18 +935,32 @@ function buildSelectedRoundSummary(round, submissions, gameId) {
   };
 }
 
-function buildSelectedGameCompetitiveAnchor(submissions) {
+function buildCompetitiveLeaderHref(gameId, leader) {
+  return buildMemoryBoardEvidenceHref({ gameId }) ?? "/";
+}
+
+function buildSelectedGameCompetitiveAnchor(submissions, gameId = null) {
   const standings = deriveGameStandings(submissions);
 
-  if (standings.length === 0) {
+  if (standings.completeness === "none") {
     return null;
   }
 
-  const leaderScore = standings[0].totalScore;
-  const leaders = standings.filter((standing) => standing.totalScore === leaderScore);
-  const incompleteSubmissionCount = submissions.filter(
-    (submission) => submission.score === null || submission.rank === null,
-  ).length;
+  if (standings.completeness === "partial") {
+    return {
+      kind: "unavailable",
+      title: "Results need complete score evidence",
+      leaders: [],
+      scoreContext: null,
+      unavailableReason: "partial-score-rank-evidence",
+      body:
+        "At least one selected-game round has incomplete score or rank data, so game-level leader claims stay unavailable.",
+      standings: [],
+    };
+  }
+
+  const leaderScore = standings.rows[0].totalScore;
+  const leaders = standings.rows.filter((standing) => standing.rank === 1);
   const scoredRoundCount = new Set(
     submissions
       .filter((submission) => isScoredSubmission(submission))
@@ -922,13 +968,12 @@ function buildSelectedGameCompetitiveAnchor(submissions) {
   ).size;
   const evidenceRoundId =
     submissions.find((submission) => isScoredSubmission(submission))?.roundId ?? null;
+  const leaderLabel = leaders.map((leader) => leader.player.displayName).join(", ");
   const title =
     leaders.length === 1
       ? `${leaders[0].player.displayName} leads the game`
-      : `Tied leaders: ${leaders
-          .map((leader) => leader.player.displayName)
-          .join(", ")}`;
-  const baseBody =
+      : `Tied leaders: ${leaderLabel}`;
+  const scoreContext =
     leaders.length === 1
       ? `${leaders[0].totalScore} points across ${formatGenericCount(
           leaders[0].scoredSubmissionCount,
@@ -938,43 +983,74 @@ function buildSelectedGameCompetitiveAnchor(submissions) {
           scoredRoundCount,
           "scored round",
         )}.`;
-  const caveat =
-    incompleteSubmissionCount > 0
-      ? ` ${formatGenericCount(
-          incompleteSubmissionCount,
-          "unscored pick",
-        )} omitted from outcome claims.`
-      : "";
 
   return {
+    kind: leaders.length === 1 ? "leader" : "tied-leaders",
     title,
-    body: `${baseBody}${caveat}`,
+    body: scoreContext,
     leaders: leaders.map((leader) => ({
       ...leader,
+      rank: 1,
+      href: buildCompetitiveLeaderHref(gameId, leader),
       playerName: leader.player.displayName,
     })),
+    scoreContext,
+    unavailableReason: null,
     scoredRoundCount,
     evidenceRoundId,
-    incompleteSubmissionCount,
-    standings: standings.slice(0, 3).map((standing) => ({
+    incompleteSubmissionCount: 0,
+    standings: standings.rows.slice(0, 3).map((standing) => ({
       ...standing,
       playerName: standing.player.displayName,
     })),
   };
 }
 
-function buildMemoryBoardMoment(kind, label, title, body, href = null) {
+function buildMemoryBoardMoment(kind, label, title, body, href = null, details = {}) {
+  const family = details.family ?? kind;
+  const lens =
+    details.lens ??
+    (kind === "competitive"
+      ? "competitive"
+      : kind === "song"
+        ? "song-discovery"
+        : "social-participation");
+  const evidence =
+    details.evidence ??
+    (href
+      ? [
+          {
+            kind: details.evidenceKind ?? "game",
+            label,
+            href,
+            requiresGameContext: true,
+            target: details.target,
+          },
+        ]
+      : []);
+
   return {
+    id: details.id ?? family,
+    family,
+    lens,
     kind,
     label,
     title,
+    copy: body,
     body,
+    sourceFacts: details.sourceFacts ?? [],
+    denominator: details.denominator ?? "selected game",
+    evidence,
     href,
   };
 }
 
 function buildSelectedGameCompetitiveMoment(competitiveAnchor, gameId) {
-  if (!competitiveAnchor) {
+  if (
+    !competitiveAnchor ||
+    competitiveAnchor.kind === "unavailable" ||
+    competitiveAnchor.unavailableReason !== null
+  ) {
     return null;
   }
 
@@ -991,14 +1067,161 @@ function buildSelectedGameCompetitiveMoment(competitiveAnchor, gameId) {
     "competitive",
     "Score evidence",
     `${formatGenericCount(competitiveAnchor.scoredRoundCount, "scored round")} counted`,
-    competitiveAnchor.incompleteSubmissionCount > 0
-      ? `${formatGenericCount(
-          competitiveAnchor.incompleteSubmissionCount,
-          "unscored pick",
-        )} stayed out of result claims.`
-      : "The board uses selected-game scored submissions for the result.",
+    "The board uses complete selected-game scored submissions for the result.",
     href,
+    {
+      id: "the-table",
+      family: "the-table",
+      lens: "competitive",
+      sourceFacts: ["players", "games", "rounds", "submissions", "scores", "ranks"],
+      denominator: "complete scored submissions in the selected game",
+      evidenceKind: competitiveAnchor.evidenceRoundId === null ? "game" : "vote-breakdown",
+      target:
+        competitiveAnchor.evidenceRoundId === null
+          ? { gameId }
+          : {
+              gameId,
+              roundId: competitiveAnchor.evidenceRoundId,
+              section: "vote-breakdown",
+            },
+    },
   );
+}
+
+function getCompleteScoredRoundSubmissions(submissions) {
+  if (submissions.length < 2) {
+    return [];
+  }
+
+  return submissions.every((submission) => isScoredSubmission(submission))
+    ? [...submissions].sort(compareSelectedSubmissionOrder)
+    : [];
+}
+
+function deriveGameSwingMoment(input) {
+  const rounds = input?.rounds ?? [];
+  const submissions = input?.submissions ?? [];
+  const gameId =
+    normalizePositiveInteger(input?.gameId) ??
+    normalizePositiveInteger(rounds.find((round) => round?.gameId !== undefined)?.gameId);
+  const submissionsByRoundId = new Map();
+
+  for (const submission of submissions) {
+    const roundSubmissions = submissionsByRoundId.get(submission.roundId) ?? [];
+
+    roundSubmissions.push(submission);
+    submissionsByRoundId.set(submission.roundId, roundSubmissions);
+  }
+
+  const candidates = [];
+
+  for (const round of rounds) {
+    const roundSubmissions = getCompleteScoredRoundSubmissions(
+      submissionsByRoundId.get(round.id) ?? [],
+    );
+
+    if (roundSubmissions.length < 2) {
+      continue;
+    }
+
+    const scoreGroups = new Map();
+
+    for (const submission of roundSubmissions) {
+      const group = scoreGroups.get(submission.score) ?? [];
+
+      group.push(submission);
+      scoreGroups.set(submission.score, group);
+    }
+
+    const scores = [...scoreGroups.keys()].sort((left, right) => right - left);
+    const topScore = scores[0];
+    const runnerUpScore = scores.find((score) => score < topScore) ?? null;
+    const topSubmissions = scoreGroups.get(topScore) ?? [];
+    const runnerUpSubmissions =
+      runnerUpScore === null ? [] : (scoreGroups.get(runnerUpScore) ?? []);
+
+    if (
+      runnerUpScore === null ||
+      topSubmissions.length !== 1 ||
+      runnerUpSubmissions.length === 0
+    ) {
+      continue;
+    }
+
+    const margin = topScore - runnerUpScore;
+    const winner = topSubmissions[0];
+    const runnerUp = runnerUpSubmissions.sort(compareSelectedSubmissionOrder)[0];
+
+    if (margin === 1) {
+      candidates.push({
+        type: "photo-finish",
+        priority: 0,
+        margin,
+        round,
+        winner,
+        runnerUp,
+        submissionCount: roundSubmissions.length,
+      });
+    } else if (margin >= 5) {
+      candidates.push({
+        type: "runaway-pick",
+        priority: 1,
+        margin,
+        round,
+        winner,
+        runnerUp,
+        submissionCount: roundSubmissions.length,
+      });
+    }
+  }
+
+  const selectedCandidate = candidates.sort((left, right) => {
+    if (left.priority !== right.priority) {
+      return left.priority - right.priority;
+    }
+
+    if (left.type === "runaway-pick" && left.margin !== right.margin) {
+      return right.margin - left.margin;
+    }
+
+    return compareRoundOrder(left.round, right.round);
+  })[0];
+
+  if (!selectedCandidate || gameId === null) {
+    return null;
+  }
+
+  const { type, margin, round, winner, runnerUp, submissionCount } = selectedCandidate;
+  const href = buildMemoryBoardEvidenceHref({
+    gameId,
+    roundId: round.id,
+    section: "vote-breakdown",
+  });
+  const title = type === "photo-finish" ? "Photo Finish" : "Runaway Pick";
+  const copy =
+    type === "photo-finish"
+      ? `${winner.playerName}'s ${winner.songTitle} finished 1 point ahead of ${runnerUp.playerName}'s ${runnerUp.songTitle} in ${round.name}, across ${formatGenericCount(
+          submissionCount,
+          "scored submission",
+        )}.`
+      : `${winner.playerName}'s ${winner.songTitle} finished ${margin} points ahead of ${runnerUp.playerName}'s ${runnerUp.songTitle} in ${round.name}, across ${formatGenericCount(
+          submissionCount,
+          "scored submission",
+        )}.`;
+
+  return buildMemoryBoardMoment("competitive", title, title, copy, href, {
+    id: `game-swing-${round.id}`,
+    family: "game-swing",
+    lens: "competitive",
+    sourceFacts: ["rounds", "submissions", "scores", "ranks"],
+    denominator: "scored submissions within one selected-game round",
+    evidenceKind: "vote-breakdown",
+    target: {
+      gameId,
+      roundId: round.id,
+      section: "vote-breakdown",
+    },
+  });
 }
 
 function buildSelectedGameSongMoment(submissions, roundsById, memoryEvidence, gameId) {
@@ -1050,6 +1273,19 @@ function buildSelectedGameSongMoment(submissions, roundsById, memoryEvidence, ga
         "prior exact-song appearance",
       )}.`,
       href,
+      {
+        id: `back-again-familiar-face-${submission.id}`,
+        family: "back-again-familiar-face",
+        lens: "song-discovery",
+        sourceFacts: ["games", "rounds", "submissions", "songs", "exported-artist-labels"],
+        denominator: "exact-song submissions across archive history",
+        evidenceKind: "song",
+        target: {
+          gameId,
+          roundId: submission.roundId,
+          songId: submission.songId,
+        },
+      },
     );
   }
 
@@ -1063,6 +1299,19 @@ function buildSelectedGameSongMoment(submissions, roundsById, memoryEvidence, ga
         "prior exported-artist appearance",
       )} before ${roundName}.`,
       href,
+      {
+        id: `back-again-familiar-face-${submission.id}`,
+        family: "back-again-familiar-face",
+        lens: "song-discovery",
+        sourceFacts: ["games", "rounds", "submissions", "songs", "exported-artist-labels"],
+        denominator: "exported-artist submissions across archive history",
+        evidenceKind: "song",
+        target: {
+          gameId,
+          roundId: submission.roundId,
+          songId: submission.songId,
+        },
+      },
     );
   }
 
@@ -1072,6 +1321,19 @@ function buildSelectedGameSongMoment(submissions, roundsById, memoryEvidence, ga
     `${submission.songTitle} was new to this archive`,
     `No earlier exact-song or exported-artist history appeared before ${roundName}.`,
     href,
+    {
+      id: `new-to-us-that-landed-${submission.id}`,
+      family: "new-to-us-that-landed",
+      lens: "song-discovery",
+      sourceFacts: ["games", "rounds", "submissions", "songs", "exported-artist-labels"],
+      denominator: "archive history before the selected-game submission",
+      evidenceKind: "song",
+      target: {
+        gameId,
+        roundId: submission.roundId,
+        songId: submission.songId,
+      },
+    },
   );
 }
 
@@ -1091,6 +1353,15 @@ function buildSelectedGameParticipationMoment(rounds, submissions, votes, gameId
       "round",
     )}; ${formatGenericCount(votes.length, "vote")} imported where scoring exists.`,
     buildMemoryBoardEvidenceHref({ gameId }),
+    {
+      id: "participation-pulse",
+      family: "participation-pulse",
+      lens: "social-participation",
+      sourceFacts: ["players", "rounds", "submissions"],
+      denominator: "submitted songs, submitted rounds, and participating players in the selected game",
+      evidenceKind: "game",
+      target: { gameId },
+    },
   );
 }
 
@@ -1125,18 +1396,31 @@ function buildSelectedGameRoundWinnerMoments(rounds) {
     );
 }
 
-function buildSelectedGameSparseMoment(rounds) {
-  if (rounds.length === 0) {
-    return null;
+function buildSelectedGameSparseState(competitiveAnchor, submissions) {
+  if (submissions.length === 0) {
+    return {
+      title: "No submissions yet",
+      copy: "The selected game has rounds, but no submitted songs are available for board moments.",
+      omittedFamilies: [
+        "the-table",
+        "game-swing",
+        "new-to-us-that-landed",
+        "back-again-familiar-face",
+        "participation-pulse",
+      ],
+    };
   }
 
-  return buildMemoryBoardMoment(
-    "memory",
-    "Round evidence",
-    `${formatGenericCount(rounds.length, "round")} available`,
-    `${rounds.map((round) => round.name).join(", ")} remains available as canonical round evidence.`,
-    rounds[0].href,
-  );
+  if (competitiveAnchor?.kind === "unavailable") {
+    return {
+      title: "Some result claims are unavailable",
+      copy:
+        "Incomplete score or rank evidence suppresses game-level table claims while preserving unrelated selected-game memories.",
+      omittedFamilies: ["the-table"],
+    };
+  }
+
+  return null;
 }
 
 function buildSelectedGameBoard({ gameId, rounds, submissions, votes, memoryEvidence }) {
@@ -1153,22 +1437,26 @@ function buildSelectedGameBoard({ gameId, rounds, submissions, votes, memoryEvid
   const boardRounds = rounds.map((round) =>
     buildSelectedRoundSummary(round, submissionsByRoundId.get(round.id) ?? [], gameId),
   );
-  const competitiveAnchor = buildSelectedGameCompetitiveAnchor(submissions);
+  const competitiveAnchor = buildSelectedGameCompetitiveAnchor(submissions, gameId);
+  const swingMoment = deriveGameSwingMoment({
+    gameId,
+    rounds,
+    submissions,
+  });
   const coreMoments = [
     buildSelectedGameCompetitiveMoment(competitiveAnchor, gameId),
+    swingMoment,
     buildSelectedGameSongMoment(submissions, roundsById, memoryEvidence, gameId),
     buildSelectedGameParticipationMoment(boardRounds, submissions, votes, gameId),
-    buildSelectedGamePendingMoment(boardRounds),
-    ...buildSelectedGameRoundWinnerMoments(boardRounds),
   ].filter(Boolean);
-  const moments =
-    coreMoments.length > 0
-      ? coreMoments.slice(0, 6)
-      : [buildSelectedGameSparseMoment(boardRounds)].filter(Boolean);
+  const moments = coreMoments.slice(0, 6);
 
   return {
+    selectedGameId: gameId,
+    anchor: competitiveAnchor,
     competitiveAnchor,
     moments,
+    sparseState: buildSelectedGameSparseState(competitiveAnchor, submissions),
     rounds: boardRounds,
   };
 }
@@ -2804,9 +3092,11 @@ module.exports = {
   buildArchiveHref,
   buildCanonicalSongMemoryHref,
   buildMemoryBoardEvidenceHref,
+  buildSelectedGameCompetitiveAnchor,
   compareSongMemoryHistoryOrder,
   deriveSongFamiliarity,
   deriveGameStandings,
+  deriveGameSwingMoment,
   derivePlayerPerformanceMetrics,
   derivePlayerTrait,
   getPlayerModalSubmission,
