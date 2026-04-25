@@ -1,10 +1,10 @@
 import React from "react";
 import archivePageModule from "../src/archive/game-archive-page";
 
-const { buildGameArchivePageProps, GameArchivePage } = archivePageModule;
+const { buildGameMemoryBoardPageProps, GameMemoryBoardPage } = archivePageModule;
 
 export default async function ArchivePageRoute({ searchParams }) {
-  const props = await buildGameArchivePageProps({ searchParams });
+  const props = await buildGameMemoryBoardPageProps({ searchParams });
 
-  return React.createElement(GameArchivePage, props);
+  return React.createElement(GameMemoryBoardPage, props);
 }

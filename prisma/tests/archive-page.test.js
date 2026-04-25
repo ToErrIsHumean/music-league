@@ -4,9 +4,12 @@ const React = require("react");
 const { renderToStaticMarkup } = require("react-dom/server");
 const { createTempPrismaDb } = require("./helpers/temp-prisma-db");
 const {
-  GameArchivePage,
-  buildGameArchivePageProps,
+  GameMemoryBoardPage,
+  buildGameMemoryBoardPageProps,
 } = require("../../src/archive/game-archive-page");
+
+const GameArchivePage = GameMemoryBoardPage;
+const buildGameArchivePageProps = buildGameMemoryBoardPageProps;
 
 const { prisma, cleanup } = createTempPrismaDb({
   prefix: "music-league-archive-page-",
@@ -36,41 +39,70 @@ async function findSongIdBySpotifyUri(spotifyUri) {
   return song.id;
 }
 
+async function findGameIdBySourceId(sourceGameId) {
+  const game = await prisma.game.findUnique({
+    where: { sourceGameId },
+    select: { id: true },
+  });
+
+  assert.ok(game, `expected seeded game ${sourceGameId} to exist`);
+
+  return game.id;
+}
+
 test.after(async () => {
   await cleanup();
 });
 
 test(
-  "archive page props and markup render grouped game summaries with concise signals",
+  "archive page resolves one deterministic selected game with switcher and memory moments",
   { concurrency: false },
   async () => {
     const props = await buildGameArchivePageProps({ prisma });
     const markup = renderToStaticMarkup(React.createElement(GameArchivePage, props));
 
+    assert.equal(props.selectedGame.displayLabel, "After Party League");
+    assert.equal(props.selectedGame.selectionBasis, "round-occurred-at");
+    assert.equal(props.selectedGame.selectionCopy, "Latest game");
     assert.deepEqual(
       props.games.map((game) => game.displayLabel),
       ["After Party League", "main"],
     );
+    assert.deepEqual(
+      props.games.map((game) => game.isSelected),
+      [true, false],
+    );
+    assert.deepEqual(
+      props.board.rounds.map((round) => round.name),
+      ["Wildcard Waltz", "Sunset Static"],
+    );
+    assert.equal(props.board.competitiveAnchor.title, "Alice Arcade leads the game");
+    assert.equal(props.board.moments.length, 5);
     assert.equal(props.openRoundId, null);
     assert.equal(props.openRound, null);
-    assert.equal(props.notFoundNotice, null);
+    assert.deepEqual(props.notices, []);
     assert.match(markup, /After Party League/);
     assert.match(markup, /main/);
     assert.match(markup, /Wildcard Waltz/);
-    assert.match(markup, /Second Spin/);
-    assert.match(markup, /Date TBD/);
-    assert.match(markup, /Awaiting votes/);
-    assert.match(markup, /Winner: Tied winners/);
+    assert.match(markup, /Competitive anchor/);
+    assert.match(markup, /Alice Arcade leads the game/);
+    assert.match(markup, /Still unfolding/);
+    assert.match(markup, /Participation pulse/);
+    assert.ok(!markup.includes("Second Spin"), "default board must not blend another game");
     assert.ok(
       !markup.includes("Mr. Brightside"),
       "round summaries should stay concise and avoid inline submission lists",
     );
 
-    const signalCount = (markup.match(/class=\"archive-signal\"/g) ?? []).length;
-    const roundCount = props.games.reduce((count, game) => count + game.rounds.length, 0);
+    const momentCount =
+      (markup.match(/class=\"archive-memory-moment archive-memory-moment-/g) ?? []).length;
 
-    assert.equal(signalCount, roundCount * 3);
-    assert.ok(props.games.every((game) => game.rounds.every((round) => round.href === `/?round=${round.id}`)));
+    assert.equal(momentCount, props.board.moments.length);
+    assert.ok(
+      props.board.rounds.every(
+        (round) => round.href === `/?game=${props.selectedGame.id}&round=${round.id}`,
+      ),
+    );
   },
 );
 
@@ -88,10 +120,203 @@ test(
 
     assert.equal(props.openRoundId, null);
     assert.equal(props.openRound, null);
-    assert.equal(props.notFoundNotice, "Round not found.");
+    assert.deepEqual(props.notices, ["Round not found."]);
     assert.match(markup, /Round not found\./);
     assert.match(markup, /After Party League/);
-    assert.match(markup, /main/);
+    assert.ok(!markup.includes("Second Spin"), "missing round should keep the selected board scoped");
+  },
+);
+
+test(
+  "selected game query switches the board without blending other games",
+  { concurrency: false },
+  async () => {
+    const mainGameId = await findGameIdBySourceId("main");
+    const props = await buildGameArchivePageProps({
+      prisma,
+      searchParams: Promise.resolve({
+        game: String(mainGameId),
+      }),
+    });
+    const markup = renderToStaticMarkup(React.createElement(GameArchivePage, props));
+
+    assert.equal(props.selectedGame.id, mainGameId);
+    assert.equal(props.selectedGame.displayLabel, "main");
+    assert.equal(props.selectedGame.selectionBasis, "explicit-query");
+    assert.equal(props.selectedGame.selectionCopy, "Selected game");
+    assert.deepEqual(
+      props.board.rounds.map((round) => round.name),
+      ["Opening Night", "Second Spin"],
+    );
+    assert.match(markup, /Second Spin/);
+    assert.ok(!markup.includes("Wildcard Waltz"), "explicit game selection must not blend games");
+  },
+);
+
+test(
+  "single selectable game suppresses the switcher",
+  { concurrency: false },
+  async () => {
+    const singleDb = createTempPrismaDb({
+      prefix: "music-league-single-game-",
+      filename: "single.sqlite",
+      seed: false,
+    });
+
+    try {
+      const game = await singleDb.prisma.game.create({
+        data: {
+          sourceGameId: "single",
+          displayName: "Single Game",
+          rounds: {
+            create: {
+              leagueSlug: "single",
+              sourceRoundId: "single-r1",
+              name: "Only Round",
+            },
+          },
+        },
+      });
+      const props = await buildGameArchivePageProps({ prisma: singleDb.prisma });
+      const markup = renderToStaticMarkup(React.createElement(GameArchivePage, props));
+
+      assert.equal(props.selectedGame.id, game.id);
+      assert.deepEqual(props.games, []);
+      assert.match(markup, /Single Game/);
+      assert.ok(!markup.includes("archive-game-switcher"));
+    } finally {
+      await singleDb.cleanup();
+    }
+  },
+);
+
+test(
+  "no selectable game renders unavailable state and ignores nested params",
+  { concurrency: false },
+  async () => {
+    const emptyDb = createTempPrismaDb({
+      prefix: "music-league-empty-board-",
+      filename: "empty.sqlite",
+      seed: false,
+    });
+
+    try {
+      await emptyDb.prisma.game.create({
+        data: {
+          sourceGameId: "roundless",
+          displayName: "Roundless",
+        },
+      });
+      const props = await buildGameArchivePageProps({
+        prisma: emptyDb.prisma,
+        searchParams: Promise.resolve({
+          round: "1",
+          song: "1",
+          player: "1",
+        }),
+      });
+      const markup = renderToStaticMarkup(React.createElement(GameArchivePage, props));
+
+      assert.equal(props.selectedGame, null);
+      assert.equal(props.board, null);
+      assert.deepEqual(props.games, []);
+      assert.deepEqual(props.notices, []);
+      assert.equal(props.openRound, null);
+      assert.equal(props.nestedEntity, null);
+      assert.match(markup, /No selectable game is available/);
+      assert.ok(!markup.includes("Roundless"));
+    } finally {
+      await emptyDb.cleanup();
+    }
+  },
+);
+
+test(
+  "weak fallback ordering uses cautious selected-game copy",
+  { concurrency: false },
+  async () => {
+    const fallbackDb = createTempPrismaDb({
+      prefix: "music-league-fallback-copy-",
+      filename: "fallback.sqlite",
+      seed: false,
+    });
+
+    try {
+      const createdAt = new Date("2024-01-01T00:00:00.000Z");
+
+      await fallbackDb.prisma.game.create({
+        data: {
+          sourceGameId: "bravo",
+          displayName: "Bravo",
+          createdAt,
+          rounds: {
+            create: {
+              leagueSlug: "bravo",
+              sourceRoundId: "bravo-r1",
+              name: "Bravo Round",
+            },
+          },
+        },
+      });
+      await fallbackDb.prisma.game.create({
+        data: {
+          sourceGameId: "alpha",
+          displayName: "Alpha",
+          createdAt,
+          rounds: {
+            create: {
+              leagueSlug: "alpha",
+              sourceRoundId: "alpha-r1",
+              name: "Alpha Round",
+            },
+          },
+        },
+      });
+
+      const props = await buildGameArchivePageProps({ prisma: fallbackDb.prisma });
+      const markup = renderToStaticMarkup(React.createElement(GameArchivePage, props));
+
+      assert.equal(props.selectedGame.displayLabel, "Alpha");
+      assert.equal(props.selectedGame.selectionBasis, "stable-source-game-id");
+      assert.equal(props.selectedGame.selectionCopy, "Selected game");
+      assert.ok(!markup.includes("Latest game"));
+    } finally {
+      await fallbackDb.cleanup();
+    }
+  },
+);
+
+test(
+  "invalid game params are non-blocking and cross-game rounds do not open",
+  { concurrency: false },
+  async () => {
+    const mainGameId = await findGameIdBySourceId("main");
+    const afterpartyGameId = await findGameIdBySourceId("afterparty");
+    const mainRoundId = await findRoundIdBySourceId("seed-r1");
+
+    const invalidGameProps = await buildGameArchivePageProps({
+      prisma,
+      searchParams: Promise.resolve({
+        game: "999999",
+        round: String(mainRoundId),
+      }),
+    });
+
+    assert.equal(invalidGameProps.selectedGame.id, mainGameId);
+    assert.equal(invalidGameProps.openRoundId, mainRoundId);
+    assert.deepEqual(invalidGameProps.notices, ["Game not found."]);
+
+    const mismatchProps = await buildGameArchivePageProps({
+      prisma,
+      searchParams: Promise.resolve({
+        game: String(afterpartyGameId),
+        round: String(mainRoundId),
+      }),
+    });
+
+    assert.equal(mismatchProps.selectedGame.id, afterpartyGameId);
+    assert.equal(mismatchProps.openRound, null);
+    assert.deepEqual(mismatchProps.notices, ["Round not found in selected game."]);
   },
 );
 
@@ -109,9 +334,11 @@ test(
     const markup = renderToStaticMarkup(React.createElement(GameArchivePage, props));
 
     assert.equal(props.openRoundId, roundId);
+    assert.equal(props.selectedGame.displayLabel, "main");
+    assert.equal(props.selectedGame.selectionBasis, "explicit-query");
     assert.ok(props.openRound, "expected direct entry to resolve an open round");
     assert.equal(props.openRound.game.displayLabel, "main");
-    assert.equal(props.notFoundNotice, null);
+    assert.deepEqual(props.notices, []);
     assert.match(markup, /role=\"dialog\"/);
     assert.match(markup, /Round detail/);
     assert.match(markup, /From main/);
@@ -252,9 +479,14 @@ test(
 
     assert.match(
       songShellMarkup,
-      new RegExp(`href=\"/\\?round=${evidenceRow.roundId}&amp;player=${evidenceRow.submitter.id}\"`),
+      new RegExp(
+        `href=\"/\\?game=${evidenceRow.gameId}&amp;round=${evidenceRow.roundId}&amp;player=${evidenceRow.submitter.id}\"`,
+      ),
     );
-    assert.match(songShellMarkup, new RegExp(`href=\"/\\?round=${evidenceRow.roundId}\"`));
+    assert.match(
+      songShellMarkup,
+      new RegExp(`href=\"/\\?game=${evidenceRow.gameId}&amp;round=${evidenceRow.roundId}\"`),
+    );
 
     const outOfScopeCopy = [
       /global search/i,
@@ -292,7 +524,9 @@ test(
     for (const submission of playerProps.openPlayerModal.history) {
       assert.match(
         playerShellMarkup,
-        new RegExp(`href=\"/\\?round=${submission.roundId}&amp;song=${submission.song.id}\"`),
+        new RegExp(
+          `href=\"/\\?game=${submission.gameId}&amp;round=${submission.roundId}&amp;song=${submission.song.id}\"`,
+        ),
       );
     }
 
@@ -410,16 +644,24 @@ test(
     assert.ok(props.openSongModal.historyGroups.length > 0);
     const evidenceRow = props.openSongModal.historyGroups[0].rows[0];
     assert.equal((markup.match(/role=\"dialog\"/g) ?? []).length, 2);
-    assert.match(markup, new RegExp(`href=\"/\\?round=${roundId}&amp;song=${targetSubmission.song.id}\"`));
     assert.match(
       markup,
-      new RegExp(`href=\"/\\?round=${roundId}&amp;player=${targetSubmission.player.id}\"`),
+      new RegExp(`href=\"/\\?game=${props.selectedGame.id}&amp;round=${roundId}&amp;song=${targetSubmission.song.id}\"`),
     );
     assert.match(
       markup,
-      new RegExp(`href=\"/\\?round=${evidenceRow.roundId}&amp;player=${evidenceRow.submitter.id}\"`),
+      new RegExp(`href=\"/\\?game=${props.selectedGame.id}&amp;round=${roundId}&amp;player=${targetSubmission.player.id}\"`),
     );
-    assert.match(markup, new RegExp(`href=\"/\\?round=${evidenceRow.roundId}\"`));
+    assert.match(
+      markup,
+      new RegExp(
+        `href=\"/\\?game=${evidenceRow.gameId}&amp;round=${evidenceRow.roundId}&amp;player=${evidenceRow.submitter.id}\"`,
+      ),
+    );
+    assert.match(
+      markup,
+      new RegExp(`href=\"/\\?game=${evidenceRow.gameId}&amp;round=${evidenceRow.roundId}\"`),
+    );
     assert.match(markup, /Song memory/);
     assert.match(markup, new RegExp(targetSubmission.song.title));
     assert.match(markup, new RegExp(targetSubmission.song.artistName));
@@ -458,7 +700,7 @@ test(
     const markup = renderToStaticMarkup(React.createElement(GameArchivePage, props));
     const songShellMarkup = markup.slice(markup.lastIndexOf('data-nested-kind="song"'));
     const closeHrefMatches = songShellMarkup.match(
-      new RegExp(`href=\"/\\?round=${roundId}\"`, "g"),
+      new RegExp(`href=\"/\\?game=${props.selectedGame.id}&amp;round=${roundId}\"`, "g"),
     );
 
     assert.deepEqual(props.nestedEntity, {
@@ -470,11 +712,15 @@ test(
     assert.ok(closeHrefMatches.length >= 2);
     assert.match(
       songShellMarkup,
-      new RegExp(`href=\"/\\?round=${roundId}\" class=\"archive-nested-shell-backdrop\"`),
+      new RegExp(
+        `href=\"/\\?game=${props.selectedGame.id}&amp;round=${roundId}\" class=\"archive-nested-shell-backdrop\"`,
+      ),
     );
     assert.match(
       songShellMarkup,
-      new RegExp(`href=\"/\\?round=${roundId}\" class=\"archive-round-close\"`),
+      new RegExp(
+        `href=\"/\\?game=${props.selectedGame.id}&amp;round=${roundId}\" class=\"archive-round-close\"`,
+      ),
     );
     assert.ok(!songShellMarkup.includes("playerSubmission="));
     assert.match(songShellMarkup, /Back to round/);
@@ -504,13 +750,16 @@ test(
       unavailable: true,
       originRoundId: roundId,
       requestedSongId: staleSongId,
-      closeHref: `/?round=${roundId}`,
+      closeHref: `/?game=${props.selectedGame.id}&round=${roundId}`,
     });
     assert.equal(props.openPlayerModal, null);
     assert.equal((markup.match(/role=\"dialog\"/g) ?? []).length, 2);
     assert.match(markup, /Song detail unavailable/);
     assert.match(markup, /This song detail is unavailable for the open round/);
-    assert.match(markup, new RegExp(`href=\"/\\?round=${roundId}\"`));
+    assert.match(
+      markup,
+      new RegExp(`href=\"/\\?game=${props.selectedGame.id}&amp;round=${roundId}\"`),
+    );
     assert.match(markup, /Round detail/);
   },
 );
@@ -665,10 +914,13 @@ test(
     assert.match(
       markup,
       new RegExp(
-        `href=\"/\\?round=${playerHistorySubmission.round.id}&amp;song=${playerHistorySubmission.song.id}\"`,
+        `href=\"/\\?game=${props.selectedGame.id}&amp;round=${playerHistorySubmission.round.id}&amp;song=${playerHistorySubmission.song.id}\"`,
       ),
     );
-    assert.match(markup, new RegExp(`href=\"/\\?round=${playerHistorySubmission.round.id}\"`));
+    assert.match(
+      markup,
+      new RegExp(`href=\"/\\?game=${props.selectedGame.id}&amp;round=${playerHistorySubmission.round.id}\"`),
+    );
     assert.match(markup, new RegExp(playerHistorySubmission.round.name));
     assert.ok(!markup.includes("Round-scoped submission"));
     assert.ok(!markup.includes("playerSubmission="));
@@ -745,7 +997,11 @@ test(
     assert.ok(markup.includes(playerHistorySubmission.song.title));
     assert.ok(markup.includes(playerHistorySubmission.round.name));
     assert.match(markup, /archive-song-modal-familiarity/);
-    assert.ok(!playerShellMarkup.includes(`href="/?round=${playerHistorySubmission.round.id}"`));
+    assert.ok(
+      !playerShellMarkup.includes(
+        `href="/?game=${props.selectedGame.id}&round=${playerHistorySubmission.round.id}"`,
+      ),
+    );
     assert.ok(!playerShellMarkup.includes("playerSubmission="));
     assert.equal((playerShellMarkup.match(/href=\"/g) ?? []).length, 2);
   },

@@ -48,6 +48,20 @@ async function findRoundIdBySourceId(sourceRoundId) {
   return round.id;
 }
 
+async function findRoundGameId(roundId) {
+  const round = await prisma.round.findUnique({
+    where: {
+      id: roundId,
+    },
+    select: {
+      gameId: true,
+    },
+  });
+
+  assert.ok(round, `expected round ${roundId} to exist`);
+  return round.gameId;
+}
+
 async function findSongIdBySpotifyUri(spotifyUri) {
   const song = await prisma.song.findUnique({
     where: {
@@ -1826,6 +1840,7 @@ test(
       exactSubmissions.map((submission) => [submission.round.sourceRoundId, submission.id]),
     );
     const modal = await getSongMemoryModal(originRoundId, songId, { prisma });
+    const originGameId = await findRoundGameId(originRoundId);
 
     assert.ok(modal);
     assert.equal(modal.originRoundId, originRoundId);
@@ -1834,7 +1849,7 @@ test(
       title: "The Long Way Home",
       artistName: "Solar Static",
     });
-    assert.equal(modal.closeHref, `/?round=${originRoundId}`);
+    assert.equal(modal.closeHref, `/?game=${originGameId}&round=${originRoundId}`);
     assert.equal(modal.familiarity.kind, "brought-back");
     assert.equal(modal.familiarity.label, "Brought back");
     assert.equal(modal.familiarity.priorExactSongSubmissionCount, 1);
@@ -2002,12 +2017,13 @@ test(
 
     const staleRoundId = await findRoundIdBySourceId("seed-r1");
     const staleSongId = await findSongIdBySpotifyUri("spotify:track:seed-song-005");
+    const staleGameId = await findRoundGameId(staleRoundId);
 
     assert.deepEqual(await getSongMemoryModal(staleRoundId, staleSongId, { prisma }), {
       unavailable: true,
       originRoundId: staleRoundId,
       requestedSongId: staleSongId,
-      closeHref: `/?round=${staleRoundId}`,
+      closeHref: `/?game=${staleGameId}&round=${staleRoundId}`,
     });
     assert.equal(await getSongMemoryModal(999999, staleSongId, { prisma }), null);
   },
@@ -2138,11 +2154,13 @@ test(
     });
     assert.equal(sparseModal.historyGroups[0].rows[0].comment, null);
 
+    const fixtureOriginGameId = await findRoundGameId(fixture.originRoundId);
+
     assert.deepEqual(await getSongMemoryModal(fixture.originRoundId, fixture.staleSongId, { prisma }), {
       unavailable: true,
       originRoundId: fixture.originRoundId,
       requestedSongId: fixture.staleSongId,
-      closeHref: `/?round=${fixture.originRoundId}`,
+      closeHref: `/?game=${fixtureOriginGameId}&round=${fixture.originRoundId}`,
     });
   },
 );
@@ -2604,15 +2622,21 @@ test("archive href helper canonicalizes round-first URL state", () => {
   );
   assert.equal(buildArchiveHref({ roundId: 5, playerSubmissionId: 9 }), "/?round=5");
   assert.equal(buildArchiveHref({ roundId: 5, songId: 2 }), "/?round=5&song=2");
+  assert.equal(buildArchiveHref({ gameId: 7 }), "/?game=7");
+  assert.equal(
+    buildArchiveHref({ gameId: 7, roundId: 5, songId: 2 }),
+    "/?game=7&round=5&song=2",
+  );
   assert.equal(buildArchiveHref({ roundId: -1, playerId: 3 }), "/");
   assert.equal(
     buildCanonicalSongMemoryHref({
+      gameId: 7,
       roundId: 5,
       songId: 2,
       playerId: 3,
       playerSubmissionId: 9,
     }),
-    "/?round=5&song=2",
+    "/?game=7&round=5&song=2",
   );
 });
 
