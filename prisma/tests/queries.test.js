@@ -2,8 +2,10 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { createTempPrismaDb } = require("./helpers/temp-prisma-db");
 const {
+  applySelectedGameRouteContext,
   buildArchiveHref,
   buildCanonicalSongMemoryHref,
+  buildMemoryBoardEvidenceHref,
   deriveGameStandings,
   derivePlayerPerformanceMetrics,
   derivePlayerTrait,
@@ -2745,6 +2747,10 @@ test("archive href helper canonicalizes round-first URL state", () => {
     buildArchiveHref({ gameId: 7, roundId: 5, songId: 2 }),
     "/?game=7&round=5&song=2",
   );
+  assert.equal(
+    buildArchiveHref({ gameId: 7, roundId: 5, fragment: "vote-breakdown" }),
+    "/?game=7&round=5#vote-breakdown",
+  );
   assert.equal(buildArchiveHref({ roundId: -1, playerId: 3 }), "/");
   assert.equal(
     buildCanonicalSongMemoryHref({
@@ -2756,6 +2762,82 @@ test("archive href helper canonicalizes round-first URL state", () => {
     }),
     "/?game=7&round=5&song=2",
   );
+});
+
+test("memory board evidence href helper targets canonical selected-game destinations", () => {
+  assert.equal(buildMemoryBoardEvidenceHref({ gameId: 7 }), "/?game=7");
+  assert.equal(
+    buildMemoryBoardEvidenceHref({ gameId: 7, roundId: 5 }),
+    "/?game=7&round=5",
+  );
+  assert.equal(
+    buildMemoryBoardEvidenceHref({ gameId: 7, roundId: 5, songId: 2 }),
+    "/?game=7&round=5&song=2",
+  );
+  assert.equal(
+    buildMemoryBoardEvidenceHref({ gameId: 7, roundId: 5, playerId: 3 }),
+    "/?game=7&round=5&player=3",
+  );
+  assert.equal(
+    buildMemoryBoardEvidenceHref({
+      gameId: 7,
+      roundId: 5,
+      playerId: 3,
+      submissionId: 9,
+    }),
+    "/?game=7&round=5&player=3&playerSubmission=9",
+  );
+  assert.equal(
+    buildMemoryBoardEvidenceHref({ gameId: 7, roundId: 5, submissionId: 9 }),
+    "/?game=7&round=5#submission-9",
+  );
+  assert.equal(
+    buildMemoryBoardEvidenceHref({ gameId: 7, roundId: 5, section: "vote-breakdown" }),
+    "/?game=7&round=5#vote-breakdown",
+  );
+  assert.equal(buildMemoryBoardEvidenceHref({ roundId: 5, songId: 2 }), null);
+});
+
+test("selected-game route context adapter rewrites return and evidence hrefs without changing identity", () => {
+  const roundPayload = {
+    id: 5,
+    game: {
+      id: 7,
+      displayLabel: "League",
+    },
+    submissions: [
+      {
+        id: 9,
+        song: {
+          id: 2,
+        },
+        player: {
+          id: 3,
+        },
+      },
+    ],
+    voteBreakdown: [
+      {
+        submissionId: 9,
+      },
+    ],
+  };
+
+  const adaptedRound = applySelectedGameRouteContext(roundPayload, {
+    selectedGameId: 7,
+    openRoundId: 5,
+    selectedGameHref: "/?game=7",
+  });
+
+  assert.notEqual(adaptedRound, roundPayload);
+  assert.equal(adaptedRound.id, roundPayload.id);
+  assert.equal(adaptedRound.closeHref, "/?game=7");
+  assert.equal(adaptedRound.href, "/?game=7&round=5");
+  assert.equal(adaptedRound.submissions[0].href, "/?game=7&round=5#submission-9");
+  assert.equal(adaptedRound.submissions[0].songHref, "/?game=7&round=5&song=2");
+  assert.equal(adaptedRound.submissions[0].playerHref, "/?game=7&round=5&player=3");
+  assert.equal(adaptedRound.voteBreakdownHref, "/?game=7&round=5#vote-breakdown");
+  assert.equal(adaptedRound.voteBreakdown[0].href, "/?game=7&round=5#submission-9");
 });
 
 test(

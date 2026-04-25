@@ -393,6 +393,56 @@ test(
 );
 
 test(
+  "selected-game evidence links expose canonical paths and stable round fragments",
+  { concurrency: false },
+  async () => {
+    const roundId = await findRoundIdBySourceId("seed-r1");
+    const props = await buildGameArchivePageProps({
+      prisma,
+      searchParams: Promise.resolve({
+        round: String(roundId),
+      }),
+    });
+    const markup = renderToStaticMarkup(React.createElement(GameArchivePage, props));
+
+    assert.ok(props.board.moments.length > 0);
+    assert.ok(
+      props.board.moments.every((moment) => typeof moment.href === "string" && moment.href.length > 0),
+      "every rendered board moment should expose a canonical evidence href",
+    );
+    assert.ok(props.openRound, "expected round evidence to be open");
+    assert.equal(props.openRound.closeHref, `/?game=${props.selectedGame.id}`);
+    assert.equal(
+      props.openRound.voteBreakdownHref,
+      `/?game=${props.selectedGame.id}&round=${roundId}#vote-breakdown`,
+    );
+    assert.match(markup, /id=\"vote-breakdown\"/);
+
+    for (const submission of props.openRound.submissions) {
+      assert.equal(
+        submission.href,
+        `/?game=${props.selectedGame.id}&round=${roundId}#submission-${submission.id}`,
+      );
+      assert.equal(
+        submission.songHref,
+        `/?game=${props.selectedGame.id}&round=${roundId}&song=${submission.song.id}`,
+      );
+      assert.equal(
+        submission.playerHref,
+        `/?game=${props.selectedGame.id}&round=${roundId}&player=${submission.player.id}`,
+      );
+      assert.match(markup, new RegExp(`id=\"submission-${submission.id}\"`));
+    }
+
+    assert.match(
+      markup,
+      new RegExp(`href=\"/\\?game=${props.selectedGame.id}&amp;round=${roundId}#vote-breakdown\"`),
+    );
+    assert.ok(!markup.includes('href="/"'));
+  },
+);
+
+test(
   "TASK-06 archive render regression covers M5 cues, canonical song evidence, player-history links, and exclusions",
   { concurrency: false },
   async () => {
