@@ -13,6 +13,7 @@ const {
   getRoundPageData,
   getRoundRouteData,
   getSongBrowserData,
+  getSongDetailData,
   getSongRouteData,
   getSongsRouteData,
 } = require("../../src/archive/route-skeletons");
@@ -464,8 +465,10 @@ test(
     const roundPage = await getRoundPageData(mainGameId, mainRoundId, { prisma });
     const round = await getRoundRouteData(mainGameId, mainRoundId, { prisma });
     const songs = await getSongsRouteData({ prisma, searchParams: { q: "bright" } });
+    const songDetail = await getSongDetailData(songId, { prisma });
     const song = await getSongRouteData(songId, { prisma });
     const playerRoute = await getPlayerRouteData(player.id, { prisma });
+    const missingSong = await getSongDetailData("not-a-song", { prisma });
     const missingGame = await getGameRouteData("not-an-id", { prisma });
     const wrongGameRound = await getRoundRouteData(afterpartyGameId, mainRoundId, { prisma });
     const invalidRoundForGame = await getRoundRouteData(mainGameId, "not-a-round", { prisma });
@@ -521,18 +524,33 @@ test(
       songs.songs.find((routeSong) => routeSong.id === songId).familiarity.kind,
       song.song.familiarity.kind,
     );
+    assert.equal(songDetail.kind, "ready");
+    assert.equal(songDetail.props.song.songId, songId);
+    assert.equal(songDetail.props.song.familiarity.kind, song.song.familiarity.kind);
+    assert.equal(songDetail.props.song.href, `/songs/${songId}`);
+    assert.equal(songDetail.props.song.artistSearchHref.startsWith("/songs?q="), true);
+    assert.equal(songDetail.props.backHref, "/songs");
+    assert.equal(missingSong.kind, "not-found");
+    assert.equal(missingSong.statusNotice.href, "/songs");
     assert.equal(song.kind, "song");
     assert.equal(song.shell.gameContext, null);
     assert.ok(song.song.familiarity.label);
-    assert.ok(song.song.summaryFacts.length > 0);
-    assert.ok(song.song.originLabels.length > 0);
-    const firstSongSubmission = song.song.submissions[song.song.submissions.length - 1];
-    assert.equal(
-      song.song.originLabels.find((origin) => origin.id === "song-origin")?.value,
-      `${firstSongSubmission.player.displayName} in ${firstSongSubmission.round.name}`,
+    assert.ok(song.summaryFacts.some((fact) => fact.label === "First appearance"));
+    assert.ok(song.summaryFacts.some((fact) => fact.label === "Most recent appearance"));
+    assert.ok(song.summaryFacts.some((fact) => fact.label === "Artist footprint"));
+    assert.ok(song.summaryFacts.some((fact) => fact.label === "Best finish"));
+    assert.ok(song.originLabels.some((origin) => origin.startsWith("Song origin: ")));
+    assert.ok(song.historyGroups.length > 0);
+    assert.ok(
+      song.historyGroups.every((group) =>
+        group.rows.every(
+          (row) =>
+            row.round.href === `/games/${group.gameId}/rounds/${row.round.id}` &&
+            row.submitter.href === `/players/${row.submitter.id}` &&
+            Object.prototype.hasOwnProperty.call(row, "isOrigin"),
+        ),
+      ),
     );
-    assert.ok(song.song.historyGroups.length > 0);
-    assert.ok(song.song.submissions.every((submission) => submission.round.game.id));
     assert.equal(playerRoute.kind, "player");
     assert.equal(playerRoute.shell.gameContext, null);
     assert.ok(playerRoute.player.aggregate.submissionCount > 0);

@@ -370,8 +370,10 @@ function deriveSongAppearanceFacts(submissions = []) {
 
     group.rows.push({
       id: row.id,
+      roundId: row.roundId,
       roundName: row.roundName,
       roundHref: row.roundHref,
+      submitterId: row.submitterId,
       submitterName: row.submitterName,
       submitterHref: row.submitterHref,
       rank: row.rank,
