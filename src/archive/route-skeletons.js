@@ -5,6 +5,7 @@ const {
 } = require("./player-metrics");
 const {
   buildGameHref,
+  buildPlayerHref,
   buildRoundHref,
   buildRouteMetadata,
   buildSongHref,
@@ -17,6 +18,7 @@ const {
 } = require("./archive-badges");
 const { ArchiveShell } = require("./archive-shell");
 const { LandingContent } = require("./landing-page-content");
+const { RoundSubmissionsList } = require("./round-vote-disclosures");
 const {
   derivePlayerTrait,
   getSelectedGameMemoryBoard,
@@ -554,6 +556,101 @@ function buildRoundHighlights(submissions) {
   return highlights.slice(0, 3);
 }
 
+function compareRoundSubmissions(left, right) {
+  const rankComparison = compareNullableAscending(left.rank, right.rank);
+
+  if (rankComparison !== 0) {
+    return rankComparison;
+  }
+
+  const submittedAtComparison = compareNullableAscending(
+    left.submittedAt ?? null,
+    right.submittedAt ?? null,
+  );
+
+  if (submittedAtComparison !== 0) {
+    return submittedAtComparison;
+  }
+
+  return left.id - right.id;
+}
+
+function hasTiedRoundRank(submission, rankCounts) {
+  return (
+    submission.rank !== null &&
+    submission.rank !== undefined &&
+    (rankCounts.get(submission.rank) ?? 0) > 1
+  );
+}
+
+function buildRoundPageProps({ game, round, submissions, votesBySubmissionId, songAppearances }) {
+  const rankCounts = submissions.reduce((counts, submission) => {
+    if (submission.rank !== null) {
+      counts.set(submission.rank, (counts.get(submission.rank) ?? 0) + 1);
+    }
+
+    return counts;
+  }, new Map());
+
+  return {
+    round: {
+      id: round.id,
+      gameId: game.id,
+      gameDisplayName: resolveGameDisplayLabel(game),
+      name: round.name,
+      description: round.description,
+      sequenceNumber: round.sequenceNumber ?? null,
+      occurredAtLabel: round.occurredAt ? archiveDateFormatter.format(round.occurredAt) : null,
+      playlistUrl: round.playlistUrl,
+    },
+    highlights: buildRoundHighlights(submissions),
+    submissions: submissions.map((submission) => {
+      const isTiedRank = hasTiedRoundRank(submission, rankCounts);
+
+      return {
+        submissionId: submission.id,
+        rankLabel: formatRankBadgeLabel(submission.rank, isTiedRank),
+        scoreLabel: formatScore(submission.score),
+        isTiedRank,
+        song: {
+          id: submission.song.id,
+          title: submission.song.title,
+          artistName: submission.song.artist.name,
+          href: buildSongHref(submission.song.id),
+        },
+        submitter: {
+          id: submission.player.id,
+          displayName: submission.player.displayName,
+          href: buildPlayerHref(submission.player.id),
+        },
+        familiarity: deriveArchiveSongFamiliarity(submission.songId, songAppearances),
+        submissionComment: submission.comment,
+        votes: [...(votesBySubmissionId.get(submission.id) ?? [])]
+          .sort((left, right) => {
+            if (right.pointsAssigned !== left.pointsAssigned) {
+              return right.pointsAssigned - left.pointsAssigned;
+            }
+
+            const voterComparison = left.voter.displayName.localeCompare(right.voter.displayName);
+
+            return voterComparison !== 0 ? voterComparison : left.id - right.id;
+          })
+          .map((vote) => ({
+            voteId: vote.id,
+            voter: {
+              id: vote.voter.id,
+              displayName: vote.voter.displayName,
+              href: buildPlayerHref(vote.voter.id),
+            },
+            pointsAssigned: vote.pointsAssigned,
+            votedAtLabel: vote.votedAt ? archiveDateFormatter.format(vote.votedAt) : null,
+            comment: vote.comment,
+          })),
+      };
+    }),
+  };
+}
+
 function buildSongSummaryFacts(submissions) {
   const appearances = submissions.length;
   const games = new Set(submissions.map((submission) => submission.round.game.id));
@@ -962,23 +1059,19 @@ async function getGameRouteData(gameId, input = {}) {
   }
 }
 
-async function getRoundRouteData(gameId, roundId, input = {}) {
+async function getRoundPageData(gameId, roundId, input = {}) {
   const parsedGameId = parsePositiveRouteId(gameId);
   const parsedRoundId = parsePositiveRouteId(roundId);
 
   if (parsedGameId === null) {
-    return await withArchiveShellData({
-      kind: "round",
-      title: "Round unavailable",
-      description: "The requested Music League round could not be loaded.",
-      status: "Invalid game ID.",
-      statusHref: "/",
-      statusLinkLabel: "Back to archive",
-    }, {
-      activeRoute: "round",
-      gameContext: null,
-      input,
-    });
+    return notFoundRouteData(
+      buildStatusNotice({
+        title: "Invalid game ID.",
+        body: "The requested Music League game could not be loaded.",
+        href: "/",
+        hrefLabel: "Back to archive",
+      }),
+    );
   }
 
   const { prisma, ownsPrismaClient } = resolveArchiveInput(input);
@@ -990,21 +1083,17 @@ async function getRoundRouteData(gameId, roundId, input = {}) {
         select: { id: true, sourceGameId: true, displayName: true },
       });
 
-      return await withArchiveShellData({
-        kind: "round",
-        title: "Round unavailable",
-        description: "The requested Music League round could not be loaded.",
-        status: "Invalid round ID.",
-        statusHref: game ? buildGameHref(game.id) : "/",
-        statusLinkLabel: game ? "Back to game" : "Back to archive",
-      }, {
-        activeRoute: "round",
-        gameContext: buildGameContext(game),
-        input: { prisma },
-      });
+      return notFoundRouteData(
+        buildStatusNotice({
+          title: "Invalid round ID.",
+          body: "The requested Music League round could not be loaded.",
+          href: game ? buildGameHref(game.id) : "/",
+          hrefLabel: game ? "Back to game" : "Back to archive",
+        }),
+      );
     }
 
-    const [game, round] = await Promise.all([
+    const [game, round, songAppearances] = await Promise.all([
       prisma.game.findUnique({
         where: { id: parsedGameId },
         select: {
@@ -1020,6 +1109,7 @@ async function getRoundRouteData(gameId, roundId, input = {}) {
           name: true,
           description: true,
           occurredAt: true,
+          sequenceNumber: true,
           playlistUrl: true,
           game: {
             select: {
@@ -1037,6 +1127,7 @@ async function getRoundRouteData(gameId, roundId, input = {}) {
               score: true,
               rank: true,
               comment: true,
+              submittedAt: true,
               player: {
                 select: {
                   id: true,
@@ -1074,64 +1165,49 @@ async function getRoundRouteData(gameId, roundId, input = {}) {
           },
         },
       }),
+      prisma.submission.findMany({
+        select: {
+          songId: true,
+        },
+      }),
     ]);
 
     if (!game) {
-      return await withArchiveShellData({
-        kind: "round",
-        title: "Round unavailable",
-        description: "The requested Music League round could not be loaded.",
-        status: "Game not found.",
-        statusHref: "/",
-        statusLinkLabel: "Back to archive",
-      }, {
-        activeRoute: "round",
-        gameContext: null,
-        input: { prisma },
-      });
+      return notFoundRouteData(
+        buildStatusNotice({
+          title: "Game not found.",
+          body: "The requested Music League game could not be found.",
+          href: "/",
+          hrefLabel: "Back to archive",
+        }),
+      );
     }
 
     if (!round) {
-      return await withArchiveShellData({
-        kind: "round",
-        title: "Round unavailable",
-        description: "The requested Music League round could not be found.",
-        status: "Round not found.",
-        statusHref: buildGameHref(game.id),
-        statusLinkLabel: "Back to game",
-      }, {
-        activeRoute: "round",
-        gameContext: buildGameContext(game),
-        input: { prisma },
-      });
+      return notFoundRouteData(
+        buildStatusNotice({
+          title: "Round not found.",
+          body: "The requested Music League round could not be found.",
+          href: buildGameHref(game.id),
+          hrefLabel: "Back to game",
+        }),
+      );
     }
 
     const owningGameTitle = resolveGameDisplayLabel(round.game);
 
     if (round.game.id !== game.id) {
-      return await withArchiveShellData({
-        kind: "round",
-        title: "Round belongs to another game",
-        description: "This Music League round belongs to a different game.",
-        status: "Round belongs to another game.",
-        statusHref: buildGameHref(round.game.id),
-        statusLinkLabel: `Open ${owningGameTitle}`,
-      }, {
-        activeRoute: "round",
-        gameContext: buildGameContext(round.game),
-        input: { prisma },
-      });
+      return notFoundRouteData(
+        buildStatusNotice({
+          title: "Round belongs to another game.",
+          body: "This Music League round belongs to a different game.",
+          href: buildGameHref(round.game.id),
+          hrefLabel: `Open ${owningGameTitle}`,
+        }),
+      );
     }
 
-    const orderedSubmissions = [...round.submissions].sort((left, right) => {
-      const rankComparison = compareNullableAscending(left.rank, right.rank);
-
-      if (rankComparison !== 0) {
-        return rankComparison;
-      }
-
-      return left.id - right.id;
-    });
+    const orderedSubmissions = [...round.submissions].sort(compareRoundSubmissions);
     const { votesBySubmissionId } = mapVotesToRoundSubmissions({
       submissions: orderedSubmissions.map((submission) => ({
         id: submission.id,
@@ -1141,48 +1217,68 @@ async function getRoundRouteData(gameId, roundId, input = {}) {
       })),
       votes: round.votes,
     });
-    const formatSubmissionVotes = (submission) => {
-      return [...(votesBySubmissionId.get(submission.id) ?? [])]
-        .sort((left, right) => {
-          if (right.pointsAssigned !== left.pointsAssigned) {
-            return right.pointsAssigned - left.pointsAssigned;
-          }
 
-          return left.voter.displayName.localeCompare(right.voter.displayName);
-        })
-        .map((vote) => ({
-          id: vote.id,
-          pointsAssigned: vote.pointsAssigned,
-          comment: vote.comment,
-          votedAt: vote.votedAt,
-          voter: vote.voter,
-        }));
+    return readyRouteData(
+      buildRoundPageProps({
+        game,
+        round,
+        submissions: orderedSubmissions,
+        votesBySubmissionId,
+        songAppearances,
+      }),
+    );
+  } finally {
+    if (ownsPrismaClient) {
+      await prisma.$disconnect();
+    }
+  }
+}
+
+async function getRoundRouteData(gameId, roundId, input = {}) {
+  const { prisma, ownsPrismaClient } = resolveArchiveInput(input);
+
+  try {
+    const pageData = await getRoundPageData(gameId, roundId, { prisma });
+
+    if (pageData.kind === "not-found") {
+      return await withArchiveShellData({
+        kind: "round",
+        title: "Round unavailable",
+        description: pageData.statusNotice.body,
+        status: pageData.statusNotice.title,
+        statusHref: pageData.statusNotice.href,
+        statusLinkLabel: pageData.statusNotice.hrefLabel,
+      }, {
+        activeRoute: "round",
+        gameContext: null,
+        input: { prisma },
+      });
+    }
+
+    const { props } = pageData;
+    const gameContext = {
+      gameId: props.round.gameId,
+      displayName: props.round.gameDisplayName,
+      href: buildGameHref(props.round.gameId),
     };
 
     return await withArchiveShellData({
       kind: "round",
-      title: round.name,
-      description: `${round.name} round page in ${resolveGameDisplayLabel(game)}.`,
+      title: props.round.name,
+      description: `${props.round.name} round page in ${props.round.gameDisplayName}.`,
       round: {
-        id: round.id,
-        name: round.name,
-        description: round.description,
-        occurredAt: round.occurredAt,
-        playlistUrl: round.playlistUrl,
+        ...props.round,
         game: {
-          id: game.id,
-          title: resolveGameDisplayLabel(game),
-          href: buildGameHref(game.id),
+          id: props.round.gameId,
+          title: props.round.gameDisplayName,
+          href: buildGameHref(props.round.gameId),
         },
-        highlights: buildRoundHighlights(orderedSubmissions),
-        submissions: orderedSubmissions.map((submission) => ({
-          ...submission,
-          votes: formatSubmissionVotes(submission),
-        })),
+        highlights: props.highlights,
+        submissions: props.submissions,
       },
     }, {
       activeRoute: "round",
-      gameContext: buildGameContext(game),
+      gameContext,
       input: { prisma },
     });
   } finally {
@@ -1983,73 +2079,38 @@ function RoundContent({ data }) {
   return React.createElement(
     React.Fragment,
     null,
-    React.createElement("p", null, React.createElement("a", { href: data.round.game.href }, data.round.game.title)),
+    React.createElement(
+      "p",
+      { className: "archive-round-parent-link" },
+      React.createElement("a", { href: data.round.game.href }, data.round.game.title),
+    ),
     React.createElement("h1", null, data.round.name),
     data.round.description ? React.createElement("p", null, data.round.description) : null,
-    React.createElement("p", null, formatDate(data.round.occurredAt)),
+    data.round.occurredAtLabel ? React.createElement("p", null, data.round.occurredAtLabel) : null,
     data.round.playlistUrl
       ? React.createElement(ArchiveBadge, {
           variant: "playlist-link",
-          label: "Open playlist",
+          label: "Playlist",
           href: data.round.playlistUrl,
-          rel: "noreferrer",
+          rel: "noopener",
           target: "_blank",
+          ariaLabel: `Open playlist for ${data.round.name}`,
         })
       : null,
     data.round.highlights.length
-      ? React.createElement(DefinitionList, {
-          items: data.round.highlights.map((highlight) => ({
-            label: highlight.label,
-            value: highlight.value,
-          })),
-        })
+      ? React.createElement(
+          "section",
+          { className: "archive-route-section", "aria-labelledby": "round-highlights-heading" },
+          React.createElement("h2", { id: "round-highlights-heading" }, "Highlights"),
+          React.createElement(DefinitionList, {
+            items: data.round.highlights.map((highlight) => ({
+              label: highlight.label,
+              value: highlight.value,
+            })),
+          }),
+        )
       : null,
-    React.createElement("button", { type: "button" }, "Expand all votes"),
-    React.createElement(
-      "ol",
-      { className: "archive-route-ranked-list" },
-      data.round.submissions.map((submission) =>
-        React.createElement(
-          "li",
-          { key: submission.id, id: `submission-${submission.id}` },
-          React.createElement(
-            "a",
-            { href: buildSongHref(submission.song.id) },
-            `${formatRank(submission.rank)} - ${submission.song.title}`,
-          ),
-          React.createElement(
-            "p",
-            null,
-            `${submission.song.artist.name} - ${submission.player.displayName} - `,
-            React.createElement(ArchiveBadge, {
-              variant: "score",
-              label: formatScore(submission.score),
-            }),
-          ),
-          submission.comment ? React.createElement("p", null, submission.comment) : null,
-          React.createElement(
-            "details",
-            null,
-            React.createElement("summary", null, `${formatCount(submission.votes.length, "vote")} disclosed`),
-            submission.votes.length === 0
-              ? React.createElement("p", null, "No votes imported for this submission.")
-              : React.createElement(
-                  "ul",
-                  null,
-                  submission.votes.map((vote) =>
-                    React.createElement(
-                      "li",
-                      { key: vote.id },
-                      `${vote.voter.displayName}: ${vote.pointsAssigned} points${
-                        vote.comment ? ` - ${vote.comment}` : ""
-                      }`,
-                    ),
-                  ),
-                ),
-          ),
-        ),
-      ),
-    ),
+    React.createElement(RoundSubmissionsList, { submissions: data.round.submissions }),
   );
 }
 
@@ -2353,6 +2414,7 @@ module.exports = {
   getGameRouteData,
   getLandingRouteData,
   getPlayerRouteData,
+  getRoundPageData,
   getRoundRouteData,
   getSongRouteData,
   getSongsRouteData,
