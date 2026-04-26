@@ -16,6 +16,11 @@ const {
   readyRouteData,
   sparseRouteData,
 } = require("./m8-derivations");
+const {
+  HEADER_SEARCH_QUERY_MAX_LENGTH,
+  getArchiveSearchSuggestionsMethodNotAllowedResult,
+  getArchiveSearchSuggestionsResult,
+} = require("./search-suggestions-api");
 
 test("normalizes archive search without throwing on empty punctuation", () => {
   assert.equal(normalizeArchiveSearch("  “Solar”  Static... "), "solar static");
@@ -284,8 +289,53 @@ test("builds song catalog rows and header suggestions from normalized song and a
     suggestions.map((suggestion) => suggestion.type),
     ["song", "artist"],
   );
+  assert.deepEqual(suggestions[0], {
+    type: "song",
+    songId: 1,
+    title: "Solar Static",
+    artistName: "The Comets",
+    href: "/songs/1",
+  });
+  assert.deepEqual(suggestions[1], {
+    type: "artist",
+    artistName: "Solar Fields",
+    href: "/songs?q=Solar+Fields",
+  });
   assert.ok(suggestions.length <= 8);
   assert.equal(suggestions.some((suggestion) => suggestion.type === "player"), false);
+
+  const apiResult = await getArchiveSearchSuggestionsResult({
+    q: "solar",
+    input: { prisma },
+  });
+
+  assert.equal(apiResult.status, 200);
+  assert.deepEqual(apiResult.body.error, null);
+  assert.deepEqual(apiResult.body.data.suggestions, suggestions);
+  assert.deepEqual(await getArchiveSearchSuggestionsResult({ q: "   " }), {
+    status: 200,
+    body: { data: { suggestions: [] }, error: null },
+  });
+  assert.deepEqual(
+    await getArchiveSearchSuggestionsResult({
+      q: "x".repeat(HEADER_SEARCH_QUERY_MAX_LENGTH + 1),
+    }),
+    {
+      status: 400,
+      body: {
+        data: null,
+        error: "validation: q exceeds 200 characters",
+      },
+    },
+  );
+  assert.deepEqual(getArchiveSearchSuggestionsMethodNotAllowedResult(), {
+    status: 405,
+    headers: { Allow: "GET" },
+    body: {
+      data: null,
+      error: "method not allowed",
+    },
+  });
 });
 
 test("constructs shared route data result shapes", () => {

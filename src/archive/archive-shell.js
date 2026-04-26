@@ -1,12 +1,21 @@
 "use client";
 
 const React = require("react");
+const { ARCHIVE_BADGE_VARIANTS, buildArchiveBadgeModel } = require("./archive-badges");
 const {
   buildGameHref,
   buildRoundHref,
   buildSongSearchHref,
   parsePositiveRouteId,
 } = require("./route-utils");
+const { normalizeArchiveSearch } = require("./search-normalization");
+
+const HEADER_SEARCH_LIMIT = 8;
+const SEARCH_DEBOUNCE_MS = 200;
+const SEARCH_FORM_ID = "archive-shell-search-form";
+const SEARCH_INPUT_ID = "archive-shell-search-input";
+const SEARCH_LIVE_REGION_ID = "archive-shell-search-status";
+const SEARCH_SUGGESTIONS_ID = "archive-shell-search-suggestions";
 
 function acceptedArchiveGamePath(pathname) {
   if (typeof pathname !== "string") {
@@ -119,12 +128,304 @@ function resolveDisplayBackContext(shell, resolvedContext) {
   };
 }
 
-function HeaderSearch({ activeRoute, search }) {
+function isEditableShortcutTarget(target) {
+  if (!target || typeof target !== "object") {
+    return false;
+  }
+
+  const tagName = typeof target.tagName === "string" ? target.tagName.toLowerCase() : "";
+
+  return (
+    target.isContentEditable === true ||
+    tagName === "input" ||
+    tagName === "textarea" ||
+    tagName === "select"
+  );
+}
+
+function isSearchShortcutEvent(event) {
+  return (
+    event?.key === "/" &&
+    event.ctrlKey !== true &&
+    event.metaKey !== true &&
+    event.altKey !== true &&
+    !isEditableShortcutTarget(event.target)
+  );
+}
+
+function normalizeHeaderSuggestions(suggestions) {
+  if (!Array.isArray(suggestions)) {
+    return [];
+  }
+
+  return suggestions
+    .filter((suggestion) => {
+      if (!suggestion || typeof suggestion !== "object") {
+        return false;
+      }
+
+      if (suggestion.type === "song") {
+        return (
+          Number.isInteger(suggestion.songId) &&
+          typeof suggestion.title === "string" &&
+          typeof suggestion.artistName === "string" &&
+          typeof suggestion.href === "string"
+        );
+      }
+
+      return (
+        suggestion.type === "artist" &&
+        typeof suggestion.artistName === "string" &&
+        typeof suggestion.href === "string"
+      );
+    })
+    .slice(0, HEADER_SEARCH_LIMIT);
+}
+
+function getInitialSwitcherIndex(switcherItems, selectedGameId) {
+  if (!Array.isArray(switcherItems) || switcherItems.length === 0) {
+    return null;
+  }
+
+  const selectedIndex = switcherItems.findIndex((game) => game.gameId === selectedGameId);
+
+  return selectedIndex >= 0 ? selectedIndex : 0;
+}
+
+function useArchiveHeaderInteractions({
+  activeRoute,
+  initialSearchValue = "",
+  initialSuggestions = [],
+  suggestionEndpoint = "/api/archive/search-suggestions",
+  switcherItems = [],
+  selectedSwitcherGameId = null,
+} = {}) {
+  const [searchValue, setSearchValue] = React.useState(() =>
+    normalizeArchiveSearch(initialSearchValue),
+  );
+  const [suggestions, setSuggestions] = React.useState(() =>
+    normalizeHeaderSuggestions(initialSuggestions),
+  );
+  const [suggestionStatus, setSuggestionStatus] = React.useState(
+    suggestions.length > 0 ? "ready" : "idle",
+  );
+  const initialSwitcherIndex = React.useMemo(
+    () => getInitialSwitcherIndex(switcherItems, selectedSwitcherGameId),
+    [selectedSwitcherGameId, switcherItems],
+  );
+  const [switcherOpen, setSwitcherOpen] = React.useState(false);
+  const [switcherActiveIndex, setSwitcherActiveIndex] = React.useState(initialSwitcherIndex);
+  const normalizedSearchValue = normalizeArchiveSearch(searchValue);
+
+  React.useEffect(() => {
+    setSearchValue(normalizeArchiveSearch(initialSearchValue));
+  }, [initialSearchValue]);
+
+  React.useEffect(() => {
+    setSwitcherActiveIndex((currentIndex) => {
+      if (switcherItems.length === 0) {
+        return null;
+      }
+
+      if (currentIndex === null || currentIndex >= switcherItems.length) {
+        return initialSwitcherIndex;
+      }
+
+      return currentIndex;
+    });
+  }, [initialSwitcherIndex, switcherItems.length]);
+
+  React.useEffect(() => {
+    if (normalizedSearchValue.length === 0) {
+      setSuggestions([]);
+      setSuggestionStatus("idle");
+      return undefined;
+    }
+
+    if (typeof window === "undefined" || typeof window.fetch !== "function") {
+      return undefined;
+    }
+
+    setSuggestionStatus("loading");
+
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(async () => {
+      try {
+        const url = new URL(suggestionEndpoint, window.location.origin);
+        url.searchParams.set("q", normalizedSearchValue);
+        const response = await window.fetch(url, {
+          headers: { Accept: "application/json" },
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          throw new Error(`suggestions request failed: ${response.status}`);
+        }
+
+        const payload = await response.json();
+        setSuggestions(normalizeHeaderSuggestions(payload?.data?.suggestions));
+        setSuggestionStatus("ready");
+      } catch (error) {
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        setSuggestions([]);
+        setSuggestionStatus("error");
+      }
+    }, SEARCH_DEBOUNCE_MS);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      controller.abort();
+    };
+  }, [normalizedSearchValue, suggestionEndpoint]);
+
+  const suggestionCountAnnouncement = React.useMemo(() => {
+    if (suggestionStatus === "loading") {
+      return "Loading search suggestions.";
+    }
+
+    if (suggestionStatus === "error") {
+      return "Search suggestions are unavailable.";
+    }
+
+    if (normalizedSearchValue.length === 0) {
+      return "Search suggestions are available after typing.";
+    }
+
+    if (suggestions.length === 0) {
+      return "No search suggestions found.";
+    }
+
+    return `${suggestions.length} search suggestion${suggestions.length === 1 ? "" : "s"} available.`;
+  }, [normalizedSearchValue, suggestionStatus, suggestions.length]);
+
+  const submitSearch = React.useCallback(() => {
+    const href = buildSongSearchHref({ q: normalizeArchiveSearch(searchValue) });
+
+    setSuggestions([]);
+    setSuggestionStatus("idle");
+
+    if (typeof window !== "undefined") {
+      window.location.assign(href);
+    }
+  }, [searchValue]);
+
+  const clearSuggestions = React.useCallback(() => {
+    setSuggestions([]);
+    setSuggestionStatus("idle");
+  }, []);
+
+  const focusSearchFromShortcut = React.useCallback((event) => {
+    if (!isSearchShortcutEvent(event)) {
+      return;
+    }
+
+    event.preventDefault();
+
+    if (typeof document !== "undefined") {
+      const input = document.getElementById(SEARCH_INPUT_ID);
+      input?.focus();
+      input?.select();
+    }
+  }, []);
+
+  const moveSwitcherFocus = React.useCallback(
+    (direction) => {
+      if (switcherItems.length === 0) {
+        setSwitcherActiveIndex(null);
+        return;
+      }
+
+      setSwitcherOpen(true);
+      setSwitcherActiveIndex((currentIndex) => {
+        if (currentIndex === null) {
+          return direction === "previous" ? switcherItems.length - 1 : (initialSwitcherIndex ?? 0);
+        }
+
+        return direction === "previous"
+          ? (currentIndex - 1 + switcherItems.length) % switcherItems.length
+          : (currentIndex + 1) % switcherItems.length;
+      });
+    },
+    [initialSwitcherIndex, switcherItems.length],
+  );
+
+  const selectActiveSwitcherItem = React.useCallback(() => {
+    const activeItem =
+      switcherActiveIndex === null ? null : switcherItems[switcherActiveIndex] ?? null;
+
+    if (activeItem?.href && typeof window !== "undefined") {
+      window.location.assign(activeItem.href);
+    }
+  }, [switcherActiveIndex, switcherItems]);
+
+  return {
+    searchValue,
+    setSearchValue,
+    suggestions,
+    suggestionStatus,
+    suggestionCountAnnouncement,
+    submitSearch,
+    clearSuggestions,
+    focusSearchFromShortcut,
+    switcherOpen,
+    switcherActiveIndex,
+    setSwitcherOpen,
+    moveSwitcherFocus,
+    selectActiveSwitcherItem,
+  };
+}
+
+function buildSearchSuggestionBadge(type) {
+  const badge = buildArchiveBadgeModel({
+    variant: type === "song" ? "search-type-song" : "search-type-artist",
+    label: type === "song" ? "Song" : "Artist",
+  });
+
+  return React.createElement(
+    "span",
+    {
+      className: "archive-badge archive-shell-search-suggestion-type",
+      "data-archive-badge-variant": badge.variant,
+      "data-archive-badge-role": ARCHIVE_BADGE_VARIANTS[badge.variant].tokenRole,
+    },
+    badge.label,
+  );
+}
+
+function getSuggestionKey(suggestion) {
+  return suggestion.type === "song"
+    ? `song-${suggestion.songId}`
+    : `artist-${normalizeArchiveSearch(suggestion.artistName)}`;
+}
+
+function HeaderSearch({ activeRoute, search, interactions }) {
   const [expanded, setExpanded] = React.useState(false);
-  const searchValue = typeof search?.value === "string" ? search.value : "";
-  const suggestedCount = search?.suggestions?.length ?? 0;
-  const searchFormId = "archive-shell-search-form";
-  const liveRegionId = "archive-shell-search-status";
+  const suggestions = interactions.suggestions;
+
+  React.useEffect(() => {
+    if (typeof window === "undefined") {
+      return undefined;
+    }
+
+    function handleShortcut(event) {
+      if (!isSearchShortcutEvent(event)) {
+        return;
+      }
+
+      setExpanded(true);
+      interactions.focusSearchFromShortcut(event);
+      window.requestAnimationFrame(() => {
+        document.getElementById(SEARCH_INPUT_ID)?.focus();
+      });
+    }
+
+    window.addEventListener("keydown", handleShortcut);
+
+    return () => window.removeEventListener("keydown", handleShortcut);
+  }, [interactions.focusSearchFromShortcut]);
 
   return React.createElement(
     "div",
@@ -134,7 +435,7 @@ function HeaderSearch({ activeRoute, search }) {
       {
         type: "button",
         className: "archive-shell-search-toggle",
-        "aria-controls": searchFormId,
+        "aria-controls": SEARCH_FORM_ID,
         "aria-expanded": expanded,
         onClick: () => setExpanded((value) => !value),
       },
@@ -143,7 +444,7 @@ function HeaderSearch({ activeRoute, search }) {
     React.createElement(
       "form",
       {
-        id: searchFormId,
+        id: SEARCH_FORM_ID,
         action: search?.submitHrefBase ?? "/songs",
         method: "get",
         role: "search",
@@ -151,46 +452,67 @@ function HeaderSearch({ activeRoute, search }) {
         className: expanded
           ? "archive-shell-search-form is-expanded"
           : "archive-shell-search-form",
+        onSubmit: (event) => {
+          event.preventDefault();
+          interactions.submitSearch();
+        },
+        onKeyDown: (event) => {
+          if (event.key === "Escape") {
+            event.preventDefault();
+            interactions.clearSuggestions();
+          }
+        },
       },
       React.createElement(
         "label",
-        { htmlFor: "archive-shell-search-input" },
+        { htmlFor: SEARCH_INPUT_ID },
         "Search songs and artists",
       ),
       React.createElement("input", {
-        id: "archive-shell-search-input",
+        id: SEARCH_INPUT_ID,
         name: "q",
         type: "search",
-        defaultValue: searchValue,
+        value: interactions.searchValue,
+        onChange: (event) => interactions.setSearchValue(event.target.value),
         autoComplete: "off",
+        "aria-controls": SEARCH_SUGGESTIONS_ID,
+        "aria-describedby": SEARCH_LIVE_REGION_ID,
+        "aria-expanded": suggestions.length > 0,
       }),
       React.createElement("button", { type: "submit" }, "Search"),
       React.createElement(
         "p",
-        { id: liveRegionId, className: "archive-sr-only", "aria-live": "polite" },
-        suggestedCount === 0
-          ? "Search suggestions are available after typing."
-          : `${suggestedCount} search suggestions available.`,
+        { id: SEARCH_LIVE_REGION_ID, className: "archive-sr-only", "aria-live": "polite" },
+        interactions.suggestionCountAnnouncement,
       ),
-      suggestedCount > 0
+      suggestions.length > 0
         ? React.createElement(
             "ul",
-            { className: "archive-shell-search-suggestions", "aria-labelledby": liveRegionId },
-            search.suggestions.map((suggestion) =>
+            {
+              id: SEARCH_SUGGESTIONS_ID,
+              className: "archive-shell-search-suggestions",
+              "aria-labelledby": SEARCH_LIVE_REGION_ID,
+            },
+            suggestions.map((suggestion) =>
               React.createElement(
                 "li",
-                {
-                  key:
-                    suggestion.type === "song"
-                      ? `song-${suggestion.songId}`
-                      : `artist-${suggestion.artistName}`,
-                },
+                { key: getSuggestionKey(suggestion) },
                 React.createElement(
                   "a",
                   { href: suggestion.href },
-                  suggestion.type === "song"
-                    ? `${suggestion.title} by ${suggestion.artistName}`
-                    : suggestion.artistName,
+                  buildSearchSuggestionBadge(suggestion.type),
+                  React.createElement(
+                    "span",
+                    { className: "archive-shell-search-suggestion-copy" },
+                    suggestion.type === "song"
+                      ? React.createElement(
+                          React.Fragment,
+                          null,
+                          React.createElement("span", null, suggestion.title),
+                          React.createElement("small", null, `by ${suggestion.artistName}`),
+                        )
+                      : React.createElement("span", null, suggestion.artistName),
+                  ),
                 ),
               ),
             ),
@@ -259,8 +581,7 @@ function GameSwitcherGroup({
   );
 }
 
-function GameSwitcher({ switcher }) {
-  const [expanded, setExpanded] = React.useState(false);
+function GameSwitcher({ switcher, interactions }) {
   const triggerRef = React.useRef(null);
   const itemRefs = React.useRef(new Map());
   const panelId = "archive-shell-game-switcher-panel";
@@ -270,32 +591,22 @@ function GameSwitcher({ switcher }) {
     () => [...currentGames, ...completedGames],
     [currentGames, completedGames],
   );
-  const selectedIndex = orderedGames.findIndex(
-    (game) => game.gameId === switcher?.selectedGameId,
-  );
-  const initialActiveIndex = selectedIndex >= 0 ? selectedIndex : 0;
-  const [activeIndex, setActiveIndex] = React.useState(initialActiveIndex);
-  const activeGameId = orderedGames[activeIndex]?.gameId ?? null;
+  const activeGameId =
+    interactions.switcherActiveIndex === null
+      ? null
+      : orderedGames[interactions.switcherActiveIndex]?.gameId ?? null;
 
   React.useEffect(() => {
-    setActiveIndex(initialActiveIndex);
-  }, [initialActiveIndex]);
-
-  function focusGameAt(index) {
-    const game = orderedGames[index];
-
-    if (!game) {
-      return;
+    if (!interactions.switcherOpen || activeGameId === null) {
+      return undefined;
     }
 
-    setActiveIndex(index);
-    itemRefs.current.get(game.gameId)?.focus();
-  }
+    const animationFrame = window.requestAnimationFrame(() => {
+      itemRefs.current.get(activeGameId)?.focus();
+    });
 
-  function openAndFocus(index = initialActiveIndex) {
-    setExpanded(true);
-    window.requestAnimationFrame(() => focusGameAt(index));
-  }
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [activeGameId, interactions.switcherOpen]);
 
   return React.createElement(
     "div",
@@ -304,56 +615,34 @@ function GameSwitcher({ switcher }) {
       onKeyDown: (event) => {
         if (event.key === "Escape") {
           event.preventDefault();
-          setExpanded(false);
+          interactions.setSwitcherOpen(false);
           triggerRef.current?.focus();
           return;
         }
 
+        if (orderedGames.length === 0) {
+          return;
+        }
+
+        if (event.key === "ArrowDown") {
+          event.preventDefault();
+          interactions.moveSwitcherFocus("next");
+          return;
+        }
+
+        if (event.key === "ArrowUp") {
+          event.preventDefault();
+          interactions.moveSwitcherFocus("previous");
+          return;
+        }
+
         if (
-          !expanded &&
-          orderedGames.length > 0 &&
-          (event.key === "ArrowDown" || event.key === "ArrowUp")
+          interactions.switcherOpen &&
+          (event.key === "Enter" || event.key === " ") &&
+          isGameSwitcherItemTarget(event.target)
         ) {
           event.preventDefault();
-          openAndFocus(event.key === "ArrowUp" ? orderedGames.length - 1 : initialActiveIndex);
-          return;
-        }
-
-        if (!expanded || orderedGames.length === 0) {
-          return;
-        }
-
-        if (event.key === "ArrowDown" || event.key === "ArrowRight") {
-          event.preventDefault();
-          focusGameAt((activeIndex + 1) % orderedGames.length);
-          return;
-        }
-
-        if (event.key === "ArrowUp" || event.key === "ArrowLeft") {
-          event.preventDefault();
-          focusGameAt((activeIndex - 1 + orderedGames.length) % orderedGames.length);
-          return;
-        }
-
-        if (event.key === "Home") {
-          event.preventDefault();
-          focusGameAt(0);
-          return;
-        }
-
-        if (event.key === "End") {
-          event.preventDefault();
-          focusGameAt(orderedGames.length - 1);
-          return;
-        }
-
-        if (event.key === "Enter" || event.key === " ") {
-          const selectedItem = isGameSwitcherItemTarget(event.target);
-
-          if (selectedItem) {
-            event.preventDefault();
-            selectedItem.click();
-          }
+          interactions.selectActiveSwitcherItem();
         }
       },
     },
@@ -361,16 +650,20 @@ function GameSwitcher({ switcher }) {
       "button",
       {
         type: "button",
-        "aria-expanded": expanded,
+        "aria-expanded": interactions.switcherOpen,
         "aria-controls": panelId,
         ref: triggerRef,
-        onClick: () => setExpanded((value) => !value),
+        onClick: () => interactions.setSwitcherOpen(!interactions.switcherOpen),
       },
       "Games",
     ),
     React.createElement(
       "div",
-      { id: panelId, className: "archive-shell-switcher-panel", hidden: !expanded },
+      {
+        id: panelId,
+        className: "archive-shell-switcher-panel",
+        hidden: !interactions.switcherOpen,
+      },
       React.createElement(GameSwitcherGroup, {
         title: "Current games",
         games: currentGames,
@@ -393,6 +686,17 @@ function GameSwitcher({ switcher }) {
 }
 
 function ArchiveShell({ activeRoute, gameContext, search, switcher, children }) {
+  const switcherItems = React.useMemo(
+    () => [...(switcher?.currentGames ?? []), ...(switcher?.completedGames ?? [])],
+    [switcher?.completedGames, switcher?.currentGames],
+  );
+  const headerInteractions = useArchiveHeaderInteractions({
+    activeRoute,
+    initialSearchValue: search?.value ?? "",
+    initialSuggestions: search?.suggestions ?? [],
+    selectedSwitcherGameId: switcher?.selectedGameId ?? null,
+    switcherItems,
+  });
   const shell = {
     activeRoute,
     gameContext,
@@ -437,7 +741,11 @@ function ArchiveShell({ activeRoute, gameContext, search, switcher, children }) 
           },
           "Music League Archive",
         ),
-        React.createElement(HeaderSearch, { activeRoute, search }),
+        React.createElement(HeaderSearch, {
+          activeRoute,
+          search,
+          interactions: headerInteractions,
+        }),
         React.createElement(
           "nav",
           { "aria-label": "Archive navigation", className: "archive-shell-nav" },
@@ -450,7 +758,7 @@ function ArchiveShell({ activeRoute, gameContext, search, switcher, children }) 
             "Songs",
           ),
         ),
-        React.createElement(GameSwitcher, { switcher }),
+        React.createElement(GameSwitcher, { switcher, interactions: headerInteractions }),
         backContext
           ? React.createElement(
               "a",
@@ -486,4 +794,5 @@ function ArchiveShell({ activeRoute, gameContext, search, switcher, children }) 
 module.exports = {
   ArchiveShell,
   resolveBackToGameContext,
+  useArchiveHeaderInteractions,
 };

@@ -145,6 +145,49 @@ a {
   color: var(--ink-primary);
 }
 
+.archive-shell-search-suggestions {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 6px;
+  max-height: 280px;
+  margin: 0;
+  padding: 8px;
+  overflow: auto;
+  list-style: none;
+  border: 1px solid rgba(var(--ink-muted-rgb), 0.16);
+  border-radius: 8px;
+  background: var(--surface-paper);
+  box-shadow: 0 16px 34px rgba(var(--ink-primary-rgb), 0.14);
+}
+
+.archive-shell-search-suggestions a {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  padding: 8px;
+  border-radius: 8px;
+}
+
+.archive-shell-search-suggestions a:hover,
+.archive-shell-search-suggestions a:focus-visible {
+  background: rgba(var(--brand-purple-rgb), 0.1);
+}
+
+.archive-shell-search-suggestion-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+  color: var(--ink-primary);
+  font-weight: 800;
+}
+
+.archive-shell-search-suggestion-copy small {
+  color: var(--ink-muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
 .archive-shell-search-form button,
 .archive-shell-switcher button {
   padding: 8px 12px;
