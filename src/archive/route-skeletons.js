@@ -19,6 +19,7 @@ const {
   ARCHIVE_BADGE_VARIANTS,
   buildArchiveBadgeModel,
 } = require("./archive-badges");
+const { ArchiveShell } = require("./archive-shell");
 const {
   derivePlayerTrait,
   getSelectedGameMemoryBoard,
@@ -146,9 +147,27 @@ function sum(values) {
 }
 
 function getRoundDates(rounds) {
-  const dates = rounds
-    .map((round) => round.occurredAt)
-    .filter((date) => date instanceof Date);
+  const dates = rounds.flatMap((round) => {
+    const eventDates = [];
+
+    if (round.occurredAt instanceof Date) {
+      eventDates.push(round.occurredAt);
+    }
+
+    for (const submission of round.submissions ?? []) {
+      if (submission.submittedAt instanceof Date) {
+        eventDates.push(submission.submittedAt);
+      }
+    }
+
+    for (const vote of round.votes ?? []) {
+      if (vote.votedAt instanceof Date) {
+        eventDates.push(vote.votedAt);
+      }
+    }
+
+    return eventDates;
+  });
 
   if (dates.length === 0) {
     return {
@@ -211,6 +230,108 @@ function buildGameSummary(game) {
     timeframe: formatGameTimeframe(orderedRounds),
     roundCount: orderedRounds.length,
     href: buildGameHref(game.id),
+  };
+}
+
+function buildGameContext(game) {
+  if (!game?.id) {
+    return null;
+  }
+
+  return {
+    gameId: game.id,
+    displayName: resolveGameDisplayLabel(game),
+    href: buildGameHref(game.id),
+  };
+}
+
+function buildGameSwitcherItem(game) {
+  const orderedRounds = [...(game.rounds ?? [])].sort(compareRounds);
+
+  return {
+    gameId: game.id,
+    displayName: resolveGameDisplayLabel(game),
+    status: game.finished ? "Completed" : "Current",
+    timeframeLabel: formatGameTimeframe(orderedRounds),
+    href: buildGameHref(game.id),
+  };
+}
+
+function compareGameSwitcherItems(left, right) {
+  const leftLatest = getRoundDates(left.rounds ?? []).latest;
+  const rightLatest = getRoundDates(right.rounds ?? []).latest;
+  const latestComparison = compareNullableDescending(leftLatest, rightLatest);
+
+  if (latestComparison !== 0) {
+    return latestComparison;
+  }
+
+  return resolveGameDisplayLabel(left).localeCompare(resolveGameDisplayLabel(right));
+}
+
+async function getArchiveShellData({
+  activeRoute,
+  gameContext = null,
+  searchParams,
+  input = {},
+} = {}) {
+  const { prisma, ownsPrismaClient } = resolveArchiveInput(input);
+  const normalizedParams = normalizeSearchParams(await searchParams);
+
+  try {
+    const games = await prisma.game.findMany({
+      select: {
+        id: true,
+        sourceGameId: true,
+        displayName: true,
+        finished: true,
+        rounds: {
+          select: {
+            id: true,
+            occurredAt: true,
+            sequenceNumber: true,
+            submissions: {
+              select: {
+                submittedAt: true,
+              },
+            },
+            votes: {
+              select: {
+                votedAt: true,
+              },
+            },
+          },
+        },
+      },
+    });
+    const switcherItems = [...games].sort(compareGameSwitcherItems).map(buildGameSwitcherItem);
+
+    return {
+      activeRoute,
+      gameContext,
+      search: {
+        value: normalizeQueryText(normalizedParams.q),
+        submitHrefBase: "/songs",
+        suggestions: [],
+      },
+      switcher: {
+        currentGames: switcherItems.filter((game) => game.status === "Current"),
+        completedGames: switcherItems.filter((game) => game.status === "Completed"),
+        selectedGameId: gameContext?.gameId ?? null,
+        backToGame: null,
+      },
+    };
+  } finally {
+    if (ownsPrismaClient) {
+      await prisma.$disconnect();
+    }
+  }
+}
+
+async function withArchiveShellData(routeData, shellOptions) {
+  return {
+    ...routeData,
+    shell: await getArchiveShellData(shellOptions),
   };
 }
 
@@ -570,11 +691,17 @@ async function getLandingRouteData(input = {}) {
             submissions: {
               select: {
                 rank: true,
+                submittedAt: true,
                 player: {
                   select: {
                     displayName: true,
                   },
                 },
+              },
+            },
+            votes: {
+              select: {
+                votedAt: true,
               },
             },
           },
@@ -603,7 +730,7 @@ async function getLandingRouteData(input = {}) {
       })
       .map(buildGameSummary);
 
-    return {
+    return await withArchiveShellData({
       kind: "landing",
       title: "Music League Archive",
       description: "Browse current and completed Music League games.",
@@ -614,7 +741,12 @@ async function getLandingRouteData(input = {}) {
         year: yearFilter,
         winner: winnerFilter,
       },
-    };
+    }, {
+      activeRoute: "landing",
+      gameContext: null,
+      searchParams,
+      input: { prisma },
+    });
   } finally {
     if (ownsPrismaClient) {
       await prisma.$disconnect();
@@ -626,14 +758,18 @@ async function getGameRouteData(gameId, input = {}) {
   const parsedGameId = parsePositiveRouteId(gameId);
 
   if (parsedGameId === null) {
-    return {
+    return await withArchiveShellData({
       kind: "game",
       title: "Game unavailable",
       description: "The requested Music League game could not be loaded.",
       status: "Invalid game ID.",
       statusHref: "/",
       statusLinkLabel: "Back to archive",
-    };
+    }, {
+      activeRoute: "game",
+      gameContext: null,
+      input,
+    });
   }
 
   const { prisma, ownsPrismaClient } = resolveArchiveInput(input);
@@ -657,6 +793,7 @@ async function getGameRouteData(gameId, input = {}) {
                 id: true,
                 score: true,
                 rank: true,
+                submittedAt: true,
                 player: {
                   select: {
                     id: true,
@@ -665,20 +802,29 @@ async function getGameRouteData(gameId, input = {}) {
                 },
               },
             },
+            votes: {
+              select: {
+                votedAt: true,
+              },
+            },
           },
         },
       },
     });
 
     if (!game) {
-      return {
+      return await withArchiveShellData({
         kind: "game",
         title: "Game unavailable",
         description: "The requested Music League game could not be found.",
         status: "Game not found.",
         statusHref: "/",
         statusLinkLabel: "Back to archive",
-      };
+      }, {
+        activeRoute: "game",
+        gameContext: null,
+        input: { prisma },
+      });
     }
 
     const title = resolveGameDisplayLabel(game);
@@ -686,7 +832,7 @@ async function getGameRouteData(gameId, input = {}) {
     const leaderboard = buildGameLeaderboard({ ...game, rounds });
     const memoryBoard = rounds.length === 0 ? null : await getSelectedGameMemoryBoard(game.id, { prisma });
 
-    return {
+    return await withArchiveShellData({
       kind: "game",
       title,
       description: `${title} archive page.`,
@@ -714,7 +860,11 @@ async function getGameRouteData(gameId, input = {}) {
         memoryBoard: memoryBoard?.board ?? null,
       },
       status: rounds.length === 0 ? "This game has no imported round evidence yet." : null,
-    };
+    }, {
+      activeRoute: "game",
+      gameContext: buildGameContext(game),
+      input: { prisma },
+    });
   } finally {
     if (ownsPrismaClient) {
       await prisma.$disconnect();
@@ -727,14 +877,18 @@ async function getRoundRouteData(gameId, roundId, input = {}) {
   const parsedRoundId = parsePositiveRouteId(roundId);
 
   if (parsedGameId === null) {
-    return {
+    return await withArchiveShellData({
       kind: "round",
       title: "Round unavailable",
       description: "The requested Music League round could not be loaded.",
       status: "Invalid game ID.",
       statusHref: "/",
       statusLinkLabel: "Back to archive",
-    };
+    }, {
+      activeRoute: "round",
+      gameContext: null,
+      input,
+    });
   }
 
   const { prisma, ownsPrismaClient } = resolveArchiveInput(input);
@@ -743,17 +897,21 @@ async function getRoundRouteData(gameId, roundId, input = {}) {
     if (parsedRoundId === null) {
       const game = await prisma.game.findUnique({
         where: { id: parsedGameId },
-        select: { id: true },
+        select: { id: true, sourceGameId: true, displayName: true },
       });
 
-      return {
+      return await withArchiveShellData({
         kind: "round",
         title: "Round unavailable",
         description: "The requested Music League round could not be loaded.",
         status: "Invalid round ID.",
         statusHref: game ? buildGameHref(game.id) : "/",
         statusLinkLabel: game ? "Back to game" : "Back to archive",
-      };
+      }, {
+        activeRoute: "round",
+        gameContext: buildGameContext(game),
+        input: { prisma },
+      });
     }
 
     const [game, round] = await Promise.all([
@@ -825,38 +983,50 @@ async function getRoundRouteData(gameId, roundId, input = {}) {
     ]);
 
     if (!game) {
-      return {
+      return await withArchiveShellData({
         kind: "round",
         title: "Round unavailable",
         description: "The requested Music League round could not be loaded.",
         status: "Game not found.",
         statusHref: "/",
         statusLinkLabel: "Back to archive",
-      };
+      }, {
+        activeRoute: "round",
+        gameContext: null,
+        input: { prisma },
+      });
     }
 
     if (!round) {
-      return {
+      return await withArchiveShellData({
         kind: "round",
         title: "Round unavailable",
         description: "The requested Music League round could not be found.",
         status: "Round not found.",
         statusHref: buildGameHref(game.id),
         statusLinkLabel: "Back to game",
-      };
+      }, {
+        activeRoute: "round",
+        gameContext: buildGameContext(game),
+        input: { prisma },
+      });
     }
 
     const owningGameTitle = resolveGameDisplayLabel(round.game);
 
     if (round.game.id !== game.id) {
-      return {
+      return await withArchiveShellData({
         kind: "round",
         title: "Round belongs to another game",
         description: "This Music League round belongs to a different game.",
         status: "Round belongs to another game.",
         statusHref: buildGameHref(round.game.id),
         statusLinkLabel: `Open ${owningGameTitle}`,
-      };
+      }, {
+        activeRoute: "round",
+        gameContext: buildGameContext(round.game),
+        input: { prisma },
+      });
     }
 
     const orderedSubmissions = [...round.submissions].sort((left, right) => {
@@ -870,7 +1040,7 @@ async function getRoundRouteData(gameId, roundId, input = {}) {
     });
     const votesBySongId = groupVotesBySongId(round.votes);
 
-    return {
+    return await withArchiveShellData({
       kind: "round",
       title: round.name,
       description: `${round.name} round page in ${resolveGameDisplayLabel(game)}.`,
@@ -891,7 +1061,11 @@ async function getRoundRouteData(gameId, roundId, input = {}) {
           votes: votesBySongId.get(submission.song.id) ?? [],
         })),
       },
-    };
+    }, {
+      activeRoute: "round",
+      gameContext: buildGameContext(game),
+      input: { prisma },
+    });
   } finally {
     if (ownsPrismaClient) {
       await prisma.$disconnect();
@@ -1014,7 +1188,7 @@ async function getSongsRouteData(input = {}) {
         return left.id - right.id;
       });
 
-    return {
+    return await withArchiveShellData({
       kind: "songs",
       title: "Songs",
       description: "Search songs and artists in the Music League archive.",
@@ -1030,7 +1204,12 @@ async function getSongsRouteData(input = {}) {
       songs: rows,
       isEmpty: songs.length === 0,
       clearHref: buildSongSearchHref({}),
-    };
+    }, {
+      activeRoute: "songs",
+      gameContext: null,
+      searchParams,
+      input: { prisma },
+    });
   } finally {
     if (ownsPrismaClient) {
       await prisma.$disconnect();
@@ -1042,14 +1221,18 @@ async function getSongRouteData(songId, input = {}) {
   const parsedSongId = parsePositiveRouteId(songId);
 
   if (parsedSongId === null) {
-    return {
+    return await withArchiveShellData({
       kind: "song",
       title: "Song unavailable",
       description: "The requested Music League song could not be loaded.",
       status: "Invalid song ID.",
       statusHref: "/songs",
       statusLinkLabel: "Back to songs",
-    };
+    }, {
+      activeRoute: "song",
+      gameContext: null,
+      input,
+    });
   }
 
   const { prisma, ownsPrismaClient } = resolveArchiveInput(input);
@@ -1101,14 +1284,18 @@ async function getSongRouteData(songId, input = {}) {
     });
 
     if (!song || song.submissions.length === 0) {
-      return {
+      return await withArchiveShellData({
         kind: "song",
         title: "Song unavailable",
         description: "The requested Music League song has no archive evidence.",
         status: "Song not found with submission evidence.",
         statusHref: "/songs",
         statusLinkLabel: "Back to songs",
-      };
+      }, {
+        activeRoute: "song",
+        gameContext: null,
+        input: { prisma },
+      });
     }
 
     const artistSubmissions = await prisma.submission.findMany({
@@ -1168,7 +1355,7 @@ async function getSongRouteData(songId, input = {}) {
       },
     }));
 
-    return {
+    return await withArchiveShellData({
       kind: "song",
       title: song.title,
       description: `${song.title} by ${song.artist.name} in the Music League archive.`,
@@ -1200,7 +1387,11 @@ async function getSongRouteData(songId, input = {}) {
           return right.id - left.id;
         }),
       },
-    };
+    }, {
+      activeRoute: "song",
+      gameContext: null,
+      input: { prisma },
+    });
   } finally {
     if (ownsPrismaClient) {
       await prisma.$disconnect();
@@ -1214,14 +1405,19 @@ async function getPlayerRouteData(playerId, input = {}) {
   const voteGameId = parsePositiveRouteId(searchParams.voteGameId);
 
   if (parsedPlayerId === null) {
-    return {
+    return await withArchiveShellData({
       kind: "player",
       title: "Player unavailable",
       description: "The requested Music League player could not be loaded.",
       status: "Invalid player ID.",
       statusHref: "/",
       statusLinkLabel: "Back to archive",
-    };
+    }, {
+      activeRoute: "player",
+      gameContext: null,
+      searchParams,
+      input,
+    });
   }
 
   const { prisma, ownsPrismaClient } = resolveArchiveInput(input);
@@ -1303,14 +1499,19 @@ async function getPlayerRouteData(playerId, input = {}) {
     });
 
     if (!player) {
-      return {
+      return await withArchiveShellData({
         kind: "player",
         title: "Player unavailable",
         description: "The requested Music League player could not be found.",
         status: "Player not found.",
         statusHref: "/",
         statusLinkLabel: "Back to archive",
-      };
+      }, {
+        activeRoute: "player",
+        gameContext: null,
+        searchParams,
+        input: { prisma },
+      });
     }
 
     const submissionVoteTargets = player.submissions.map((submission) => ({
@@ -1388,7 +1589,7 @@ async function getPlayerRouteData(playerId, input = {}) {
     const scoredHistory = history.filter((submission) => isScoredSubmission(submission));
     const gameIds = new Set(player.submissions.map((submission) => submission.round.game.id));
 
-    return {
+    return await withArchiveShellData({
       kind: "player",
       title: player.displayName,
       description: `${player.displayName} in the Music League archive.`,
@@ -1437,26 +1638,17 @@ async function getPlayerRouteData(playerId, input = {}) {
         player.submissions.length === 0 && player.votes.length === 0 && receivedVotes.length === 0
           ? "No submissions or votes have been imported for this player yet."
           : null,
-    };
+    }, {
+      activeRoute: "player",
+      gameContext: null,
+      searchParams,
+      input: { prisma },
+    });
   } finally {
     if (ownsPrismaClient) {
       await prisma.$disconnect();
     }
   }
-}
-
-function ArchiveHeader() {
-  return React.createElement(
-    "header",
-    { className: "archive-route-header" },
-    React.createElement("a", { href: "/", className: "archive-route-brand" }, "Music League Archive"),
-    React.createElement(
-      "nav",
-      { "aria-label": "Archive routes" },
-      React.createElement("a", { href: "/" }, "Games"),
-      React.createElement("a", { href: "/songs" }, "Songs"),
-    ),
-  );
 }
 
 function ArchiveBadge({ variant, label, ariaLabel, href, rel, target }) {
@@ -1546,13 +1738,14 @@ function SimpleTable({ caption, headers, rows, emptyCopy }) {
     React.createElement(
       "table",
       null,
+      React.createElement("caption", null, caption),
       React.createElement(
         "thead",
         null,
         React.createElement(
           "tr",
           null,
-          headers.map((header) => React.createElement("th", { key: header }, header)),
+          headers.map((header) => React.createElement("th", { key: header, scope: "col" }, header)),
         ),
       ),
       React.createElement(
@@ -2088,19 +2281,22 @@ function ArchiveRoutePage({ data }) {
   const Content = contentByKind[data.kind] ?? LandingContent;
 
   return React.createElement(
-    React.Fragment,
-    null,
-    React.createElement(ArchiveHeader),
-    React.createElement(
-      "main",
-      { className: "archive-route-page" },
-      React.createElement(Content, { data }),
-    ),
+    ArchiveShell,
+    {
+      ...(data.shell ?? {
+        activeRoute: data.kind,
+        gameContext: null,
+        search: { value: "", submitHrefBase: "/songs", suggestions: [] },
+        switcher: { currentGames: [], completedGames: [], selectedGameId: null, backToGame: null },
+      }),
+    },
+    React.createElement(Content, { data }),
   );
 }
 
 module.exports = {
   ArchiveRoutePage,
+  getArchiveShellData,
   buildRouteMetadata,
   getGameRouteData,
   getLandingRouteData,
