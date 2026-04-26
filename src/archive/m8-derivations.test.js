@@ -127,6 +127,17 @@ test("maps votes to submissions through same-round song attribution", () => {
       }),
     /without a same-round submission/,
   );
+  assert.throws(
+    () =>
+      mapVotesToRoundSubmissions({
+        submissions: [
+          { id: 1, roundId: 1, songId: 1, playerId: 1 },
+          { id: 2, roundId: 1, songId: 1, playerId: 2 },
+        ],
+        votes: [{ id: 3, roundId: 1, songId: 1, voterId: 3 }],
+      }),
+    /duplicate submission target/,
+  );
 });
 
 test("orders song appearances by submitted date, round date fallback, and stable id", () => {
