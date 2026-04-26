@@ -23,6 +23,7 @@ const {
   selectPlayerNotablePicks,
 } = require("./archive-utils");
 const {
+  buildStatusNotice,
   compareGameRoundAscending,
   compareNullableAscending,
   compareNullableDescending,
@@ -35,7 +36,10 @@ const {
   getSongCatalog,
   mapVotesToRoundSubmissions,
   normalizeArchiveSearch,
+  notFoundRouteData,
+  readyRouteData,
   resolveArchiveInput,
+  sparseRouteData,
 } = require("./m8-derivations");
 
 const archiveDateFormatter = new Intl.DateTimeFormat("en-US", {
@@ -387,6 +391,131 @@ function buildGameLeaderboard(game) {
   return deriveLeaderboardRows(flattenGameSubmissions(game));
 }
 
+function countScoredRounds(rounds) {
+  return rounds.filter((round) =>
+    (round.submissions ?? []).some(
+      (submission) => submission.score !== null && submission.score !== undefined,
+    ),
+  ).length;
+}
+
+function buildGameCompetitiveAnchor(leaderboardRows) {
+  const leaders = leaderboardRows
+    .filter((row) => row.rank === 1)
+    .map((row) => ({
+      playerId: row.playerId,
+      displayName: row.displayName,
+      totalPoints: row.totalPoints,
+      href: row.href,
+    }));
+
+  if (leaders.length === 0) {
+    return {
+      headline: "Competitive standings need scored submissions.",
+      leaders: [],
+      closestRace: null,
+      roundsWonLeader: null,
+    };
+  }
+
+  const leaderPoints = leaders[0].totalPoints;
+  const headline =
+    leaders.length === 1
+      ? `Leader: ${leaders[0].displayName} with ${leaderPoints} points`
+      : leaders.length === 2
+        ? `Tied leaders: ${leaders[0].displayName} & ${leaders[1].displayName} at ${leaderPoints} points`
+        : `${leaders.length}-way tie at ${leaderPoints} points: ${leaders
+            .map((leader) => leader.displayName)
+            .join(", ")}`;
+  let closestRace = null;
+
+  for (let index = 1; index < leaderboardRows.length; index += 1) {
+    const left = leaderboardRows[index - 1];
+    const right = leaderboardRows[index];
+    const pointGap = left.totalPoints - right.totalPoints;
+
+    if (pointGap < 0) {
+      continue;
+    }
+
+    if (!closestRace || pointGap < closestRace.pointGap) {
+      closestRace = {
+        label: `${left.displayName} over ${right.displayName}`,
+        pointGap,
+      };
+    }
+  }
+
+  const highestRoundWins = Math.max(...leaderboardRows.map((row) => row.roundWins));
+  const roundWinLeaders = leaderboardRows.filter(
+    (row) => row.roundWins === highestRoundWins && row.roundWins > 0,
+  );
+
+  return {
+    headline,
+    leaders,
+    closestRace,
+    roundsWonLeader:
+      roundWinLeaders.length === 1
+        ? {
+            playerId: roundWinLeaders[0].playerId,
+            displayName: roundWinLeaders[0].displayName,
+            roundWins: roundWinLeaders[0].roundWins,
+            href: roundWinLeaders[0].href,
+          }
+        : null,
+  };
+}
+
+function buildEmptyMemoryBoard(gameId, statusNotice) {
+  return {
+    selectedGameId: gameId,
+    anchor: null,
+    competitiveAnchor: null,
+    moments: [],
+    rounds: [],
+    sparseState: {
+      title: statusNotice.title,
+      copy: statusNotice.body,
+    },
+  };
+}
+
+function buildGamePageProps({ game, rounds, leaderboard, memoryBoard }) {
+  const timeframe = deriveGameTimeframe({
+    rounds,
+    submissions: rounds.flatMap((round) => round.submissions ?? []),
+    votes: rounds.flatMap((round) => round.votes ?? []),
+  });
+  const roundList = deriveGameRoundListItems({ gameId: game.id, rounds });
+  const scoredRoundCount = countScoredRounds(rounds);
+
+  return {
+    game: {
+      id: game.id,
+      displayName: resolveGameDisplayLabel(game),
+      title: resolveGameDisplayLabel(game),
+      description: game.description ?? null,
+      status: game.finished ? "Completed" : "Current",
+      finished: game.finished,
+      timeframeLabel: timeframe?.label ?? null,
+      timeframe: timeframe?.label ?? null,
+      roundCount: rounds.length,
+      scoredRoundCount,
+    },
+    leaderboard,
+    rounds: roundList,
+    memoryBoard,
+    competitiveAnchor: buildGameCompetitiveAnchor(leaderboard.rows),
+    leaderboardFootnote: leaderboard.footnote,
+    hasLeaderboardTies: leaderboard.hasTies,
+    pendingScoringCopy:
+      leaderboard.rows.length === 0
+        ? "Scoring evidence has not been imported for this game yet, so standings stay pending."
+        : null,
+  };
+}
+
 function buildRoundHighlights(submissions) {
   const rankedSubmissions = submissions.filter((submission) => submission.rank !== null);
   const scoredSubmissions = submissions.filter((submission) => submission.score !== null);
@@ -668,22 +797,18 @@ async function getLandingPageData({ year, winner, input } = {}) {
   }
 }
 
-async function getGameRouteData(gameId, input = {}) {
+async function getGamePageData(gameId, input = {}) {
   const parsedGameId = parsePositiveRouteId(gameId);
 
   if (parsedGameId === null) {
-    return await withArchiveShellData({
-      kind: "game",
-      title: "Game unavailable",
-      description: "The requested Music League game could not be loaded.",
-      status: "Invalid game ID.",
-      statusHref: "/",
-      statusLinkLabel: "Back to archive",
-    }, {
-      activeRoute: "game",
-      gameContext: null,
-      input,
-    });
+    return notFoundRouteData(
+      buildStatusNotice({
+        title: "Invalid game ID.",
+        body: "The requested Music League game could not be loaded.",
+        href: "/",
+        hrefLabel: "Back to archive",
+      }),
+    );
   }
 
   const { prisma, ownsPrismaClient } = resolveArchiveInput(input);
@@ -695,6 +820,7 @@ async function getGameRouteData(gameId, input = {}) {
         id: true,
         sourceGameId: true,
         displayName: true,
+        description: true,
         finished: true,
         rounds: {
           select: {
@@ -730,13 +856,61 @@ async function getGameRouteData(gameId, input = {}) {
     });
 
     if (!game) {
+      return notFoundRouteData(
+        buildStatusNotice({
+          title: "Game not found.",
+          body: "The requested Music League game could not be found.",
+          href: "/",
+          hrefLabel: "Back to archive",
+        }),
+      );
+    }
+
+    const rounds = [...game.rounds].sort(compareRounds);
+    const leaderboard = buildGameLeaderboard({ ...game, rounds });
+    const sparseNotice =
+      rounds.length === 0
+        ? buildStatusNotice({
+            title: "No round evidence.",
+            body: "This game has no imported round evidence yet.",
+            href: "/",
+            hrefLabel: "Back to archive",
+          })
+        : null;
+    const memoryBoardResult =
+      rounds.length === 0 ? null : await getSelectedGameMemoryBoard(game.id, { prisma });
+    const props = buildGamePageProps({
+      game,
+      rounds,
+      leaderboard,
+      memoryBoard: memoryBoardResult?.board ?? buildEmptyMemoryBoard(game.id, sparseNotice ?? {
+        title: "Memory board pending.",
+        body: "Memory-board evidence is not available for this game yet.",
+      }),
+    });
+
+    return sparseNotice ? sparseRouteData(props, sparseNotice) : readyRouteData(props);
+  } finally {
+    if (ownsPrismaClient) {
+      await prisma.$disconnect();
+    }
+  }
+}
+
+async function getGameRouteData(gameId, input = {}) {
+  const { prisma, ownsPrismaClient } = resolveArchiveInput(input);
+
+  try {
+    const pageData = await getGamePageData(gameId, { prisma });
+
+    if (pageData.kind === "not-found") {
       return await withArchiveShellData({
         kind: "game",
         title: "Game unavailable",
-        description: "The requested Music League game could not be found.",
-        status: "Game not found.",
-        statusHref: "/",
-        statusLinkLabel: "Back to archive",
+        description: pageData.statusNotice.body,
+        status: pageData.statusNotice.title,
+        statusHref: pageData.statusNotice.href,
+        statusLinkLabel: pageData.statusNotice.hrefLabel,
       }, {
         activeRoute: "game",
         gameContext: null,
@@ -744,35 +918,41 @@ async function getGameRouteData(gameId, input = {}) {
       });
     }
 
-    const title = resolveGameDisplayLabel(game);
-    const rounds = [...game.rounds].sort(compareRounds);
-    const leaderboard = buildGameLeaderboard({ ...game, rounds });
-    const memoryBoard = rounds.length === 0 ? null : await getSelectedGameMemoryBoard(game.id, { prisma });
+    const { props } = pageData;
 
     return await withArchiveShellData({
       kind: "game",
-      title,
-      description: `${title} archive page.`,
+      title: props.game.displayName,
+      description: props.game.description ?? `${props.game.displayName} archive page.`,
       game: {
-        id: game.id,
-        title,
-        finished: game.finished,
-        timeframe: formatGameTimeframe(rounds),
-        rounds: deriveGameRoundListItems({ gameId: game.id, rounds }),
-        leaderboard: leaderboard.rows,
-        leaderboardFootnote: leaderboard.footnote,
-        hasLeaderboardTies: leaderboard.hasTies,
-        pendingScoringCopy:
-          leaderboard.rows.length === 0
-            ? "Scoring is pending for this game, so the leaderboard stays hidden until scored rounds are imported."
-            : null,
-        competitiveAnchor: memoryBoard?.board?.competitiveAnchor ?? null,
-        memoryBoard: memoryBoard?.board ?? null,
+        ...props.game,
+        title: props.game.displayName,
+        timeframe: props.game.timeframeLabel,
+        rounds: props.rounds,
+        leaderboard: props.leaderboard.rows,
+        leaderboardFootnote: props.leaderboardFootnote,
+        hasLeaderboardTies: props.hasLeaderboardTies,
+        pendingScoringCopy: props.pendingScoringCopy,
+        competitiveAnchor: props.competitiveAnchor,
+        memoryBoard: props.memoryBoard,
       },
-      status: rounds.length === 0 ? "This game has no imported round evidence yet." : null,
+      leaderboard: props.leaderboard,
+      rounds: props.rounds,
+      memoryBoard: props.memoryBoard,
+      competitiveAnchor: props.competitiveAnchor,
+      leaderboardFootnote: props.leaderboardFootnote,
+      hasLeaderboardTies: props.hasLeaderboardTies,
+      pendingScoringCopy: props.pendingScoringCopy,
+      status: pageData.statusNotice?.body ?? null,
+      statusHref: pageData.statusNotice?.href,
+      statusLinkLabel: pageData.statusNotice?.hrefLabel,
     }, {
       activeRoute: "game",
-      gameContext: buildGameContext(game),
+      gameContext: {
+        gameId: props.game.id,
+        displayName: props.game.displayName,
+        href: buildGameHref(props.game.id),
+      },
       input: { prisma },
     });
   } finally {
@@ -1630,11 +1810,12 @@ function GameContent({ data }) {
   return React.createElement(
     React.Fragment,
     null,
-    React.createElement("h1", null, data.game.title),
+    React.createElement("h1", null, data.game.displayName ?? data.game.title),
     React.createElement(ArchiveBadge, {
-      variant: data.game.finished ? "status-completed" : "status-current",
-      label: data.game.finished ? "Completed game" : "Current game",
+      variant: data.game.status === "Completed" || data.game.finished ? "status-completed" : "status-current",
+      label: data.game.status ?? (data.game.finished ? "Completed" : "Current"),
     }),
+    data.game.description ? React.createElement("p", null, data.game.description) : null,
     data.game.timeframe ? React.createElement("p", null, data.game.timeframe) : null,
     React.createElement(StatusNotice, { status: data.status }),
     data.status
@@ -1644,25 +1825,37 @@ function GameContent({ data }) {
           null,
           React.createElement(SimpleTable, {
             caption: "Leaderboard",
-            headers: ["Rank", "Player", "Score", "Wins"],
+            headers: ["Rank", "Player", "Points", "Round wins", "Rounds played"],
             rows: data.game.leaderboard.map((row) => ({
-              id: row.player.id,
+              id: row.playerId ?? row.player.id,
               cells: [
                 React.createElement(ArchiveBadge, {
-                  variant: row.tied ? "rank-tie" : "rank-plain",
-                  label: formatRankBadgeLabel(row.rank, row.tied),
-                  ariaLabel: row.tied ? `Tied rank ${row.rank}` : `Rank ${row.rank}`,
+                  variant: row.isTiedRank || row.tied ? "rank-tie" : "rank-plain",
+                  label: row.rankLabel ?? formatRankBadgeLabel(row.rank, row.tied),
+                  ariaLabel: row.isTiedRank || row.tied ? `Tied rank ${row.rank}` : `Rank ${row.rank}`,
                 }),
-                React.createElement("a", { href: row.player.href }, row.player.displayName),
+                React.createElement(
+                  "a",
+                  { href: row.href ?? row.player.href },
+                  row.displayName ?? row.player.displayName,
+                ),
                 React.createElement(ArchiveBadge, {
                   variant: "score",
-                  label: `${row.totalScore} points`,
+                  label: `${row.totalPoints ?? row.totalScore} points`,
                 }),
-                String(row.wins),
+                String(row.roundWins ?? row.wins),
+                String(row.roundsPlayed ?? row.scoredSubmissionCount),
               ],
             })),
             emptyCopy: data.game.pendingScoringCopy ?? "No scored rounds imported for this game.",
           }),
+          data.game.status === "Current" && data.game.leaderboard.length > 0
+            ? React.createElement(
+                "p",
+                { className: "archive-route-footnote", role: "note" },
+                "Standings are provisional while this game is in progress.",
+              )
+            : null,
           data.game.leaderboardFootnote
             ? React.createElement(
                 "p",
@@ -1674,15 +1867,48 @@ function GameContent({ data }) {
             "section",
             { className: "archive-route-section" },
             React.createElement("h2", null, "Rounds"),
-            React.createElement(RouteList, {
-              items: data.game.rounds.map((round) => ({
-                id: round.id,
-                title: round.name,
-                href: round.href,
-                meta: `${round.submissionCount} submissions - ${formatDate(round.occurredAt)}`,
-              })),
-              emptyCopy: "No rounds imported for this game.",
-            }),
+            data.game.rounds.length === 0
+              ? React.createElement("p", { className: "archive-route-empty" }, "No rounds imported for this game.")
+              : React.createElement(
+                  "ul",
+                  { className: "archive-route-list archive-game-round-list" },
+                  data.game.rounds.map((round) =>
+                    React.createElement(
+                      "li",
+                      { key: round.roundId ?? round.id },
+                      React.createElement(
+                        "span",
+                        { className: "archive-route-list-main" },
+                        React.createElement("a", { href: round.href }, `${round.sequenceLabel}: ${round.name}`),
+                        React.createElement(ArchiveBadge, {
+                          variant: "score",
+                          label: round.statusLabel,
+                        }),
+                        round.playlistUrl
+                          ? React.createElement(ArchiveBadge, {
+                              variant: "playlist-link",
+                              label: "Playlist",
+                              href: round.playlistUrl,
+                              rel: "noopener",
+                              target: "_blank",
+                              ariaLabel: `Open playlist for ${round.name}`,
+                            })
+                          : null,
+                      ),
+                      React.createElement(
+                        "span",
+                        null,
+                        [
+                          round.occurredAtLabel ?? "Date TBD",
+                          formatCount(round.submissionCount, "submission"),
+                          round.winnerLabel ? `Winner: ${round.winnerLabel}` : null,
+                        ]
+                          .filter(Boolean)
+                          .join(" - "),
+                      ),
+                    ),
+                  ),
+                ),
           ),
           React.createElement(
             "section",
@@ -1709,13 +1935,29 @@ function GameContent({ data }) {
             "section",
             { className: "archive-route-section" },
             React.createElement("h2", null, "Competitive anchor"),
-            data.game.competitiveAnchor?.title
+            data.game.competitiveAnchor?.headline
               ? React.createElement(
                   React.Fragment,
                   null,
-                  React.createElement("p", null, data.game.competitiveAnchor.title),
-                  data.game.competitiveAnchor.body
-                    ? React.createElement("p", null, data.game.competitiveAnchor.body)
+                  React.createElement("p", null, data.game.competitiveAnchor.headline),
+                  data.game.competitiveAnchor.closestRace
+                    ? React.createElement(
+                        "p",
+                        null,
+                        `Closest race: ${data.game.competitiveAnchor.closestRace.label}, ${data.game.competitiveAnchor.closestRace.pointGap} points apart.`,
+                      )
+                    : null,
+                  data.game.competitiveAnchor.roundsWonLeader
+                    ? React.createElement(
+                        "p",
+                        null,
+                        React.createElement(
+                          "a",
+                          { href: data.game.competitiveAnchor.roundsWonLeader.href },
+                          data.game.competitiveAnchor.roundsWonLeader.displayName,
+                        ),
+                        ` leads round wins with ${data.game.competitiveAnchor.roundsWonLeader.roundWins}.`,
+                      )
                     : null,
                 )
               : React.createElement("p", null, "Competitive claims need complete scored evidence."),
@@ -2107,6 +2349,7 @@ module.exports = {
   getArchiveShellData,
   buildRouteMetadata,
   getLandingPageData,
+  getGamePageData,
   getGameRouteData,
   getLandingRouteData,
   getPlayerRouteData,

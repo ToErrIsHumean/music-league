@@ -5,6 +5,7 @@ const { renderToStaticMarkup } = require("react-dom/server");
 const { createTempPrismaDb } = require("./helpers/temp-prisma-db");
 const {
   ArchiveRoutePage,
+  getGamePageData,
   getGameRouteData,
   getLandingPageData,
   getLandingRouteData,
@@ -215,6 +216,159 @@ test(
       assert.ok(!markup.includes("archive-overlay"));
     } finally {
       await landingDb.cleanup();
+    }
+  },
+);
+
+test(
+  "game page loader renders ordered rounds, playlist links, provisional ties, and pending scoring",
+  { concurrency: false },
+  async () => {
+    const gameDb = createTempPrismaDb({
+      prefix: "music-league-game-route-",
+      filename: "game-route.sqlite",
+      seed: false,
+    });
+
+    try {
+      const ada = await gameDb.prisma.player.create({
+        data: {
+          displayName: "Ada",
+          normalizedName: "ada",
+          sourcePlayerId: "game-route-ada",
+        },
+      });
+      const bea = await gameDb.prisma.player.create({
+        data: {
+          displayName: "Bea",
+          normalizedName: "bea",
+          sourcePlayerId: "game-route-bea",
+        },
+      });
+      const artist = await gameDb.prisma.artist.create({
+        data: {
+          name: "Game Route Band",
+          normalizedName: "game route band",
+        },
+      });
+      const songA = await gameDb.prisma.song.create({
+        data: {
+          title: "Tie Song A",
+          normalizedTitle: "tie song a",
+          spotifyUri: "spotify:track:game-route-a",
+          artistId: artist.id,
+        },
+      });
+      const songB = await gameDb.prisma.song.create({
+        data: {
+          title: "Tie Song B",
+          normalizedTitle: "tie song b",
+          spotifyUri: "spotify:track:game-route-b",
+          artistId: artist.id,
+        },
+      });
+      const game = await gameDb.prisma.game.create({
+        data: {
+          sourceGameId: "game-route-current",
+          displayName: "Game Route Current",
+          description: "A current game for route coverage.",
+          finished: false,
+        },
+      });
+      const lateRound = await gameDb.prisma.round.create({
+        data: {
+          gameId: game.id,
+          leagueSlug: game.sourceGameId,
+          sourceRoundId: "game-route-late",
+          name: "Late Round",
+          sequenceNumber: 2,
+          occurredAt: new Date("2026-03-02T00:00:00.000Z"),
+        },
+      });
+      const opener = await gameDb.prisma.round.create({
+        data: {
+          gameId: game.id,
+          leagueSlug: game.sourceGameId,
+          sourceRoundId: "game-route-opener",
+          name: "Opener",
+          sequenceNumber: 1,
+          occurredAt: new Date("2026-03-01T00:00:00.000Z"),
+          playlistUrl: "https://example.com/game-route-playlist",
+        },
+      });
+
+      await gameDb.prisma.submission.createMany({
+        data: [
+          {
+            roundId: opener.id,
+            playerId: ada.id,
+            songId: songA.id,
+            score: 10,
+            rank: 1,
+            submittedAt: new Date("2026-03-01T01:00:00.000Z"),
+          },
+          {
+            roundId: lateRound.id,
+            playerId: bea.id,
+            songId: songB.id,
+            score: 10,
+            rank: 1,
+            submittedAt: new Date("2026-03-02T01:00:00.000Z"),
+          },
+        ],
+      });
+
+      const pageData = await getGamePageData(game.id, { prisma: gameDb.prisma });
+      const routeData = await getGameRouteData(game.id, { prisma: gameDb.prisma });
+      const markup = renderToStaticMarkup(React.createElement(ArchiveRoutePage, { data: routeData }));
+
+      assert.equal(pageData.kind, "ready");
+      assert.equal(pageData.props.game.status, "Current");
+      assert.equal(pageData.props.game.scoredRoundCount, 2);
+      assert.deepEqual(
+        pageData.props.rounds.map((round) => round.roundId),
+        [opener.id, lateRound.id],
+      );
+      assert.equal(pageData.props.rounds[0].playlistUrl, "https://example.com/game-route-playlist");
+      assert.deepEqual(
+        pageData.props.leaderboard.rows.map((row) => [row.displayName, row.rankLabel, row.isTiedRank]),
+        [
+          ["Ada", "T1", true],
+          ["Bea", "T1", true],
+        ],
+      );
+      assert.equal(pageData.props.competitiveAnchor.headline, "Tied leaders: Ada & Bea at 10 points");
+      assert.match(markup, /Standings are provisional while this game is in progress/);
+      assert.match(markup, /href="\/players\//);
+      assert.match(markup, /href="\/games\/\d+\/rounds\/\d+"/);
+      assert.match(markup, /href="https:\/\/example.com\/game-route-playlist"/);
+      assert.match(markup, /target="_blank"/);
+      assert.match(markup, /rel="noopener"/);
+
+      const pendingGame = await gameDb.prisma.game.create({
+        data: {
+          sourceGameId: "game-route-pending",
+          displayName: "Pending Game",
+          finished: true,
+        },
+      });
+      await gameDb.prisma.round.create({
+        data: {
+          gameId: pendingGame.id,
+          leagueSlug: pendingGame.sourceGameId,
+          sourceRoundId: "game-route-pending-round",
+          name: "Pending Round",
+          sequenceNumber: 1,
+        },
+      });
+      const pendingRoute = await getGameRouteData(pendingGame.id, { prisma: gameDb.prisma });
+      const pendingMarkup = renderToStaticMarkup(React.createElement(ArchiveRoutePage, { data: pendingRoute }));
+
+      assert.equal(pendingRoute.game.leaderboard.length, 0);
+      assert.match(pendingMarkup, /Scoring evidence has not been imported/);
+      assert.ok(!pendingMarkup.includes("<table>"));
+    } finally {
+      await gameDb.cleanup();
     }
   },
 );
