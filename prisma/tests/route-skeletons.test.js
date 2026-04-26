@@ -62,6 +62,30 @@ test.after(async () => {
   await cleanup();
 });
 
+function countMatches(value, pattern) {
+  return value.match(pattern)?.length ?? 0;
+}
+
+function assertPrimaryRouteAccessibility(markup) {
+  assert.equal(countMatches(markup, /<h1(?:\s[^>]*)?>/g), 1);
+  assert.match(markup, /href="#archive-main"/);
+  assert.match(markup, /<main[^>]*id="archive-main"/);
+  assert.match(markup, /<header[^>]*aria-label="Archive header"/);
+  assert.match(markup, /<footer[^>]*aria-label="Archive footer"/);
+  assert.match(markup, /<nav[^>]*aria-label="Archive navigation"/);
+  assert.match(markup, /role="search"/);
+  assert.match(markup, /id="archive-shell-search-status"[^>]*aria-live="polite"/);
+  assert.match(markup, /aria-controls="archive-shell-game-switcher-panel"/);
+  assert.match(markup, /aria-expanded="false"/);
+  assert.ok(!markup.includes("role=\"dialog\""));
+  assert.ok(!markup.includes("archive-overlay"));
+  assert.ok(!markup.includes("<details"));
+  assert.ok(!markup.includes("round="));
+  assert.ok(!markup.includes("song="));
+  assert.ok(!markup.includes("player="));
+  assert.ok(!markup.includes("playerSubmission="));
+}
+
 test("song browser loader normalizes filters and exposes zero-state metadata", async () => {
   const prismaStub = {
     song: {
@@ -830,22 +854,40 @@ test(
 
     assert.ok(player, "expected a seeded player");
 
+    const landingData = await getLandingRouteData({
+      prisma,
+      searchParams: {
+        round: String(mainRoundId),
+        song: String(songId),
+        player: String(player.id),
+        playerSubmission: "999",
+      },
+    });
     const gameData = await getGameRouteData(mainGameId, { prisma });
     const roundData = await getRoundRouteData(mainGameId, mainRoundId, { prisma });
     const pendingRound = await getRoundRouteData(mainGameId, pendingRoundId, { prisma });
     const songsData = await getSongsRouteData({ prisma, searchParams: { q: "bright" } });
     const songData = await getSongRouteData(songId, { prisma });
     const playerData = await getPlayerRouteData(player.id, { prisma });
-    const markup = [
-      gameData,
-      roundData,
-      pendingRound,
-      songsData,
-      songData,
-      playerData,
-    ]
-      .map((data) => renderToStaticMarkup(React.createElement(ArchiveRoutePage, { data })))
-      .join("\n");
+    const invalidGameData = await getGameRouteData("not-a-game", { prisma });
+    const routeMarkups = [
+      ["landing", landingData],
+      ["game", gameData],
+      ["round", roundData],
+      ["pending-round", pendingRound],
+      ["songs", songsData],
+      ["song", songData],
+      ["player", playerData],
+      ["invalid-game", invalidGameData],
+    ].map(([kind, data]) => [
+      kind,
+      renderToStaticMarkup(React.createElement(ArchiveRoutePage, { data })),
+    ]);
+    const markup = routeMarkups.map(([, routeMarkup]) => routeMarkup).join("\n");
+
+    for (const [kind, routeMarkup] of routeMarkups) {
+      assertPrimaryRouteAccessibility(routeMarkup, kind);
+    }
 
     assert.match(markup, /Music League Archive/);
     assert.match(markup, /Skip to content/);
@@ -870,10 +912,18 @@ test(
     assert.match(markup, /Submission history/);
     assert.match(markup, /Votes given/);
     assert.match(markup, /Votes received/);
+    assert.match(markup, /role="status"/);
+    assert.match(routeMarkups.find(([kind]) => kind === "landing")[1], /class="archive-shell-brand"[^>]*aria-current="page"/);
+    assert.match(routeMarkups.find(([kind]) => kind === "songs")[1], /href="\/songs"[^>]*aria-current="page"/);
+    assert.match(routeMarkups.find(([kind]) => kind === "song")[1], /href="\/songs"[^>]*aria-current="page"/);
+    assert.match(routeMarkups.find(([kind]) => kind === "game")[1], new RegExp(`href="/games/${mainGameId}"[^>]*aria-current="page"`));
+    assert.match(routeMarkups.find(([kind]) => kind === "round")[1], new RegExp(`href="/games/${mainGameId}"[^>]*aria-current="page"`));
+    assert.match(markup, /<th scope="col">Rank<\/th>/);
     assert.match(markup, /data-archive-badge-variant="status-/);
     assert.match(markup, /data-archive-badge-variant="rank-/);
     assert.match(markup, /data-archive-badge-variant="score"/);
     assert.match(markup, /data-archive-badge-role="primary"/);
+    assert.doesNotMatch(markup, /album|genre|mood|release year|audio feature|spotify enrichment|live voting|live submission/i);
     assert.ok(!markup.includes("role=\"dialog\""));
     assert.ok(!markup.includes("archive-overlay"));
     assert.ok(!markup.includes("<details"));

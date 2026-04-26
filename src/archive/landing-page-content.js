@@ -30,7 +30,7 @@ function ArchiveBadge({ variant, label, ariaLabel }) {
 function LandingStatus({ children }) {
   return React.createElement(
     "p",
-    { className: "archive-route-status", "aria-live": "polite" },
+    { className: "archive-route-status", role: "status", "aria-live": "polite" },
     children,
   );
 }

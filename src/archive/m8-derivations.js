@@ -417,26 +417,30 @@ function mapVotesToRoundSubmissions({ submissions = [], votes = [] } = {}) {
 
   for (const submission of submissions) {
     const key = `${submission.roundId}\u0000${submission.songId}`;
+    const matchingSubmissions = submissionsByRoundSong.get(key) ?? [];
 
-    if (submissionsByRoundSong.has(key)) {
-      throw new Error(
-        `mapVotesToRoundSubmissions: duplicate submission target for round ${submission.roundId} song ${submission.songId}`,
-      );
-    }
-
-    submissionsByRoundSong.set(key, submission);
+    matchingSubmissions.push(submission);
+    submissionsByRoundSong.set(key, matchingSubmissions);
     votesBySubmissionId.set(submission.id, []);
   }
 
   for (const vote of votes) {
     const key = `${vote.roundId}\u0000${vote.songId}`;
-    const submission = submissionsByRoundSong.get(key);
+    const matchingSubmissions = submissionsByRoundSong.get(key) ?? [];
 
-    if (!submission) {
+    if (matchingSubmissions.length === 0) {
       throw new Error(
         `mapVotesToRoundSubmissions: vote ${vote.id} targets round ${vote.roundId} song ${vote.songId} without a same-round submission`,
       );
     }
+
+    if (matchingSubmissions.length > 1) {
+      throw new Error(
+        `mapVotesToRoundSubmissions: duplicate submission target for round ${vote.roundId} song ${vote.songId}`,
+      );
+    }
+
+    const submission = matchingSubmissions[0];
 
     votesBySubmissionId.get(submission.id).push(vote);
     submissionByVoteId.set(vote.id, submission);

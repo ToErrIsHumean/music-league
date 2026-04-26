@@ -1719,7 +1719,7 @@ function StatusNotice({ status, href, linkLabel }) {
 
   return React.createElement(
     "section",
-    { className: "archive-route-status", "aria-live": "polite" },
+    { className: "archive-route-status", role: "status", "aria-live": "polite" },
     React.createElement("p", null, status),
     href
       ? React.createElement("a", { href }, linkLabel ?? "Continue")
