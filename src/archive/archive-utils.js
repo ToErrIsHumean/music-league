@@ -19,6 +19,7 @@ const {
   parsePositiveRouteId,
   stripRetiredOverlayParams,
 } = require("./route-utils");
+const { mapVotesToRoundSubmissions } = require("./m8-derivations");
 
 const SHORT_GAME_ID_MAX_LENGTH = 16;
 const SONG_RECALL_COMMENT_MAX_LENGTH = 140;
@@ -440,43 +441,16 @@ function groupSongMemoryEvidence(evidenceSubmissions) {
   };
 }
 
-function buildSubmissionSongIndex(submissions) {
-  const submissionGroupsBySongId = new Map();
-
-  for (const submission of submissions) {
-    const submissionGroup = submissionGroupsBySongId.get(submission.song.id) ?? [];
-
-    submissionGroup.push(submission);
-    submissionGroupsBySongId.set(submission.song.id, submissionGroup);
-  }
-
-  return submissionGroupsBySongId;
-}
-
 function buildRoundVoteBreakdown(orderedSubmissions, votes) {
-  const submissionGroupsBySongId = buildSubmissionSongIndex(orderedSubmissions);
-  const votesBySongId = new Map();
-
-  for (const vote of votes) {
-    const submissionGroup = submissionGroupsBySongId.get(vote.songId);
-
-    if (!submissionGroup) {
-      throw new Error(
-        `Round vote ${vote.id} targets song ${vote.songId} without a same-round submission`,
-      );
-    }
-
-    if (submissionGroup.length > 1) {
-      throw new Error(
-        `Round vote ${vote.id} targets duplicate same-round song ${vote.songId}`,
-      );
-    }
-
-    const songVotes = votesBySongId.get(vote.songId) ?? [];
-
-    songVotes.push(vote);
-    votesBySongId.set(vote.songId, songVotes);
-  }
+  const { votesBySubmissionId } = mapVotesToRoundSubmissions({
+    submissions: orderedSubmissions.map((submission) => ({
+      id: submission.id,
+      roundId: submission.roundId,
+      songId: submission.songId,
+      playerId: submission.playerId,
+    })),
+    votes,
+  });
 
   return orderedSubmissions.map((submission) => ({
     submissionId: submission.id,
@@ -492,7 +466,7 @@ function buildRoundVoteBreakdown(orderedSubmissions, votes) {
     rank: submission.rank,
     score: submission.score,
     submissionComment: submission.comment,
-    votes: [...(votesBySongId.get(submission.song.id) ?? [])]
+    votes: [...(votesBySubmissionId.get(submission.id) ?? [])]
       .sort(compareRoundVoteOrder)
       .map((vote) => ({
         voter: {
@@ -2595,6 +2569,9 @@ async function getRoundDetail(roundId, input = {}) {
         submissions: {
           select: {
             id: true,
+            roundId: true,
+            songId: true,
+            playerId: true,
             score: true,
             rank: true,
             comment: true,
@@ -2637,6 +2614,7 @@ async function getRoundDetail(roundId, input = {}) {
           },
           select: {
             id: true,
+            roundId: true,
             songId: true,
             pointsAssigned: true,
             comment: true,
