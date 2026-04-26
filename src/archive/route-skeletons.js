@@ -1,9 +1,5 @@
 const React = require("react");
 const {
-  derivePlayerPerformanceMetrics,
-  isScoredSubmission,
-} = require("./player-metrics");
-const {
   buildGameHref,
   buildPlayerHref,
   buildRoundHref,
@@ -20,11 +16,13 @@ const { ArchiveShell } = require("./archive-shell");
 const { LandingContent } = require("./landing-page-content");
 const { RoundSubmissionsList } = require("./round-vote-disclosures");
 const { SongBrowser } = require("./song-browser");
+const { getSelectedGameMemoryBoard } = require("./archive-utils");
 const {
-  derivePlayerTrait,
-  getSelectedGameMemoryBoard,
-  selectPlayerNotablePicks,
-} = require("./archive-utils");
+  PLAYER_TRAIT_REGISTRY,
+  derivePlayerTraits,
+  getPlayerDetailData,
+  getPlayerVoteHistory,
+} = require("./player-detail");
 const {
   buildStatusNotice,
   compareGameRoundAscending,
@@ -819,85 +817,6 @@ function buildSongDetailBrowserRow({ song, exactSubmissions, appearanceFacts, be
   };
 }
 
-function buildPlayerHistoryRows(submissions) {
-  return [...submissions]
-    .sort((left, right) => {
-      const dateComparison = compareNullableDescending(
-        left.round.occurredAt ?? null,
-        right.round.occurredAt ?? null,
-      );
-
-      if (dateComparison !== 0) {
-        return dateComparison;
-      }
-
-      return right.id - left.id;
-    })
-    .map((submission) => ({
-      submissionId: submission.id,
-      gameId: submission.round.game.id,
-      gameTitle: resolveGameDisplayLabel(submission.round.game),
-      gameHref: buildGameHref(submission.round.game.id),
-      roundId: submission.round.id,
-      roundName: submission.round.name,
-      roundHref: buildRoundHref(submission.round.game.id, submission.round.id),
-      occurredAt: submission.round.occurredAt,
-      song: {
-        id: submission.song.id,
-        title: submission.song.title,
-        artistName: submission.song.artist.name,
-        href: buildSongHref(submission.song.id),
-      },
-      score: submission.score,
-      rank: submission.rank,
-      comment: submission.comment,
-    }));
-}
-
-function buildPlayerMetricBaselines(metricsByPlayer) {
-  const metricRows = [...metricsByPlayer.values()].filter(
-    (metrics) =>
-      metrics.scoredSubmissionCount > 0 && metrics.averageFinishPercentile !== null,
-  );
-
-  return {
-    playerCount: metricRows.length,
-    averageFinishPercentile:
-      metricRows.length === 0
-        ? 0
-        : sum(metricRows.map((metrics) => metrics.averageFinishPercentile)) / metricRows.length,
-    scoreStdDev:
-      metricRows.length === 0
-        ? 0
-        : sum(metricRows.map((metrics) => metrics.rawScoreStdDev ?? 0)) / metricRows.length,
-    winRate:
-      metricRows.length === 0
-        ? 0
-        : sum(metricRows.map((metrics) => metrics.winRate ?? 0)) / metricRows.length,
-  };
-}
-
-function buildPlayerTrait(playerId, allSubmissions) {
-  const metricsByPlayer = derivePlayerPerformanceMetrics(
-    allSubmissions.map((submission) => ({
-      playerId: submission.playerId,
-      roundId: submission.roundId,
-      score: submission.score,
-      rank: submission.rank,
-    })),
-  );
-  const playerMetrics = metricsByPlayer.get(playerId);
-
-  if (!playerMetrics || !playerMetrics.minimumSampleMet) {
-    return null;
-  }
-
-  return derivePlayerTrait({
-    playerMetrics,
-    gameBaselines: buildPlayerMetricBaselines(metricsByPlayer),
-  });
-}
-
 async function getLandingRouteData(input = {}) {
   const { prisma, ownsPrismaClient } = resolveArchiveInput(input);
   const searchParams = normalizeSearchParams(await input.searchParams);
@@ -1673,116 +1592,73 @@ async function getSongRouteData(songId, input = {}) {
   }
 }
 
+function buildLegacyPlayerRouteModel(props) {
+  const scoredSubmissionCount = props.submissionGroups
+    .flatMap((group) => group.rows)
+    .filter((row) => row.score !== null && row.rank !== null).length;
+  const votesGivenCount = sum(props.votesGiven.rows.map((row) => row.voteCount));
+  const totalPointsGiven = sum(props.votesGiven.rows.map((row) => row.netPoints));
+  const votesReceivedCount = sum(props.votesReceived.rows.map((row) => row.voteCount));
+  const firstBestPick = props.notablePicks.find((pick) => pick.kind === "best") ?? null;
+  const firstWorstPick = props.notablePicks.find((pick) => pick.kind === "worst") ?? null;
+  const firstTrait = props.traits[0] ?? null;
+
+  return {
+    ...props.player,
+    voteGameId: props.voteScope.active.kind === "game" ? props.voteScope.active.gameId : null,
+    aggregate: {
+      submissionCount: props.player.totalSubmissions,
+      scoredSubmissionCount,
+      gameCount: props.submissionGroups.length,
+      votesGivenCount,
+      votesReceivedCount,
+      totalPointsGiven,
+      totalPointsReceived: props.player.totalPointsReceived,
+    },
+    trait: firstTrait
+      ? {
+          kind: firstTrait.traitId,
+          line: firstTrait.label,
+        }
+      : null,
+    notablePicks: {
+      best: firstBestPick,
+      worst: firstWorstPick,
+    },
+    submissions: props.submissionGroups.flatMap((group) =>
+      group.rows.map((row) => ({
+        ...row,
+        gameId: group.gameId,
+        gameTitle: group.gameName,
+        gameHref: group.href,
+        roundId: row.round.id,
+        roundName: row.round.name,
+        roundHref: row.round.href,
+      })),
+    ),
+    votesGiven: props.votesGiven.rows,
+    votesReceived: props.votesReceived.rows,
+  };
+}
+
 async function getPlayerRouteData(playerId, input = {}) {
-  const parsedPlayerId = parsePositiveRouteId(playerId);
   const searchParams = normalizeSearchParams(await input.searchParams);
-  const voteGameId = parsePositiveRouteId(searchParams.voteGameId);
-
-  if (parsedPlayerId === null) {
-    return await withArchiveShellData({
-      kind: "player",
-      title: "Player unavailable",
-      description: "The requested Music League player could not be loaded.",
-      status: "Invalid player ID.",
-      statusHref: "/",
-      statusLinkLabel: "Back to archive",
-    }, {
-      activeRoute: "player",
-      gameContext: null,
-      searchParams,
-      input,
-    });
-  }
-
   const { prisma, ownsPrismaClient } = resolveArchiveInput(input);
 
   try {
-    const player = await prisma.player.findUnique({
-      where: { id: parsedPlayerId },
-      select: {
-        id: true,
-        displayName: true,
-        submissions: {
-          select: {
-            id: true,
-            roundId: true,
-            songId: true,
-            playerId: true,
-            rank: true,
-            score: true,
-            comment: true,
-            createdAt: true,
-            song: {
-              select: {
-                id: true,
-                title: true,
-                artist: {
-                  select: {
-                    name: true,
-                  },
-                },
-              },
-            },
-            round: {
-              select: {
-                id: true,
-                name: true,
-                occurredAt: true,
-                sequenceNumber: true,
-                game: {
-                  select: {
-                    id: true,
-                    sourceGameId: true,
-                    displayName: true,
-                  },
-                },
-              },
-            },
-          },
-        },
-        votes: {
-          select: {
-            id: true,
-            pointsAssigned: true,
-            round: {
-              select: {
-                id: true,
-                gameId: true,
-                name: true,
-                occurredAt: true,
-                game: {
-                  select: {
-                    id: true,
-                    sourceGameId: true,
-                    displayName: true,
-                  },
-                },
-              },
-            },
-            song: {
-              select: {
-                id: true,
-                title: true,
-                artist: {
-                  select: {
-                    name: true,
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
+    const pageData = await getPlayerDetailData(playerId, {
+      voteGameId: searchParams.voteGameId,
+      input: { prisma },
     });
 
-    if (!player) {
+    if (pageData.kind === "not-found") {
       return await withArchiveShellData({
         kind: "player",
         title: "Player unavailable",
-        description: "The requested Music League player could not be found.",
-        status: "Player not found.",
-        statusHref: "/",
-        statusLinkLabel: "Back to archive",
+        description: pageData.statusNotice.body,
+        status: pageData.statusNotice.title,
+        statusHref: pageData.statusNotice.href,
+        statusLinkLabel: pageData.statusNotice.hrefLabel,
       }, {
         activeRoute: "player",
         gameContext: null,
@@ -1791,147 +1667,22 @@ async function getPlayerRouteData(playerId, input = {}) {
       });
     }
 
-    const submissionVoteTargets = player.submissions.map((submission) => ({
-      roundId: submission.round.id,
-      songId: submission.song.id,
-    }));
-    const [receivedVotes, allSubmissions] = await Promise.all([
-      submissionVoteTargets.length === 0
-        ? []
-        : prisma.vote.findMany({
-            where: {
-              OR: submissionVoteTargets,
-            },
-            select: {
-              id: true,
-              roundId: true,
-              songId: true,
-              pointsAssigned: true,
-              comment: true,
-              votedAt: true,
-              voter: {
-                select: {
-                  id: true,
-                  displayName: true,
-                },
-              },
-              round: {
-                select: {
-                  id: true,
-                  gameId: true,
-                  name: true,
-                  occurredAt: true,
-                  game: {
-                    select: {
-                      id: true,
-                      sourceGameId: true,
-                      displayName: true,
-                    },
-                  },
-                },
-              },
-              song: {
-                select: {
-                  id: true,
-                  title: true,
-                  artist: {
-                    select: {
-                      name: true,
-                    },
-                  },
-                },
-              },
-            },
-          }),
-      prisma.submission.findMany({
-        select: {
-          id: true,
-          playerId: true,
-          roundId: true,
-          songId: true,
-          score: true,
-          rank: true,
-        },
-      }),
-    ]);
-    const { submissionByVoteId } = mapVotesToRoundSubmissions({
-      submissions: player.submissions.map((submission) => ({
-        id: submission.id,
-        roundId: submission.roundId,
-        songId: submission.songId,
-        playerId: submission.playerId,
-      })),
-      votes: receivedVotes,
-    });
-    const attributedReceivedVotes = receivedVotes.map((vote) => ({
-      ...vote,
-      submissionId: submissionByVoteId.get(vote.id).id,
-    }));
-
-    const hasScopedVoteEvidence =
-      voteGameId !== null &&
-      (player.submissions.some((submission) => submission.round.game.id === voteGameId) ||
-        player.votes.some((vote) => vote.round.gameId === voteGameId) ||
-        attributedReceivedVotes.some((vote) => vote.round.gameId === voteGameId));
-    const visibleVotesGiven = hasScopedVoteEvidence
-      ? player.votes.filter((vote) => vote.round.gameId === voteGameId)
-      : player.votes;
-    const visibleVotesReceived = hasScopedVoteEvidence
-      ? attributedReceivedVotes.filter((vote) => vote.round.gameId === voteGameId)
-      : attributedReceivedVotes;
-    const history = buildPlayerHistoryRows(player.submissions);
-    const scoredHistory = history.filter((submission) => isScoredSubmission(submission));
-    const gameIds = new Set(player.submissions.map((submission) => submission.round.game.id));
+    const { props } = pageData;
 
     return await withArchiveShellData({
       kind: "player",
-      title: player.displayName,
-      description: `${player.displayName} in the Music League archive.`,
-      player: {
-        id: player.id,
-        displayName: player.displayName,
-        voteGameId: hasScopedVoteEvidence ? voteGameId : null,
-        aggregate: {
-          submissionCount: player.submissions.length,
-          scoredSubmissionCount: scoredHistory.length,
-          gameCount: gameIds.size,
-          votesGivenCount: player.votes.length,
-          votesReceivedCount: attributedReceivedVotes.length,
-          totalPointsGiven: sum(player.votes.map((vote) => vote.pointsAssigned)),
-          totalPointsReceived: sum(attributedReceivedVotes.map((vote) => vote.pointsAssigned)),
-        },
-        trait: buildPlayerTrait(player.id, allSubmissions),
-        notablePicks: selectPlayerNotablePicks(scoredHistory),
-        submissions: history,
-        votesGiven: [...visibleVotesGiven].sort((left, right) => {
-          const dateComparison = compareNullableDescending(
-            left.round.occurredAt ?? null,
-            right.round.occurredAt ?? null,
-          );
-
-          if (dateComparison !== 0) {
-            return dateComparison;
-          }
-
-          return right.id - left.id;
-        }),
-        votesReceived: [...visibleVotesReceived].sort((left, right) => {
-          const dateComparison = compareNullableDescending(
-            left.round.occurredAt ?? null,
-            right.round.occurredAt ?? null,
-          );
-
-          if (dateComparison !== 0) {
-            return dateComparison;
-          }
-
-          return right.id - left.id;
-        }),
-      },
-      status:
-        player.submissions.length === 0 && player.votes.length === 0 && attributedReceivedVotes.length === 0
-          ? "No submissions or votes have been imported for this player yet."
-          : null,
+      title: props.player.displayName,
+      description: `${props.player.displayName} in the Music League archive.`,
+      player: buildLegacyPlayerRouteModel(props),
+      traits: props.traits,
+      notablePicks: props.notablePicks,
+      submissionGroups: props.submissionGroups,
+      voteScope: props.voteScope,
+      votesGiven: props.votesGiven,
+      votesReceived: props.votesReceived,
+      status: pageData.statusNotice?.body ?? null,
+      statusHref: pageData.statusNotice?.href,
+      statusLinkLabel: pageData.statusNotice?.hrefLabel,
     }, {
       activeRoute: "player",
       gameContext: null,
@@ -2394,6 +2145,91 @@ function SongContent({ data }) {
   );
 }
 
+function formatAveragePoints(value) {
+  return Number.isInteger(value) ? String(value) : value.toFixed(2);
+}
+
+function PlayerVoteScope({ voteScope }) {
+  if (!voteScope || voteScope.options.length <= 1) {
+    return null;
+  }
+
+  return React.createElement(
+    "section",
+    { className: "archive-route-section" },
+    React.createElement("h2", null, "Vote scope"),
+    React.createElement(
+      "nav",
+      { "aria-label": "Player vote scope" },
+      React.createElement(
+        "ul",
+        { className: "archive-route-list" },
+        voteScope.options.map((option) =>
+          React.createElement(
+            "li",
+            { key: option.kind === "all" ? "all" : option.gameId },
+            React.createElement(
+              "span",
+              { className: "archive-route-list-main" },
+              React.createElement(
+                "a",
+                {
+                  href: option.href,
+                  "aria-current": option.selected ? "page" : undefined,
+                },
+                option.kind === "all" ? option.label : option.gameName,
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+function renderVoteComments(comments) {
+  if (comments.length === 0) {
+    return "";
+  }
+
+  return React.createElement(
+    "ul",
+    { className: "archive-route-list" },
+    comments.map((comment) =>
+      React.createElement(
+        "li",
+        { key: comment.voteId },
+        React.createElement("a", { href: comment.roundHref }, `${comment.gameName} / ${comment.roundName}`),
+        ` - ${comment.comment}`,
+      ),
+    ),
+  );
+}
+
+function PlayerVoteTable({ caption, table, counterpartyHeader }) {
+  const pointHeaders = table.hasNegativeVotes
+    ? ["Positive", "Negative", "Net"]
+    : ["Net"];
+
+  return React.createElement(SimpleTable, {
+    caption,
+    headers: [counterpartyHeader, "Votes", ...pointHeaders, "Average", "Comments"],
+    rows: table.rows.map((row) => ({
+      id: row.playerId,
+      cells: [
+        React.createElement("a", { href: row.href }, row.displayName),
+        String(row.voteCount),
+        ...(table.hasNegativeVotes
+          ? [String(row.positivePoints), String(row.negativePoints), String(row.netPoints)]
+          : [String(row.netPoints)]),
+        formatAveragePoints(row.averagePoints),
+        renderVoteComments(row.comments),
+      ],
+    })),
+    emptyCopy: "No voting history in this scope.",
+  });
+}
+
 function PlayerContent({ data }) {
   if (!data.player) {
     return React.createElement(
@@ -2417,36 +2253,60 @@ function PlayerContent({ data }) {
       items: [
         {
           label: "Submissions",
-          value: `${data.player.aggregate.submissionCount} total, ${data.player.aggregate.scoredSubmissionCount} scored`,
+          value: `${data.player.totalSubmissions} total, ${data.player.aggregate.scoredSubmissionCount} scored`,
         },
         {
           label: "Games",
           value: String(data.player.aggregate.gameCount),
         },
         {
-          label: "Votes given",
-          value: `${data.player.aggregate.votesGivenCount} votes, ${data.player.aggregate.totalPointsGiven} points`,
+          label: "Votes cast",
+          value: `${data.player.totalVotesCast} total`,
         },
         {
-          label: "Votes received",
-          value: `${data.player.aggregate.votesReceivedCount} votes, ${data.player.aggregate.totalPointsReceived} points`,
+          label: "Points received",
+          value: String(data.player.totalPointsReceived),
         },
       ],
     }),
-    data.player.trait
+    data.traits.length > 0
       ? React.createElement(
           "section",
           { className: "archive-route-section" },
-          React.createElement("h2", null, "Trait"),
+          React.createElement("h2", null, "Traits"),
           React.createElement(
-            "p",
-            null,
-            React.createElement(ArchiveBadge, {
-              variant: "trait",
-              label: "Trait",
-              ariaLabel: data.player.trait.line,
-            }),
-            ` ${data.player.trait.line}`,
+            "ul",
+            { className: "archive-route-list" },
+            data.traits.map((trait) =>
+              React.createElement(
+                "li",
+                { key: trait.traitId, "data-trait-id": trait.traitId },
+                React.createElement(
+                  "span",
+                  { className: "archive-route-list-main" },
+                  React.createElement(ArchiveBadge, {
+                    variant: trait.badgeVariant,
+                    label: trait.label,
+                    ariaLabel: trait.label,
+                  }),
+                ),
+                React.createElement(
+                  "span",
+                  null,
+                  trait.evidence
+                    .map((evidence) => `${evidence.metric} ${evidence.value} (${evidence.threshold})`)
+                    .join("; "),
+                  trait.subjectPlayer
+                    ? React.createElement(
+                        React.Fragment,
+                        null,
+                        " - ",
+                        React.createElement("a", { href: trait.subjectPlayer.href }, trait.subjectPlayer.displayName),
+                      )
+                    : null,
+                ),
+              ),
+            ),
           ),
         )
       : null,
@@ -2454,16 +2314,25 @@ function PlayerContent({ data }) {
       "section",
       { className: "archive-route-section" },
       React.createElement("h2", null, "Notable picks"),
-      data.player.notablePicks.best || data.player.notablePicks.worst
+      data.notablePicks.length > 0
         ? React.createElement(RouteList, {
-            items: [data.player.notablePicks.best, data.player.notablePicks.worst]
-              .filter(Boolean)
-              .map((submission, index) => ({
-                id: `${index}-${submission.submissionId}`,
-                title: index === 0 ? "Best pick" : "Toughest finish",
-                href: submission.song.href,
-                meta: `${submission.song.title} - ${formatRank(submission.rank)} - ${formatScore(submission.score)}`,
-              })),
+            items: data.notablePicks.map((pick) => ({
+              id: `${pick.kind}-${pick.submissionId}`,
+              title: `${pick.kind === "best" ? "Best pick" : "Toughest finish"} - ${pick.gameName}`,
+              href: pick.song.href,
+              badge: {
+                variant: "score",
+                label: formatScore(pick.score),
+                ariaLabel: `${pick.gameName} ${pick.kind} pick score`,
+              },
+              meta: React.createElement(
+                React.Fragment,
+                null,
+                `${pick.song.title} by ${pick.song.artistName} - `,
+                React.createElement("a", { href: pick.round.href }, pick.round.name),
+                ` - ${formatRank(pick.rank)}`,
+              ),
+            })),
             emptyCopy: "No notable picks available.",
           })
         : React.createElement("p", { className: "archive-route-empty" }, "Notable picks need scored submissions."),
@@ -2472,43 +2341,48 @@ function PlayerContent({ data }) {
       "section",
       { className: "archive-route-section" },
       React.createElement("h2", null, "Submission history"),
-      React.createElement(RouteList, {
-        items: data.player.submissions.map((submission) => ({
-          id: submission.submissionId,
-          title: submission.song.title,
-          href: submission.song.href,
-          meta: `${submission.song.artistName} - ${submission.roundName} - ${formatRank(submission.rank)} - ${formatScore(submission.score)}`,
-        })),
-        emptyCopy: "No submissions imported for this player.",
-      }),
+      data.submissionGroups.length === 0
+        ? React.createElement("p", { className: "archive-route-empty" }, "No submissions imported for this player.")
+        : data.submissionGroups.map((group) =>
+            React.createElement(
+              "section",
+              { key: group.gameId, className: "archive-route-subsection" },
+              React.createElement("h3", null, React.createElement("a", { href: group.href }, group.gameName)),
+              React.createElement(RouteList, {
+                items: group.rows.map((submission) => ({
+                  id: submission.submissionId,
+                  title: submission.song.title,
+                  href: submission.song.href,
+                  meta: React.createElement(
+                    React.Fragment,
+                    null,
+                    `${submission.song.artistName} - `,
+                    React.createElement("a", { href: submission.round.href }, submission.round.name),
+                    ` - ${formatRank(submission.rank)} - ${formatScore(submission.score)}`,
+                    submission.comment ? ` - ${submission.comment}` : "",
+                  ),
+                })),
+                emptyCopy: "No submissions imported for this game.",
+              }),
+            ),
+          ),
     ),
-    React.createElement(SimpleTable, {
-      caption: data.player.voteGameId ? "Votes given in selected game" : "Votes given",
-      headers: ["Round", "Song", "Points", "Comment"],
-      rows: data.player.votesGiven.map((vote) => ({
-        id: vote.id,
-        cells: [
-          React.createElement("a", { href: buildRoundHref(vote.round.game.id, vote.round.id) }, vote.round.name),
-          React.createElement("a", { href: buildSongHref(vote.song.id) }, vote.song.title),
-          String(vote.pointsAssigned),
-          vote.comment ?? "",
-        ],
-      })),
-      emptyCopy: "No votes given in this scope.",
+    React.createElement(PlayerVoteScope, { voteScope: data.voteScope }),
+    React.createElement(PlayerVoteTable, {
+      caption:
+        data.voteScope.active.kind === "game"
+          ? `Votes given - ${data.voteScope.active.gameName}`
+          : "Votes given - All games",
+      table: data.votesGiven,
+      counterpartyHeader: "Recipient",
     }),
-    React.createElement(SimpleTable, {
-      caption: data.player.voteGameId ? "Votes received in selected game" : "Votes received",
-      headers: ["Round", "Song", "Points", "Voter"],
-      rows: data.player.votesReceived.map((vote) => ({
-        id: vote.id,
-        cells: [
-          React.createElement("a", { href: buildRoundHref(vote.round.game.id, vote.round.id) }, vote.round.name),
-          React.createElement("a", { href: buildSongHref(vote.song.id) }, vote.song.title),
-          String(vote.pointsAssigned),
-          vote.voter.displayName,
-        ],
-      })),
-      emptyCopy: "No votes received in this scope.",
+    React.createElement(PlayerVoteTable, {
+      caption:
+        data.voteScope.active.kind === "game"
+          ? `Votes received - ${data.voteScope.active.gameName}`
+          : "Votes received - All games",
+      table: data.votesReceived,
+      counterpartyHeader: "Voter",
     }),
   );
 }
@@ -2546,11 +2420,15 @@ module.exports = {
   getGamePageData,
   getGameRouteData,
   getLandingRouteData,
+  getPlayerDetailData,
   getPlayerRouteData,
+  getPlayerVoteHistory,
   getRoundPageData,
   getRoundRouteData,
   getSongBrowserData,
   getSongDetailData,
   getSongRouteData,
   getSongsRouteData,
+  PLAYER_TRAIT_REGISTRY,
+  derivePlayerTraits,
 };

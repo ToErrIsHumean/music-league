@@ -9,6 +9,7 @@ const {
   getGameRouteData,
   getLandingPageData,
   getLandingRouteData,
+  getPlayerDetailData,
   getPlayerRouteData,
   getRoundPageData,
   getRoundRouteData,
@@ -439,6 +440,251 @@ test(
 );
 
 test(
+  "player detail loader aggregates scoped voting history through same-round submission attribution",
+  { concurrency: false },
+  async () => {
+    const playerDb = createTempPrismaDb({
+      prefix: "music-league-player-route-",
+      filename: "player-route.sqlite",
+      seed: false,
+    });
+
+    try {
+      const target = await playerDb.prisma.player.create({
+        data: {
+          displayName: "Target Taylor",
+          normalizedName: "target taylor",
+          sourcePlayerId: "player-route-target",
+        },
+      });
+      const giver = await playerDb.prisma.player.create({
+        data: {
+          displayName: "Giver Gia",
+          normalizedName: "giver gia",
+          sourcePlayerId: "player-route-giver",
+        },
+      });
+      const other = await playerDb.prisma.player.create({
+        data: {
+          displayName: "Other Omar",
+          normalizedName: "other omar",
+          sourcePlayerId: "player-route-other",
+        },
+      });
+      const sparse = await playerDb.prisma.player.create({
+        data: {
+          displayName: "Sparse Sam",
+          normalizedName: "sparse sam",
+          sourcePlayerId: "player-route-sparse",
+        },
+      });
+      const artist = await playerDb.prisma.artist.create({
+        data: {
+          name: "Attribution Band",
+          normalizedName: "attribution band",
+        },
+      });
+      const recurringSong = await playerDb.prisma.song.create({
+        data: {
+          title: "Recurring Signal",
+          normalizedTitle: "recurring signal",
+          spotifyUri: "spotify:track:player-route-recurring",
+          artistId: artist.id,
+        },
+      });
+      const giverSong = await playerDb.prisma.song.create({
+        data: {
+          title: "Giver Tune",
+          normalizedTitle: "giver tune",
+          spotifyUri: "spotify:track:player-route-giver",
+          artistId: artist.id,
+        },
+      });
+      const targetSong = await playerDb.prisma.song.create({
+        data: {
+          title: "Target Followup",
+          normalizedTitle: "target followup",
+          spotifyUri: "spotify:track:player-route-target-followup",
+          artistId: artist.id,
+        },
+      });
+      const gameA = await playerDb.prisma.game.create({
+        data: {
+          sourceGameId: "player-route-a",
+          displayName: "Attribution A",
+        },
+      });
+      const gameB = await playerDb.prisma.game.create({
+        data: {
+          sourceGameId: "player-route-b",
+          displayName: "Attribution B",
+        },
+      });
+      const roundA = await playerDb.prisma.round.create({
+        data: {
+          gameId: gameA.id,
+          leagueSlug: "player-route-a",
+          sourceRoundId: "player-route-a-round",
+          name: "Round A",
+          sequenceNumber: 1,
+          occurredAt: new Date("2024-01-01T00:00:00.000Z"),
+        },
+      });
+      const roundB = await playerDb.prisma.round.create({
+        data: {
+          gameId: gameB.id,
+          leagueSlug: "player-route-b",
+          sourceRoundId: "player-route-b-round",
+          name: "Round B",
+          sequenceNumber: 1,
+          occurredAt: new Date("2024-02-01T00:00:00.000Z"),
+        },
+      });
+
+      await playerDb.prisma.submission.createMany({
+        data: [
+          {
+            roundId: roundA.id,
+            playerId: target.id,
+            songId: recurringSong.id,
+            score: 10,
+            rank: 1,
+            comment: "Target brought the first signal.",
+            submittedAt: new Date("2024-01-01T12:00:00.000Z"),
+          },
+          {
+            roundId: roundA.id,
+            playerId: giver.id,
+            songId: giverSong.id,
+            score: 5,
+            rank: 2,
+            submittedAt: new Date("2024-01-01T12:05:00.000Z"),
+          },
+          {
+            roundId: roundB.id,
+            playerId: other.id,
+            songId: recurringSong.id,
+            score: 7,
+            rank: 1,
+            submittedAt: new Date("2024-02-01T12:00:00.000Z"),
+          },
+          {
+            roundId: roundB.id,
+            playerId: target.id,
+            songId: targetSong.id,
+            score: 4,
+            rank: 2,
+            submittedAt: new Date("2024-02-01T12:05:00.000Z"),
+          },
+        ],
+      });
+      await playerDb.prisma.vote.createMany({
+        data: [
+          {
+            roundId: roundA.id,
+            voterId: giver.id,
+            songId: recurringSong.id,
+            pointsAssigned: 5,
+            comment: "Target hit.",
+            votedAt: new Date("2024-01-02T00:00:00.000Z"),
+          },
+          {
+            roundId: roundA.id,
+            voterId: target.id,
+            songId: giverSong.id,
+            pointsAssigned: 4,
+            comment: "Returned the favor.",
+            votedAt: new Date("2024-01-02T00:05:00.000Z"),
+          },
+          {
+            roundId: roundB.id,
+            voterId: giver.id,
+            songId: recurringSong.id,
+            pointsAssigned: 7,
+            comment: "Same song elsewhere.",
+            votedAt: new Date("2024-02-02T00:00:00.000Z"),
+          },
+          {
+            roundId: roundB.id,
+            voterId: target.id,
+            songId: recurringSong.id,
+            pointsAssigned: -2,
+            comment: "Downbeat repeat.",
+            votedAt: new Date("2024-02-02T00:05:00.000Z"),
+          },
+        ],
+      });
+
+      const detail = await getPlayerDetailData(target.id, {
+        input: { prisma: playerDb.prisma },
+      });
+      const scoped = await getPlayerDetailData(target.id, {
+        voteGameId: gameA.id,
+        input: { prisma: playerDb.prisma },
+      });
+      const invalidScope = await getPlayerDetailData(target.id, {
+        voteGameId: 99999,
+        input: { prisma: playerDb.prisma },
+      });
+      const sparseDetail = await getPlayerDetailData(sparse.id, {
+        input: { prisma: playerDb.prisma },
+      });
+      const routeData = await getPlayerRouteData(target.id, {
+        prisma: playerDb.prisma,
+        searchParams: { voteGameId: String(gameA.id) },
+      });
+      const markup = renderToStaticMarkup(React.createElement(ArchiveRoutePage, { data: routeData }));
+
+      assert.equal(detail.kind, "ready");
+      assert.equal(detail.props.player.totalSubmissions, 2);
+      assert.equal(detail.props.player.totalVotesCast, 2);
+      assert.equal(detail.props.player.totalPointsReceived, 5);
+      assert.equal(detail.props.notablePicks.length, 2);
+      assert.equal(detail.props.submissionGroups.length, 2);
+      assert.equal(detail.props.votesGiven.hasNegativeVotes, true);
+      assert.deepEqual(
+        detail.props.votesGiven.rows.map((row) => [row.displayName, row.netPoints, row.voteCount]),
+        [
+          ["Giver Gia", 4, 1],
+          ["Other Omar", -2, 1],
+        ],
+      );
+      assert.equal(detail.props.votesReceived.rows.length, 1);
+      assert.equal(detail.props.votesReceived.rows[0].displayName, "Giver Gia");
+      assert.equal(detail.props.votesReceived.rows[0].netPoints, 5);
+      assert.equal(detail.props.votesReceived.rows[0].comments[0].roundHref, `/games/${gameA.id}/rounds/${roundA.id}`);
+      assert.ok(
+        detail.props.voteScope.options.some(
+          (option) => option.kind === "game" && option.gameId === gameB.id,
+        ),
+      );
+
+      assert.equal(scoped.props.voteScope.active.kind, "game");
+      assert.equal(scoped.props.voteScope.active.gameId, gameA.id);
+      assert.equal(scoped.props.votesGiven.hasNegativeVotes, false);
+      assert.deepEqual(
+        scoped.props.votesGiven.rows.map((row) => [row.displayName, row.netPoints]),
+        [["Giver Gia", 4]],
+      );
+      assert.deepEqual(
+        scoped.props.votesReceived.rows.map((row) => [row.displayName, row.netPoints]),
+        [["Giver Gia", 5]],
+      );
+
+      assert.equal(invalidScope.props.voteScope.active.kind, "all");
+      assert.equal(sparseDetail.kind, "sparse");
+      assert.equal(sparseDetail.props.player.totalSubmissions, 0);
+      assert.match(sparseDetail.statusNotice.body, /No submissions or votes/);
+      assert.match(markup, /<caption>Votes given - Attribution A<\/caption>/);
+      assert.match(markup, /aria-current="page"/);
+      assert.ok(!markup.includes("role=\"dialog\""));
+    } finally {
+      await playerDb.cleanup();
+    }
+  },
+);
+
+test(
   "route skeleton loaders render stable route data and invalid-id status notices",
   { concurrency: false },
   async () => {
@@ -554,10 +800,11 @@ test(
     assert.equal(playerRoute.kind, "player");
     assert.equal(playerRoute.shell.gameContext, null);
     assert.ok(playerRoute.player.aggregate.submissionCount > 0);
-    assert.ok(playerRoute.player.trait);
-    assert.ok(playerRoute.player.notablePicks.best);
-    assert.ok(playerRoute.player.votesGiven.length > 0);
-    assert.ok(playerRoute.player.votesReceived.length > 0);
+    assert.ok(Array.isArray(playerRoute.traits));
+    assert.ok(playerRoute.notablePicks.some((pick) => pick.song.href === `/songs/${pick.song.id}`));
+    assert.ok(playerRoute.submissionGroups.every((group) => group.rows.every((row) => row.round.href.startsWith("/games/"))));
+    assert.ok(playerRoute.votesGiven.rows.length > 0);
+    assert.ok(playerRoute.votesReceived.rows.length > 0);
     assert.equal(missingGame.status, "Invalid game ID.");
     assert.equal(wrongGameRound.status, "Round belongs to another game.");
     assert.equal(wrongGameRound.statusHref, `/games/${mainGameId}`);
