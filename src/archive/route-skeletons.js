@@ -83,6 +83,10 @@ function formatDate(value) {
   return value ? archiveDateFormatter.format(new Date(value)) : "Date TBD";
 }
 
+function formatOptionalDateLabel(value) {
+  return value ? archiveDateFormatter.format(new Date(value)) : null;
+}
+
 function formatCount(count, singular) {
   return `${count} ${singular}${count === 1 ? "" : "s"}`;
 }
@@ -654,21 +658,48 @@ function buildRoundPageProps({ game, round, submissions, votesBySubmissionId, so
   };
 }
 
-function buildSongSummaryFacts(submissions) {
-  const appearances = submissions.length;
-  const games = new Set(submissions.map((submission) => submission.round.game.id));
-  const submitters = new Set(submissions.map((submission) => submission.player.id));
-  const rankedSubmissions = submissions.filter((submission) => submission.rank !== null);
-  const bestFinish =
-    rankedSubmissions.length === 0
-      ? null
-      : Math.min(...rankedSubmissions.map((submission) => submission.rank));
+function buildBestFinishLabel(bestFinish) {
+  if (!bestFinish) {
+    return "Best finish pending";
+  }
+
+  return bestFinish.score === null || bestFinish.score === undefined
+    ? formatRank(bestFinish.rank)
+    : `${formatRank(bestFinish.rank)}, ${formatScore(bestFinish.score)}`;
+}
+
+function buildAppearanceLabel(appearance) {
+  if (!appearance) {
+    return "No appearance evidence";
+  }
+
+  const dateLabel = formatOptionalDateLabel(appearance.appearanceAt);
+  const context = `${appearance.submitterName} in ${appearance.roundName}`;
+
+  return dateLabel ? `${context} (${dateLabel})` : context;
+}
+
+function buildArtistFootprintLabel(artistSubmissions) {
+  const songs = new Set(
+    artistSubmissions.map((submission) => submission.songId ?? submission.song?.id),
+  );
+
+  return `${formatCount(artistSubmissions.length, "artist appearance")} across ${formatCount(songs.size, "song")}`;
+}
+
+function buildSongSummaryFacts({ exactSubmissions, artistSubmissions, appearanceFacts, bestFinish }) {
+  const appearances = exactSubmissions.length;
+  const games = new Set(exactSubmissions.map((submission) => submission.round.game.id));
+  const submitters = new Set(exactSubmissions.map((submission) => submission.player.id));
 
   return [
-    `${formatCount(appearances, "appearance")} in the archive`,
-    `${formatCount(games.size, "game")} represented`,
-    `${formatCount(submitters.size, "submitter")} brought it`,
-    bestFinish === null ? "Best finish pending" : `Best finish ${formatRank(bestFinish)}`,
+    { label: "Appearances", value: formatCount(appearances, "archive appearance") },
+    { label: "First appearance", value: buildAppearanceLabel(appearanceFacts.firstAppearance) },
+    { label: "Most recent appearance", value: buildAppearanceLabel(appearanceFacts.mostRecentAppearance) },
+    { label: "Games", value: formatCount(games.size, "game") },
+    { label: "Submitters", value: formatCount(submitters.size, "submitter") },
+    { label: "Artist footprint", value: buildArtistFootprintLabel(artistSubmissions) },
+    { label: "Best finish", value: buildBestFinishLabel(bestFinish) },
   ];
 }
 
@@ -678,19 +709,13 @@ function buildSongOriginLabels(exactSubmissions, artistSubmissions) {
   const labels = [];
 
   if (songOrigin) {
-    labels.push({
-      id: "song-origin",
-      label: "Song origin",
-      value: `${songOrigin.submitterName} in ${songOrigin.roundName}`,
-    });
+    labels.push(`Song origin: ${songOrigin.submitterName} in ${songOrigin.roundName}`);
   }
 
   if (artistOrigin && artistOrigin.id !== songOrigin?.id) {
-    labels.push({
-      id: "artist-origin",
-      label: "Artist origin",
-      value: `${artistOrigin.submitterName} first brought this artist in ${artistOrigin.roundName}`,
-    });
+    labels.push(
+      `Artist origin: ${artistOrigin.submitterName} first brought this artist in ${artistOrigin.roundName}`,
+    );
   }
 
   return labels;
@@ -711,8 +736,87 @@ function buildRecallComment(submissions) {
   return recall ? commentsById.get(recall.id) : null;
 }
 
-function buildSongHistoryGroups(submissions) {
-  return deriveSongAppearanceFacts(submissions).historyGroups;
+function buildSongHistoryGroups(appearanceFacts) {
+  const originId = appearanceFacts.firstAppearance?.id ?? null;
+
+  return appearanceFacts.historyGroups.map((group) => ({
+    gameId: group.gameId,
+    gameName: group.title,
+    href: group.href,
+    rows: group.rows.map((row) => ({
+      submissionId: row.id,
+      round: {
+        id: row.roundId,
+        name: row.roundName,
+        href: row.roundHref,
+        occurredAtLabel: formatOptionalDateLabel(row.occurredAt),
+      },
+      submitter: {
+        id: row.submitterId,
+        displayName: row.submitterName,
+        href: row.submitterHref,
+      },
+      rank: row.rank,
+      score: row.score,
+      submittedAtLabel: formatOptionalDateLabel(row.submittedAt),
+      comment: row.comment,
+      isOrigin: row.id === originId,
+    })),
+  }));
+}
+
+function getSongBestFinish(submissions) {
+  const rankedSubmissions = submissions.filter(
+    (submission) => submission.rank !== null && submission.rank !== undefined,
+  );
+
+  if (rankedSubmissions.length === 0) {
+    return null;
+  }
+
+  const best = [...rankedSubmissions].sort((left, right) => {
+    const rankComparison = compareNullableAscending(left.rank ?? null, right.rank ?? null);
+
+    if (rankComparison !== 0) {
+      return rankComparison;
+    }
+
+    const scoreComparison = compareNullableDescending(left.score ?? null, right.score ?? null);
+
+    if (scoreComparison !== 0) {
+      return scoreComparison;
+    }
+
+    return compareSongAppearanceDescending(left, right);
+  })[0];
+
+  return {
+    rank: best.rank,
+    score: best.score ?? null,
+  };
+}
+
+function buildSongDetailBrowserRow({ song, exactSubmissions, appearanceFacts, bestFinish }) {
+  const mostRecent = appearanceFacts.mostRecentAppearance;
+
+  return {
+    id: song.id,
+    songId: song.id,
+    title: song.title,
+    artistName: song.artist.name,
+    artistSearchHref: buildSongSearchHref({ q: song.artist.name }),
+    appearanceCount: exactSubmissions.length,
+    mostRecentAppearance: mostRecent
+      ? {
+          gameName: mostRecent.gameTitle,
+          roundName: mostRecent.roundName,
+          href: mostRecent.roundHref,
+        }
+      : null,
+    bestFinish,
+    familiarity: deriveArchiveSongFamiliarity(song.id, exactSubmissions),
+    href: buildSongHref(song.id),
+  };
 }
 
 function buildPlayerHistoryRows(submissions) {
@@ -1370,22 +1474,18 @@ async function getSongsRouteData(input = {}) {
   }
 }
 
-async function getSongRouteData(songId, input = {}) {
+async function getSongDetailData(songId, input = {}) {
   const parsedSongId = parsePositiveRouteId(songId);
 
   if (parsedSongId === null) {
-    return await withArchiveShellData({
-      kind: "song",
-      title: "Song unavailable",
-      description: "The requested Music League song could not be loaded.",
-      status: "Invalid song ID.",
-      statusHref: "/songs",
-      statusLinkLabel: "Back to songs",
-    }, {
-      activeRoute: "song",
-      gameContext: null,
-      input,
-    });
+    return notFoundRouteData(
+      buildStatusNotice({
+        title: "Invalid song ID.",
+        body: "The requested Music League song could not be loaded.",
+        href: "/songs",
+        hrefLabel: "Back to songs",
+      }),
+    );
   }
 
   const { prisma, ownsPrismaClient } = resolveArchiveInput(input);
@@ -1412,7 +1512,6 @@ async function getSongRouteData(songId, input = {}) {
             score: true,
             comment: true,
             submittedAt: true,
-            createdAt: true,
             player: {
               select: {
                 id: true,
@@ -1440,18 +1539,14 @@ async function getSongRouteData(songId, input = {}) {
     });
 
     if (!song || song.submissions.length === 0) {
-      return await withArchiveShellData({
-        kind: "song",
-        title: "Song unavailable",
-        description: "The requested Music League song has no archive evidence.",
-        status: "Song not found with submission evidence.",
-        statusHref: "/songs",
-        statusLinkLabel: "Back to songs",
-      }, {
-        activeRoute: "song",
-        gameContext: null,
-        input: { prisma },
-      });
+      return notFoundRouteData(
+        buildStatusNotice({
+          title: "Song not found with submission evidence.",
+          body: "The requested Music League song has no archive evidence.",
+          href: "/songs",
+          hrefLabel: "Back to songs",
+        }),
+      );
     }
 
     const artistSubmissions = await prisma.submission.findMany({
@@ -1462,11 +1557,11 @@ async function getSongRouteData(songId, input = {}) {
       },
       select: {
         id: true,
+        songId: true,
         rank: true,
         score: true,
         comment: true,
         submittedAt: true,
-        createdAt: true,
         player: {
           select: {
             id: true,
@@ -1510,22 +1605,62 @@ async function getSongRouteData(songId, input = {}) {
         artist: song.artist,
       },
     }));
+    const appearanceFacts = deriveSongAppearanceFacts(exactSubmissions);
+    const bestFinish = getSongBestFinish(exactSubmissions);
+
+    return readyRouteData({
+      song: buildSongDetailBrowserRow({ song, exactSubmissions, appearanceFacts, bestFinish }),
+      summaryFacts: buildSongSummaryFacts({
+        exactSubmissions,
+        artistSubmissions,
+        appearanceFacts,
+        bestFinish,
+      }),
+      originLabels: buildSongOriginLabels(exactSubmissions, artistSubmissions),
+      recallComment: buildRecallComment(exactSubmissions),
+      historyGroups: buildSongHistoryGroups(appearanceFacts),
+      backHref: "/songs",
+    });
+  } finally {
+    if (ownsPrismaClient) {
+      await prisma.$disconnect();
+    }
+  }
+}
+
+async function getSongRouteData(songId, input = {}) {
+  const { prisma, ownsPrismaClient } = resolveArchiveInput(input);
+
+  try {
+    const pageData = await getSongDetailData(songId, { prisma });
+
+    if (pageData.kind === "not-found") {
+      return await withArchiveShellData({
+        kind: "song",
+        title: "Song unavailable",
+        description: pageData.statusNotice.body,
+        status: pageData.statusNotice.title,
+        statusHref: pageData.statusNotice.href,
+        statusLinkLabel: pageData.statusNotice.hrefLabel,
+      }, {
+        activeRoute: "song",
+        gameContext: null,
+        input: { prisma },
+      });
+    }
+
+    const { props } = pageData;
 
     return await withArchiveShellData({
       kind: "song",
-      title: song.title,
-      description: `${song.title} by ${song.artist.name} in the Music League archive.`,
-      song: {
-        id: song.id,
-        title: song.title,
-        artistName: song.artist.name,
-        familiarity: deriveArchiveSongFamiliarity(song.id, exactSubmissions),
-        summaryFacts: buildSongSummaryFacts(exactSubmissions),
-        originLabels: buildSongOriginLabels(exactSubmissions, artistSubmissions),
-        recallComment: buildRecallComment(exactSubmissions),
-        historyGroups: buildSongHistoryGroups(exactSubmissions),
-        submissions: exactSubmissions.sort(compareSongAppearanceDescending),
-      },
+      title: props.song.title,
+      description: `${props.song.title} by ${props.song.artistName} in the Music League archive.`,
+      song: props.song,
+      summaryFacts: props.summaryFacts,
+      originLabels: props.originLabels,
+      recallComment: props.recallComment,
+      historyGroups: props.historyGroups,
+      backHref: props.backHref,
     }, {
       activeRoute: "song",
       gameContext: null,
@@ -2175,7 +2310,13 @@ function SongContent({ data }) {
     React.Fragment,
     null,
     React.createElement("h1", null, data.song.title),
-    React.createElement("p", null, data.song.artistName),
+    React.createElement(
+      "p",
+      null,
+      "by ",
+      React.createElement("a", { href: data.song.artistSearchHref }, data.song.artistName),
+    ),
+    React.createElement("p", null, React.createElement("a", { href: data.backHref }, "Back to songs")),
     React.createElement(
       "section",
       { className: "archive-route-section" },
@@ -2191,48 +2332,59 @@ function SongContent({ data }) {
       ),
     ),
     React.createElement(DefinitionList, {
-      items: data.song.summaryFacts.map((fact, index) => ({
-        label: `Fact ${index + 1}`,
-        value: fact,
-      })),
+      items: data.summaryFacts,
     }),
     React.createElement(
       "section",
       { className: "archive-route-section" },
       React.createElement("h2", null, "Origins"),
-      React.createElement(RouteList, {
-        items: data.song.originLabels.map((origin) => ({
-          id: origin.id,
-          title: origin.label,
-          href: buildSongHref(data.song.id),
-          meta: origin.value,
-        })),
-        emptyCopy: "No origin labels are available.",
-      }),
+      data.originLabels.length === 0
+        ? React.createElement("p", { className: "archive-route-empty" }, "No origin labels are available.")
+        : React.createElement(
+            "ul",
+            { className: "archive-route-list" },
+            data.originLabels.map((originLabel) =>
+              React.createElement("li", { key: originLabel }, originLabel),
+            ),
+          ),
     ),
-    data.song.recallComment
+    data.recallComment
       ? React.createElement(
           "section",
           { className: "archive-route-section" },
           React.createElement("h2", null, "Recall comment"),
-          React.createElement("p", null, data.song.recallComment),
+          React.createElement("p", null, data.recallComment),
         )
       : null,
     React.createElement(
       "section",
       { className: "archive-route-section" },
       React.createElement("h2", null, "Submission history"),
-      data.song.historyGroups.map((group) =>
+      data.historyGroups.map((group) =>
         React.createElement(
           "section",
           { key: group.gameId, className: "archive-route-subsection" },
-          React.createElement("h3", null, React.createElement("a", { href: group.href }, group.title)),
+          React.createElement("h3", null, React.createElement("a", { href: group.href }, group.gameName)),
           React.createElement(RouteList, {
             items: group.rows.map((row) => ({
-              id: row.id,
-              title: row.roundName,
-              href: row.roundHref,
-              meta: `${row.submitterName} - ${formatRank(row.rank)} - ${formatScore(row.score)}`,
+              id: row.submissionId,
+              title: row.round.name,
+              href: row.round.href,
+              badge: row.isOrigin
+                ? {
+                    variant: "familiarity-first-time",
+                    label: "Origin",
+                    ariaLabel: "Original archive appearance",
+                  }
+                : null,
+              meta: React.createElement(
+                React.Fragment,
+                null,
+                React.createElement("a", { href: row.submitter.href }, row.submitter.displayName),
+                ` - ${formatRank(row.rank)} - ${formatScore(row.score)}`,
+                row.submittedAtLabel ? ` - submitted ${row.submittedAtLabel}` : "",
+                row.comment ? ` - ${row.comment}` : "",
+              ),
             })),
             emptyCopy: "No rows in this game.",
           }),
@@ -2398,6 +2550,7 @@ module.exports = {
   getRoundPageData,
   getRoundRouteData,
   getSongBrowserData,
+  getSongDetailData,
   getSongRouteData,
   getSongsRouteData,
 };
