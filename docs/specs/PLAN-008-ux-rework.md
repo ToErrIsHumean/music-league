@@ -5,8 +5,8 @@
 > **Status:** `pending`
 
 | Task | Title | Status | Depends-on |
-|------|-------|--------|------------|
-| TASK-01 | Replace overlay routing with real route skeletons | `pending` | — |
+| ---- | ----- | ------ | ---------- |
+| TASK-01 | Replace overlay routing with real route skeletons | `done` | — |
 | TASK-02 | Establish archive visual tokens and badge primitives | `pending` | TASK-01 |
 | TASK-03 | Introduce persistent archive shell chrome | `pending` | TASK-01, TASK-02 |
 | TASK-04 | Centralize M8 derivation utilities | `pending` | TASK-01 |
@@ -39,5 +39,17 @@ elevated override.
 <!-- Append signals as tasks complete. -->
 
 | Task | Signal | Discovery | Cycle | Model | Reasoning-Effort | Timestamp |
-|------|--------|-----------|-------|-------|------------------|-----------|
-| | | | | | | |
+| ---- | ------ | --------- | ----- | ----- | ---------------- | --------- |
+| TASK-01 | pass | null | 1 | gpt-5.5 | high | 2026-04-26T03:27:16.666Z |
+| TASK-01 | pass | null | 2 | gpt-5.5 | high | 2026-04-26T03:40:00.307Z |
+| TASK-01 | pass | null | 3 | gpt-5.5 | high | 2026-04-26T03:45:25.191Z |
+
+## Review Notes
+
+<!-- Orchestrator review notes append below. -->
+
+- TASK-01 cycle 3: `confirmed` -> `docs/sdd/reviews/TASK-01-epoch-1-cycle-3.md`
+
+- TASK-01 cycle 2: `contested` -> `docs/sdd/reviews/TASK-01-epoch-1-cycle-2.md`
+
+- TASK-01 cycle 1: `contested` -> `docs/sdd/reviews/TASK-01-epoch-1-cycle-1.md`
