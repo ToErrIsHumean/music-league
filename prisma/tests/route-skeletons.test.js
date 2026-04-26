@@ -10,6 +10,7 @@ const {
   getLandingPageData,
   getLandingRouteData,
   getPlayerRouteData,
+  getRoundPageData,
   getRoundRouteData,
   getSongRouteData,
   getSongsRouteData,
@@ -397,6 +398,7 @@ test(
       },
     });
     const game = await getGameRouteData(mainGameId, { prisma });
+    const roundPage = await getRoundPageData(mainGameId, mainRoundId, { prisma });
     const round = await getRoundRouteData(mainGameId, mainRoundId, { prisma });
     const songs = await getSongsRouteData({ prisma, searchParams: { q: "bright" } });
     const song = await getSongRouteData(songId, { prisma });
@@ -423,6 +425,24 @@ test(
     assert.ok(game.game.memoryBoard.moments.length > 0);
     assert.ok(game.game.competitiveAnchor);
     assert.equal(round.kind, "round");
+    assert.equal(roundPage.kind, "ready");
+    assert.equal(roundPage.props.round.gameId, mainGameId);
+    assert.ok(roundPage.props.round.gameDisplayName);
+    assert.ok(roundPage.props.round.occurredAtLabel || roundPage.props.round.occurredAtLabel === null);
+    assert.ok(roundPage.props.highlights.length <= 3);
+    assert.ok(
+      roundPage.props.submissions.every(
+        (submission) =>
+          submission.song.href === `/songs/${submission.song.id}` &&
+          submission.submitter.href === `/players/${submission.submitter.id}` &&
+          submission.familiarity.kind,
+      ),
+    );
+    assert.ok(
+      roundPage.props.submissions
+        .flatMap((submission) => submission.votes)
+        .every((vote) => vote.voter.href === `/players/${vote.voter.id}`),
+    );
     assert.equal(round.shell.gameContext.gameId, mainGameId);
     assert.equal(round.round.game.href, `/games/${mainGameId}`);
     assert.ok(round.round.highlights.length > 0);
@@ -473,6 +493,7 @@ test(
   async () => {
     const mainGameId = await findGameIdBySourceId("main");
     const mainRoundId = await findRoundIdBySourceId("seed-r1");
+    const pendingRoundId = await findRoundIdBySourceId("seed-r2");
     const songId = await findSongIdBySpotifyUri("spotify:track:seed-song-001");
     const player = await prisma.player.findFirst({
       orderBy: { id: "asc" },
@@ -483,12 +504,14 @@ test(
 
     const gameData = await getGameRouteData(mainGameId, { prisma });
     const roundData = await getRoundRouteData(mainGameId, mainRoundId, { prisma });
+    const pendingRound = await getRoundRouteData(mainGameId, pendingRoundId, { prisma });
     const songsData = await getSongsRouteData({ prisma, searchParams: { q: "bright" } });
     const songData = await getSongRouteData(songId, { prisma });
     const playerData = await getPlayerRouteData(player.id, { prisma });
     const markup = [
       gameData,
       roundData,
+      pendingRound,
       songsData,
       songData,
       playerData,
@@ -509,6 +532,9 @@ test(
     assert.match(markup, /Memory board/);
     assert.match(markup, /Competitive anchor/);
     assert.match(markup, /Expand all votes/);
+    assert.match(markup, /aria-expanded="false"/);
+    assert.match(markup, /Show \d+ votes?/);
+    assert.match(markup, /No imported votes/);
     assert.match(markup, /name=\"q\"/);
     assert.match(markup, /name=\"familiarity\"/);
     assert.match(markup, /name=\"sort\"/);
@@ -522,5 +548,6 @@ test(
     assert.match(markup, /data-archive-badge-role="primary"/);
     assert.ok(!markup.includes("role=\"dialog\""));
     assert.ok(!markup.includes("archive-overlay"));
+    assert.ok(!markup.includes("<details"));
   },
 );

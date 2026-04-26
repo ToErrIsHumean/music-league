@@ -1419,6 +1419,126 @@ a {
   color: var(--ink-muted);
 }
 
+.archive-round-parent-link a,
+.archive-round-submission-copy a,
+.archive-round-vote-main a {
+  color: var(--brand-purple);
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+}
+
+.archive-round-section-heading,
+.archive-round-submission-main,
+.archive-round-vote-main {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.archive-round-section-heading {
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.archive-round-section-heading h2 {
+  margin: 0;
+}
+
+.archive-round-expand-all,
+.archive-round-vote-disclosure button {
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid var(--brand-purple);
+  border-radius: 8px;
+  background: var(--brand-purple);
+  color: var(--surface-paper);
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.archive-round-expand-all:disabled {
+  border-color: rgba(var(--ink-muted-rgb), 0.2);
+  background: var(--surface-secondary);
+  color: var(--ink-muted);
+  cursor: default;
+}
+
+.archive-round-submission-list,
+.archive-round-vote-list {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.archive-round-submission-list > li {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid rgba(var(--ink-muted-rgb), 0.16);
+  border-radius: 8px;
+  background: rgba(var(--surface-paper-rgb), 0.72);
+}
+
+.archive-round-submission-copy {
+  display: grid;
+  min-width: min(100%, 280px);
+  gap: 4px;
+}
+
+.archive-round-submission-song {
+  width: fit-content;
+  color: var(--ink-primary);
+  font-size: 1.08rem;
+}
+
+.archive-round-submission-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.archive-round-submission-comment,
+.archive-round-vote-comment,
+.archive-round-vote-meta,
+.archive-round-vote-empty {
+  margin: 0;
+}
+
+.archive-round-submission-comment,
+.archive-round-vote-comment,
+.archive-round-vote-meta,
+.archive-round-vote-empty {
+  color: var(--ink-muted);
+  line-height: 1.55;
+}
+
+.archive-round-vote-disclosure {
+  display: grid;
+  gap: 10px;
+}
+
+.archive-round-vote-disclosure button {
+  width: fit-content;
+  background: var(--surface-paper);
+  color: var(--brand-purple);
+}
+
+.archive-round-vote-row {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid rgba(var(--ink-muted-rgb), 0.14);
+  border-radius: 8px;
+  background: var(--surface-secondary);
+}
+
 .archive-landing-band {
   display: grid;
   gap: 14px;
