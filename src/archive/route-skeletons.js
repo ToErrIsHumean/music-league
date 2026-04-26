@@ -1,20 +1,16 @@
 const React = require("react");
-const { PrismaClient } = require("@prisma/client");
 const {
   derivePlayerPerformanceMetrics,
   isScoredSubmission,
 } = require("./player-metrics");
 const {
   buildGameHref,
-  buildPlayerHref,
   buildRoundHref,
   buildRouteMetadata,
   buildSongHref,
   buildSongSearchHref,
   parsePositiveRouteId,
 } = require("./route-utils");
-const { deriveSongFamiliarity, sortSongMemoryHistory, sortSongMemoryHistoryNewestFirst } =
-  require("./song-memory");
 const {
   ARCHIVE_BADGE_VARIANTS,
   buildArchiveBadgeModel,
@@ -25,30 +21,27 @@ const {
   getSelectedGameMemoryBoard,
   selectPlayerNotablePicks,
 } = require("./archive-utils");
+const {
+  compareGameRoundAscending,
+  compareNullableAscending,
+  compareNullableDescending,
+  compareSongAppearanceDescending,
+  deriveArchiveSongFamiliarity,
+  deriveGameRoundListItems,
+  deriveGameTimeframe,
+  deriveLeaderboardRows,
+  deriveSongAppearanceFacts,
+  getSongCatalog,
+  mapVotesToRoundSubmissions,
+  normalizeArchiveSearch,
+  resolveArchiveInput,
+} = require("./m8-derivations");
 
 const archiveDateFormatter = new Intl.DateTimeFormat("en-US", {
   month: "short",
   day: "numeric",
   year: "numeric",
 });
-
-function isPrismaClientLike(value) {
-  return Boolean(value && typeof value === "object" && typeof value.$disconnect === "function");
-}
-
-function resolveArchiveInput(input = {}) {
-  if (isPrismaClientLike(input)) {
-    return {
-      prisma: input,
-      ownsPrismaClient: false,
-    };
-  }
-
-  return {
-    prisma: input.prisma ?? new PrismaClient(),
-    ownsPrismaClient: !input.prisma,
-  };
-}
 
 function firstParam(value) {
   return Array.isArray(value) ? value[0] : value;
@@ -72,46 +65,8 @@ function resolveGameDisplayLabel(game) {
   return game?.displayName?.trim() || game?.sourceGameId || `Game ${game?.id ?? ""}`;
 }
 
-function compareNullableAscending(left, right) {
-  if (left === null && right === null) {
-    return 0;
-  }
-
-  if (left === null) {
-    return 1;
-  }
-
-  if (right === null) {
-    return -1;
-  }
-
-  return left < right ? -1 : left > right ? 1 : 0;
-}
-
-function compareNullableDescending(left, right) {
-  return compareNullableAscending(right, left);
-}
-
 function compareRounds(left, right) {
-  const sequenceComparison = compareNullableAscending(
-    left.sequenceNumber ?? null,
-    right.sequenceNumber ?? null,
-  );
-
-  if (sequenceComparison !== 0) {
-    return sequenceComparison;
-  }
-
-  const occurredAtComparison = compareNullableAscending(
-    left.occurredAt ?? null,
-    right.occurredAt ?? null,
-  );
-
-  if (occurredAtComparison !== 0) {
-    return occurredAtComparison;
-  }
-
-  return left.id - right.id;
+  return compareGameRoundAscending(left, right);
 }
 
 function formatDate(value) {
@@ -139,7 +94,9 @@ function formatRankBadgeLabel(rank, tied = false) {
 }
 
 function getFamiliarityBadgeVariant(familiarity) {
-  return familiarity?.kind === "debut" ? "familiarity-first-time" : "familiarity-returning";
+  return familiarity?.kind === "first-time" || familiarity?.kind === "debut"
+    ? "familiarity-first-time"
+    : "familiarity-returning";
 }
 
 function sum(values) {
@@ -147,53 +104,32 @@ function sum(values) {
 }
 
 function getRoundDates(rounds) {
-  const dates = rounds.flatMap((round) => {
-    const eventDates = [];
-
-    if (round.occurredAt instanceof Date) {
-      eventDates.push(round.occurredAt);
-    }
-
-    for (const submission of round.submissions ?? []) {
-      if (submission.submittedAt instanceof Date) {
-        eventDates.push(submission.submittedAt);
-      }
-    }
-
-    for (const vote of round.votes ?? []) {
-      if (vote.votedAt instanceof Date) {
-        eventDates.push(vote.votedAt);
-      }
-    }
-
-    return eventDates;
+  const timeframe = deriveGameTimeframe({
+    rounds,
+    submissions: rounds.flatMap((round) => {
+      return (round.submissions ?? []).map((submission) => ({
+        submittedAt: submission.submittedAt ?? null,
+      }));
+    }),
+    votes: rounds.flatMap((round) => {
+      return (round.votes ?? []).map((vote) => ({
+        votedAt: vote.votedAt ?? null,
+      }));
+    }),
   });
 
-  if (dates.length === 0) {
-    return {
-      earliest: null,
-      latest: null,
-    };
-  }
-
   return {
-    earliest: dates.reduce((oldest, date) => (date < oldest ? date : oldest), dates[0]),
-    latest: dates.reduce((newest, date) => (date > newest ? date : newest), dates[0]),
+    earliest: timeframe?.start ?? null,
+    latest: timeframe?.end ?? null,
   };
 }
 
 function formatGameTimeframe(rounds) {
-  const { earliest, latest } = getRoundDates(rounds);
-
-  if (!earliest || !latest) {
-    return "Imported round dates pending";
-  }
-
-  if (earliest.getTime() === latest.getTime()) {
-    return formatDate(earliest);
-  }
-
-  return `${formatDate(earliest)} - ${formatDate(latest)}`;
+  return deriveGameTimeframe({
+    rounds,
+    submissions: rounds.flatMap((round) => round.submissions ?? []),
+    votes: rounds.flatMap((round) => round.votes ?? []),
+  })?.label ?? null;
 }
 
 function hasWinner(game, winnerFilter) {
@@ -310,7 +246,7 @@ async function getArchiveShellData({
       activeRoute,
       gameContext,
       search: {
-        value: normalizeQueryText(normalizedParams.q),
+        value: normalizeArchiveSearch(normalizedParams.q),
         submitHrefBase: "/songs",
         suggestions: [],
       },
@@ -348,60 +284,7 @@ function flattenGameSubmissions(game) {
 }
 
 function buildGameLeaderboard(game) {
-  const rowsByPlayer = new Map();
-
-  for (const submission of flattenGameSubmissions(game)) {
-    if (!isScoredSubmission(submission)) {
-      continue;
-    }
-
-    const row = rowsByPlayer.get(submission.playerId) ?? {
-      player: {
-        id: submission.playerId,
-        displayName: submission.playerName,
-        href: buildPlayerHref(submission.playerId),
-      },
-      totalScore: 0,
-      wins: 0,
-      scoredSubmissionCount: 0,
-      rank: null,
-    };
-
-    row.totalScore += submission.score;
-    row.scoredSubmissionCount += 1;
-    row.wins += submission.rank === 1 ? 1 : 0;
-    rowsByPlayer.set(submission.playerId, row);
-  }
-
-  const rows = [...rowsByPlayer.values()].sort((left, right) => {
-    if (right.totalScore !== left.totalScore) {
-      return right.totalScore - left.totalScore;
-    }
-
-    return left.player.displayName.localeCompare(right.player.displayName);
-  });
-
-  let previousScore = null;
-  let previousRank = 0;
-
-  const scoreCounts = new Map();
-
-  for (const row of rows) {
-    scoreCounts.set(row.totalScore, (scoreCounts.get(row.totalScore) ?? 0) + 1);
-  }
-
-  return rows.map((row, index) => {
-    const rank = previousScore === row.totalScore ? previousRank : index + 1;
-
-    previousScore = row.totalScore;
-    previousRank = rank;
-
-    return {
-      ...row,
-      rank,
-      tied: scoreCounts.get(row.totalScore) > 1,
-    };
-  });
+  return deriveLeaderboardRows(flattenGameSubmissions(game));
 }
 
 function buildRoundHighlights(submissions) {
@@ -442,50 +325,6 @@ function buildRoundHighlights(submissions) {
   return highlights.slice(0, 3);
 }
 
-function groupVotesBySongId(votes) {
-  const votesBySongId = new Map();
-
-  for (const vote of votes) {
-    const songVotes = votesBySongId.get(vote.songId) ?? [];
-
-    songVotes.push({
-      id: vote.id,
-      pointsAssigned: vote.pointsAssigned,
-      comment: vote.comment,
-      votedAt: vote.votedAt,
-      voter: vote.voter,
-    });
-    votesBySongId.set(vote.songId, songVotes);
-  }
-
-  for (const songVotes of votesBySongId.values()) {
-    songVotes.sort((left, right) => {
-      if (right.pointsAssigned !== left.pointsAssigned) {
-        return right.pointsAssigned - left.pointsAssigned;
-      }
-
-      return left.voter.displayName.localeCompare(right.voter.displayName);
-    });
-  }
-
-  return votesBySongId;
-}
-
-function buildSongEvidenceRow(submission) {
-  return {
-    id: submission.id,
-    songId: submission.song.id,
-    artistId: submission.song.artist.id,
-    playerId: submission.player.id,
-    playerName: submission.player.displayName,
-    roundId: submission.round.id,
-    roundName: submission.round.name,
-    roundOccurredAt: submission.round.occurredAt,
-    roundSequenceNumber: submission.round.sequenceNumber,
-    createdAt: submission.createdAt,
-  };
-}
-
 function buildSongSummaryFacts(submissions) {
   const appearances = submissions.length;
   const games = new Set(submissions.map((submission) => submission.round.game.id));
@@ -505,17 +344,15 @@ function buildSongSummaryFacts(submissions) {
 }
 
 function buildSongOriginLabels(exactSubmissions, artistSubmissions) {
-  const orderedExact = sortSongMemoryHistory(exactSubmissions.map(buildSongEvidenceRow));
-  const orderedArtist = sortSongMemoryHistory(artistSubmissions.map(buildSongEvidenceRow));
-  const songOrigin = orderedExact[0] ?? null;
-  const artistOrigin = orderedArtist[0] ?? null;
+  const songOrigin = deriveSongAppearanceFacts(exactSubmissions).firstAppearance;
+  const artistOrigin = deriveSongAppearanceFacts(artistSubmissions).firstAppearance;
   const labels = [];
 
   if (songOrigin) {
     labels.push({
       id: "song-origin",
       label: "Song origin",
-      value: `${songOrigin.playerName} in ${songOrigin.roundName}`,
+      value: `${songOrigin.submitterName} in ${songOrigin.roundName}`,
     });
   }
 
@@ -523,7 +360,7 @@ function buildSongOriginLabels(exactSubmissions, artistSubmissions) {
     labels.push({
       id: "artist-origin",
       label: "Artist origin",
-      value: `${artistOrigin.playerName} first brought this artist in ${artistOrigin.roundName}`,
+      value: `${artistOrigin.submitterName} first brought this artist in ${artistOrigin.roundName}`,
     });
   }
 
@@ -531,14 +368,14 @@ function buildSongOriginLabels(exactSubmissions, artistSubmissions) {
 }
 
 function buildRecallComment(submissions) {
-  const orderedSubmissions = sortSongMemoryHistory(submissions.map(buildSongEvidenceRow));
-  const originId = orderedSubmissions[0]?.id ?? null;
+  const appearanceFacts = deriveSongAppearanceFacts(submissions);
+  const originId = appearanceFacts.firstAppearance?.id ?? null;
   const commentsById = new Map(
     submissions
       .filter((submission) => submission.comment)
       .map((submission) => [submission.id, submission.comment]),
   );
-  const recall = sortSongMemoryHistoryNewestFirst(orderedSubmissions).find(
+  const recall = [...submissions].sort(compareSongAppearanceDescending).find(
     (submission) => submission.id !== originId && commentsById.has(submission.id),
   );
 
@@ -546,47 +383,7 @@ function buildRecallComment(submissions) {
 }
 
 function buildSongHistoryGroups(submissions) {
-  const groupsByGameId = new Map();
-  const orderedSubmissions = [...submissions].sort((left, right) => {
-    const dateComparison = compareNullableDescending(
-      left.round.occurredAt ?? null,
-      right.round.occurredAt ?? null,
-    );
-
-    if (dateComparison !== 0) {
-      return dateComparison;
-    }
-
-    return right.id - left.id;
-  });
-
-  for (const submission of orderedSubmissions) {
-    const game = submission.round.game;
-    const group = groupsByGameId.get(game.id) ?? {
-      gameId: game.id,
-      title: resolveGameDisplayLabel(game),
-      href: buildGameHref(game.id),
-      latestOccurredAt: submission.round.occurredAt ?? null,
-      rows: [],
-    };
-
-    group.rows.push({
-      id: submission.id,
-      roundName: submission.round.name,
-      roundHref: buildRoundHref(game.id, submission.round.id),
-      submitterName: submission.player.displayName,
-      submitterHref: buildPlayerHref(submission.player.id),
-      rank: submission.rank,
-      score: submission.score,
-      comment: submission.comment,
-      occurredAt: submission.round.occurredAt,
-    });
-    groupsByGameId.set(game.id, group);
-  }
-
-  return [...groupsByGameId.values()].sort((left, right) =>
-    compareNullableDescending(left.latestOccurredAt, right.latestOccurredAt),
-  );
+  return deriveSongAppearanceFacts(submissions).historyGroups;
 }
 
 function buildPlayerHistoryRows(submissions) {
@@ -787,10 +584,13 @@ async function getGameRouteData(gameId, input = {}) {
             id: true,
             name: true,
             occurredAt: true,
+            playlistUrl: true,
             sequenceNumber: true,
             submissions: {
               select: {
                 id: true,
+                songId: true,
+                playerId: true,
                 score: true,
                 rank: true,
                 submittedAt: true,
@@ -841,19 +641,12 @@ async function getGameRouteData(gameId, input = {}) {
         title,
         finished: game.finished,
         timeframe: formatGameTimeframe(rounds),
-        rounds: rounds.map((round) => ({
-          id: round.id,
-          name: round.name,
-          occurredAt: round.occurredAt,
-          href: buildRoundHref(game.id, round.id),
-          submissionCount: round.submissions.length,
-          isScored: round.submissions.some(
-            (submission) => submission.score !== null || submission.rank !== null,
-          ),
-        })),
-        leaderboard,
+        rounds: deriveGameRoundListItems({ gameId: game.id, rounds }),
+        leaderboard: leaderboard.rows,
+        leaderboardFootnote: leaderboard.footnote,
+        hasLeaderboardTies: leaderboard.hasTies,
         pendingScoringCopy:
-          leaderboard.length === 0
+          leaderboard.rows.length === 0
             ? "Scoring is pending for this game, so the leaderboard stays hidden until scored rounds are imported."
             : null,
         competitiveAnchor: memoryBoard?.board?.competitiveAnchor ?? null,
@@ -941,6 +734,9 @@ async function getRoundRouteData(gameId, roundId, input = {}) {
           submissions: {
             select: {
               id: true,
+              roundId: true,
+              songId: true,
+              playerId: true,
               score: true,
               rank: true,
               comment: true,
@@ -966,6 +762,7 @@ async function getRoundRouteData(gameId, roundId, input = {}) {
           votes: {
             select: {
               id: true,
+              roundId: true,
               songId: true,
               pointsAssigned: true,
               comment: true,
@@ -1038,7 +835,32 @@ async function getRoundRouteData(gameId, roundId, input = {}) {
 
       return left.id - right.id;
     });
-    const votesBySongId = groupVotesBySongId(round.votes);
+    const { votesBySubmissionId } = mapVotesToRoundSubmissions({
+      submissions: orderedSubmissions.map((submission) => ({
+        id: submission.id,
+        roundId: submission.roundId,
+        songId: submission.songId,
+        playerId: submission.playerId,
+      })),
+      votes: round.votes,
+    });
+    const formatSubmissionVotes = (submission) => {
+      return [...(votesBySubmissionId.get(submission.id) ?? [])]
+        .sort((left, right) => {
+          if (right.pointsAssigned !== left.pointsAssigned) {
+            return right.pointsAssigned - left.pointsAssigned;
+          }
+
+          return left.voter.displayName.localeCompare(right.voter.displayName);
+        })
+        .map((vote) => ({
+          id: vote.id,
+          pointsAssigned: vote.pointsAssigned,
+          comment: vote.comment,
+          votedAt: vote.votedAt,
+          voter: vote.voter,
+        }));
+    };
 
     return await withArchiveShellData({
       kind: "round",
@@ -1058,7 +880,7 @@ async function getRoundRouteData(gameId, roundId, input = {}) {
         highlights: buildRoundHighlights(orderedSubmissions),
         submissions: orderedSubmissions.map((submission) => ({
           ...submission,
-          votes: votesBySongId.get(submission.song.id) ?? [],
+          votes: formatSubmissionVotes(submission),
         })),
       },
     }, {
@@ -1076,133 +898,38 @@ async function getRoundRouteData(gameId, roundId, input = {}) {
 async function getSongsRouteData(input = {}) {
   const { prisma, ownsPrismaClient } = resolveArchiveInput(input);
   const searchParams = normalizeSearchParams(await input.searchParams);
-  const query = normalizeQueryText(searchParams.q);
-  const rawFamiliarity = normalizeQueryText(searchParams.familiarity);
-  const rawSort = normalizeQueryText(searchParams.sort);
-  const familiarity = ["first-time", "returning"].includes(rawFamiliarity)
-    ? rawFamiliarity
-    : "all";
-  const sort = ["most-appearances", "best-finish", "alphabetical"].includes(rawSort)
-    ? rawSort
-    : "most-recent";
-  const invalidFamiliarity = rawFamiliarity.length > 0 && rawFamiliarity !== "all" && familiarity === "all";
-  const invalidSort = rawSort.length > 0 && sort === "most-recent" && rawSort !== "most-recent";
-  const normalizedQuery = query.toLocaleLowerCase();
+  const rawFamiliarity = normalizeArchiveSearch(searchParams.familiarity);
+  const rawSort = normalizeArchiveSearch(searchParams.sort);
+  const invalidFamiliarity =
+    rawFamiliarity.length > 0 && !["all", "first-time", "returning"].includes(rawFamiliarity);
+  const invalidSort =
+    rawSort.length > 0 &&
+    !["most-appearances", "most-recent", "best-finish", "alphabetical"].includes(rawSort);
 
   try {
-    const songs = await prisma.song.findMany({
-      select: {
-        id: true,
-        title: true,
-        artist: {
-          select: {
-            name: true,
-          },
-        },
-        submissions: {
-          select: {
-            rank: true,
-            submittedAt: true,
-            round: {
-              select: {
-                occurredAt: true,
-              },
-            },
-          },
-        },
-      },
+    const catalog = await getSongCatalog({
+      q: searchParams.q,
+      familiarity: searchParams.familiarity,
+      sort: searchParams.sort,
+      input: { prisma },
     });
-    const rows = songs
-      .map((song) => {
-        const appearances = song.submissions.length;
-        const mostRecentAppearance = song.submissions
-          .map((submission) => submission.submittedAt ?? submission.round.occurredAt)
-          .filter(Boolean)
-          .sort((left, right) => right - left)[0];
-        const rankedSubmissions = song.submissions.filter((submission) => submission.rank !== null);
-
-        return {
-          id: song.id,
-          title: song.title,
-          artistName: song.artist.name,
-          href: buildSongHref(song.id),
-          appearances,
-          mostRecentAppearance,
-          bestFinish:
-            rankedSubmissions.length === 0
-              ? null
-              : Math.min(...rankedSubmissions.map((submission) => submission.rank)),
-        };
-      })
-      .filter((song) => {
-        if (normalizedQuery.length === 0) {
-          return true;
-        }
-
-        return (
-          song.title.toLocaleLowerCase().includes(normalizedQuery) ||
-          song.artistName.toLocaleLowerCase().includes(normalizedQuery)
-        );
-      })
-      .filter((song) => {
-        if (familiarity === "first-time") {
-          return song.appearances <= 1;
-        }
-
-        if (familiarity === "returning") {
-          return song.appearances > 1;
-        }
-
-        return true;
-      })
-      .sort((left, right) => {
-        if (sort === "most-appearances" && left.appearances !== right.appearances) {
-          return right.appearances - left.appearances;
-        }
-
-        if (sort === "best-finish") {
-          const finishComparison = compareNullableAscending(left.bestFinish, right.bestFinish);
-
-          if (finishComparison !== 0) {
-            return finishComparison;
-          }
-        }
-
-        if (sort === "alphabetical") {
-          const titleComparison = left.title.localeCompare(right.title);
-
-          if (titleComparison !== 0) {
-            return titleComparison;
-          }
-        } else {
-          const recentComparison = compareNullableDescending(
-            left.mostRecentAppearance ?? null,
-            right.mostRecentAppearance ?? null,
-          );
-
-          if (recentComparison !== 0) {
-            return recentComparison;
-          }
-        }
-
-        return left.id - right.id;
-      });
 
     return await withArchiveShellData({
       kind: "songs",
       title: "Songs",
       description: "Search songs and artists in the Music League archive.",
-      query,
-      familiarity,
-      sort,
+      query: catalog.q,
+      familiarity: catalog.familiarity,
+      sort: catalog.sort,
       status: [
         invalidFamiliarity ? "Invalid familiarity filter reset to all songs." : null,
         invalidSort ? "Invalid sort reset to most recent." : null,
       ]
         .filter(Boolean)
         .join(" "),
-      songs: rows,
-      isEmpty: songs.length === 0,
+      songs: catalog.rows,
+      isEmpty: catalog.isEmpty,
+      isZeroResult: catalog.isZeroResult,
       clearHref: buildSongSearchHref({}),
     }, {
       activeRoute: "songs",
@@ -1252,6 +979,9 @@ async function getSongRouteData(songId, input = {}) {
         submissions: {
           select: {
             id: true,
+            roundId: true,
+            songId: true,
+            playerId: true,
             rank: true,
             score: true,
             comment: true,
@@ -1363,29 +1093,12 @@ async function getSongRouteData(songId, input = {}) {
         id: song.id,
         title: song.title,
         artistName: song.artist.name,
-        familiarity: deriveSongFamiliarity({
-          songId: song.id,
-          artistId: song.artist.id,
-          originRoundId: null,
-          originSubmissionId: null,
-          exactSongSubmissions: exactSubmissions.map(buildSongEvidenceRow),
-          artistSubmissions: artistSubmissions.map(buildSongEvidenceRow),
-        }),
+        familiarity: deriveArchiveSongFamiliarity(song.id, exactSubmissions),
         summaryFacts: buildSongSummaryFacts(exactSubmissions),
         originLabels: buildSongOriginLabels(exactSubmissions, artistSubmissions),
         recallComment: buildRecallComment(exactSubmissions),
         historyGroups: buildSongHistoryGroups(exactSubmissions),
-        submissions: exactSubmissions.sort((left, right) => {
-          const leftDate = left.round.occurredAt ?? null;
-          const rightDate = right.round.occurredAt ?? null;
-          const dateComparison = compareNullableDescending(leftDate, rightDate);
-
-          if (dateComparison !== 0) {
-            return dateComparison;
-          }
-
-          return right.id - left.id;
-        }),
+        submissions: exactSubmissions.sort(compareSongAppearanceDescending),
       },
     }, {
       activeRoute: "song",
@@ -1431,6 +1144,9 @@ async function getPlayerRouteData(playerId, input = {}) {
         submissions: {
           select: {
             id: true,
+            roundId: true,
+            songId: true,
+            playerId: true,
             rank: true,
             score: true,
             comment: true,
@@ -1527,6 +1243,8 @@ async function getPlayerRouteData(playerId, input = {}) {
             },
             select: {
               id: true,
+              roundId: true,
+              songId: true,
               pointsAssigned: true,
               comment: true,
               votedAt: true,
@@ -1566,25 +1284,40 @@ async function getPlayerRouteData(playerId, input = {}) {
           }),
       prisma.submission.findMany({
         select: {
+          id: true,
           playerId: true,
           roundId: true,
+          songId: true,
           score: true,
           rank: true,
         },
       }),
     ]);
+    const { submissionByVoteId } = mapVotesToRoundSubmissions({
+      submissions: player.submissions.map((submission) => ({
+        id: submission.id,
+        roundId: submission.roundId,
+        songId: submission.songId,
+        playerId: submission.playerId,
+      })),
+      votes: receivedVotes,
+    });
+    const attributedReceivedVotes = receivedVotes.map((vote) => ({
+      ...vote,
+      submissionId: submissionByVoteId.get(vote.id).id,
+    }));
 
     const hasScopedVoteEvidence =
       voteGameId !== null &&
       (player.submissions.some((submission) => submission.round.game.id === voteGameId) ||
         player.votes.some((vote) => vote.round.gameId === voteGameId) ||
-        receivedVotes.some((vote) => vote.round.gameId === voteGameId));
+        attributedReceivedVotes.some((vote) => vote.round.gameId === voteGameId));
     const visibleVotesGiven = hasScopedVoteEvidence
       ? player.votes.filter((vote) => vote.round.gameId === voteGameId)
       : player.votes;
     const visibleVotesReceived = hasScopedVoteEvidence
-      ? receivedVotes.filter((vote) => vote.round.gameId === voteGameId)
-      : receivedVotes;
+      ? attributedReceivedVotes.filter((vote) => vote.round.gameId === voteGameId)
+      : attributedReceivedVotes;
     const history = buildPlayerHistoryRows(player.submissions);
     const scoredHistory = history.filter((submission) => isScoredSubmission(submission));
     const gameIds = new Set(player.submissions.map((submission) => submission.round.game.id));
@@ -1602,9 +1335,9 @@ async function getPlayerRouteData(playerId, input = {}) {
           scoredSubmissionCount: scoredHistory.length,
           gameCount: gameIds.size,
           votesGivenCount: player.votes.length,
-          votesReceivedCount: receivedVotes.length,
+          votesReceivedCount: attributedReceivedVotes.length,
           totalPointsGiven: sum(player.votes.map((vote) => vote.pointsAssigned)),
-          totalPointsReceived: sum(receivedVotes.map((vote) => vote.pointsAssigned)),
+          totalPointsReceived: sum(attributedReceivedVotes.map((vote) => vote.pointsAssigned)),
         },
         trait: buildPlayerTrait(player.id, allSubmissions),
         notablePicks: selectPlayerNotablePicks(scoredHistory),
@@ -1635,7 +1368,7 @@ async function getPlayerRouteData(playerId, input = {}) {
         }),
       },
       status:
-        player.submissions.length === 0 && player.votes.length === 0 && receivedVotes.length === 0
+        player.submissions.length === 0 && player.votes.length === 0 && attributedReceivedVotes.length === 0
           ? "No submissions or votes have been imported for this player yet."
           : null,
     }, {
@@ -1789,7 +1522,7 @@ function LandingContent({ data }) {
           title: game.title,
           href: game.href,
           badge: { variant: "status-current" },
-          meta: `${game.roundCount} rounds - ${game.timeframe}`,
+          meta: [formatCount(game.roundCount, "round"), game.timeframe].filter(Boolean).join(" - "),
         })),
         emptyCopy: "No current games in the archive.",
       }),
@@ -1804,7 +1537,7 @@ function LandingContent({ data }) {
           title: game.title,
           href: game.href,
           badge: { variant: "status-completed" },
-          meta: `${game.roundCount} rounds - ${game.timeframe}`,
+          meta: [formatCount(game.roundCount, "round"), game.timeframe].filter(Boolean).join(" - "),
         })),
         emptyCopy: "No completed games match these filters.",
       }),
@@ -1834,7 +1567,7 @@ function GameContent({ data }) {
       variant: data.game.finished ? "status-completed" : "status-current",
       label: data.game.finished ? "Completed game" : "Current game",
     }),
-    React.createElement("p", null, data.game.timeframe),
+    data.game.timeframe ? React.createElement("p", null, data.game.timeframe) : null,
     React.createElement(StatusNotice, { status: data.status }),
     data.status
       ? null
@@ -1862,6 +1595,13 @@ function GameContent({ data }) {
             })),
             emptyCopy: data.game.pendingScoringCopy ?? "No scored rounds imported for this game.",
           }),
+          data.game.leaderboardFootnote
+            ? React.createElement(
+                "p",
+                { className: "archive-route-footnote", role: "note" },
+                data.game.leaderboardFootnote,
+              )
+            : null,
           React.createElement(
             "section",
             { className: "archive-route-section" },
@@ -2056,7 +1796,7 @@ function SongsContent({ data }) {
         title: song.title,
         href: song.href,
         badge: {
-          variant: song.appearances <= 1 ? "familiarity-first-time" : "familiarity-returning",
+          variant: getFamiliarityBadgeVariant(song.familiarity),
         },
         meta: `${song.artistName} - ${song.appearances} appearances`,
       })),

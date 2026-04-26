@@ -117,11 +117,20 @@ test(
     assert.equal(songs.familiarity, "all");
     assert.equal(songs.sort, "most-recent");
     assert.ok(songs.songs.every((routeSong) => routeSong.href.startsWith("/songs/")));
+    assert.equal(
+      songs.songs.find((routeSong) => routeSong.id === songId).familiarity.kind,
+      song.song.familiarity.kind,
+    );
     assert.equal(song.kind, "song");
     assert.equal(song.shell.gameContext, null);
     assert.ok(song.song.familiarity.label);
     assert.ok(song.song.summaryFacts.length > 0);
     assert.ok(song.song.originLabels.length > 0);
+    const firstSongSubmission = song.song.submissions[song.song.submissions.length - 1];
+    assert.equal(
+      song.song.originLabels.find((origin) => origin.id === "song-origin")?.value,
+      `${firstSongSubmission.player.displayName} in ${firstSongSubmission.round.name}`,
+    );
     assert.ok(song.song.historyGroups.length > 0);
     assert.ok(song.song.submissions.every((submission) => submission.round.game.id));
     assert.equal(playerRoute.kind, "player");
