@@ -1961,7 +1961,7 @@ test("game swing moment uses complete selected-game round evidence only", () => 
   assert.equal(moment.family, "game-swing");
   assert.equal(moment.title, "Photo Finish");
   assert.match(moment.copy, /1 point ahead/);
-  assert.equal(moment.href, "/?game=7&round=10#vote-breakdown");
+  assert.equal(moment.href, "/games/7/rounds/10#vote-breakdown");
   assert.deepEqual(moment.evidence[0].target, {
     gameId: 7,
     roundId: 10,
@@ -2056,7 +2056,7 @@ test("song memory moments require supported novelty and distinguish exact recurr
     moments[0].evidence.map((link) => link.kind),
     ["song", "round"],
   );
-  assert.equal(moments[0].href, "/?game=7&round=10&song=100");
+  assert.equal(moments[0].href, "/songs/100");
   assert.equal(moments[1].denominator, "exact-song submissions across archive history");
   assert.match(moments[1].copy, /prior exact-song appearance/);
   assert.equal(
@@ -2120,7 +2120,7 @@ test("participation pulse keeps busiest-submitters ties non-competitive", () => 
   assert.equal(moment.lens, "social-participation");
   assert.match(moment.copy, /shared the busiest slate/);
   assert.doesNotMatch(moment.copy, /won|leader|champion/i);
-  assert.equal(moment.evidence[0].href, "/?game=7");
+  assert.equal(moment.evidence[0].href, "/games/7");
   assert.deepEqual(
     moment.evidence.map((link) => link.kind),
     ["game", "player", "player"],
@@ -2177,7 +2177,7 @@ test(
       assertNonEmptyArray(moment.evidence, `expected evidence for ${moment.family}`);
 
       for (const evidence of moment.evidence) {
-        assert.match(evidence.href, new RegExp(`^/\\?game=${gameId}`));
+        assert.match(evidence.href, new RegExp(`^/(games/${gameId}|songs/|players/)`));
         assert.equal(evidence.requiresGameContext, true);
         assert.ok(evidence.target?.gameId, "evidence target keeps selected-game context");
       }
@@ -2295,7 +2295,7 @@ test(
     assert.equal(swingMoment.evidence[0].kind, "vote-breakdown");
     assert.match(
       swingMoment.href,
-      new RegExp(`^/\\?game=${afterpartyGameId}&round=\\d+#vote-breakdown$`),
+      new RegExp(`^/games/${afterpartyGameId}/rounds/\\d+#vote-breakdown$`),
     );
     assert.ok(songMoment, "expected selected-game song or discovery memory moment");
     assert.equal(songMoment.label, "Song memory");
@@ -2304,7 +2304,7 @@ test(
     assert.equal(songMoment.evidence[0].kind, "song");
     assert.match(
       songMoment.href,
-      new RegExp(`^/\\?game=${afterpartyGameId}&round=\\d+&song=\\d+$`),
+      new RegExp(`^/songs/\\d+$`),
     );
     assert.ok(
       !recap.board.rounds.some((round) => round.name === "Opening Night"),
@@ -2672,7 +2672,7 @@ test(
       title: "The Long Way Home",
       artistName: "Solar Static",
     });
-    assert.equal(modal.closeHref, `/?game=${originGameId}&round=${originRoundId}`);
+    assert.equal(modal.closeHref, `/games/${originGameId}/rounds/${originRoundId}`);
     assert.equal(modal.familiarity.kind, "brought-back");
     assert.equal(modal.familiarity.label, "Brought back");
     assert.equal(modal.familiarity.priorExactSongSubmissionCount, 1);
@@ -2846,7 +2846,7 @@ test(
       unavailable: true,
       originRoundId: staleRoundId,
       requestedSongId: staleSongId,
-      closeHref: `/?game=${staleGameId}&round=${staleRoundId}`,
+      closeHref: `/games/${staleGameId}/rounds/${staleRoundId}`,
     });
     assert.equal(await getSongMemoryModal(999999, staleSongId, { prisma }), null);
   },
@@ -2983,7 +2983,7 @@ test(
       unavailable: true,
       originRoundId: fixture.originRoundId,
       requestedSongId: fixture.staleSongId,
-      closeHref: `/?game=${fixtureOriginGameId}&round=${fixture.originRoundId}`,
+      closeHref: `/games/${fixtureOriginGameId}/rounds/${fixture.originRoundId}`,
     });
   },
 );
@@ -3431,30 +3431,30 @@ test(
   },
 );
 
-test("archive href helper canonicalizes round-first URL state", () => {
+test("archive href helper canonicalizes route-first URL state", () => {
   assert.equal(buildArchiveHref({}), "/");
-  assert.equal(buildArchiveHref({ songId: 2, playerId: 3 }), "/");
+  assert.equal(buildArchiveHref({ songId: 2, playerId: 3 }), "/players/3");
   assert.equal(
     buildArchiveHref({ roundId: 5, songId: 2, playerId: 3 }),
-    "/?round=5&player=3",
+    "/players/3",
   );
-  assert.equal(buildArchiveHref({ roundId: 5, playerId: 3 }), "/?round=5&player=3");
+  assert.equal(buildArchiveHref({ roundId: 5, playerId: 3 }), "/players/3");
   assert.equal(
     buildArchiveHref({ roundId: 5, playerId: 3, playerSubmissionId: 9 }),
-    "/?round=5&player=3&playerSubmission=9",
+    "/players/3",
   );
-  assert.equal(buildArchiveHref({ roundId: 5, playerSubmissionId: 9 }), "/?round=5");
-  assert.equal(buildArchiveHref({ roundId: 5, songId: 2 }), "/?round=5&song=2");
-  assert.equal(buildArchiveHref({ gameId: 7 }), "/?game=7");
+  assert.equal(buildArchiveHref({ roundId: 5, playerSubmissionId: 9 }), "/");
+  assert.equal(buildArchiveHref({ roundId: 5, songId: 2 }), "/songs/2");
+  assert.equal(buildArchiveHref({ gameId: 7 }), "/games/7");
   assert.equal(
     buildArchiveHref({ gameId: 7, roundId: 5, songId: 2 }),
-    "/?game=7&round=5&song=2",
+    "/songs/2",
   );
   assert.equal(
     buildArchiveHref({ gameId: 7, roundId: 5, fragment: "vote-breakdown" }),
-    "/?game=7&round=5#vote-breakdown",
+    "/games/7/rounds/5#vote-breakdown",
   );
-  assert.equal(buildArchiveHref({ roundId: -1, playerId: 3 }), "/");
+  assert.equal(buildArchiveHref({ roundId: -1, playerId: 3 }), "/players/3");
   assert.equal(
     buildCanonicalSongMemoryHref({
       gameId: 7,
@@ -3463,23 +3463,23 @@ test("archive href helper canonicalizes round-first URL state", () => {
       playerId: 3,
       playerSubmissionId: 9,
     }),
-    "/?game=7&round=5&song=2",
+    "/songs/2",
   );
 });
 
 test("memory board evidence href helper targets canonical selected-game destinations", () => {
-  assert.equal(buildMemoryBoardEvidenceHref({ gameId: 7 }), "/?game=7");
+  assert.equal(buildMemoryBoardEvidenceHref({ gameId: 7 }), "/games/7");
   assert.equal(
     buildMemoryBoardEvidenceHref({ gameId: 7, roundId: 5 }),
-    "/?game=7&round=5",
+    "/games/7/rounds/5",
   );
   assert.equal(
     buildMemoryBoardEvidenceHref({ gameId: 7, roundId: 5, songId: 2 }),
-    "/?game=7&round=5&song=2",
+    "/songs/2",
   );
   assert.equal(
     buildMemoryBoardEvidenceHref({ gameId: 7, roundId: 5, playerId: 3 }),
-    "/?game=7&round=5&player=3",
+    "/players/3",
   );
   assert.equal(
     buildMemoryBoardEvidenceHref({
@@ -3488,15 +3488,15 @@ test("memory board evidence href helper targets canonical selected-game destinat
       playerId: 3,
       submissionId: 9,
     }),
-    "/?game=7&round=5&player=3&playerSubmission=9",
+    "/players/3",
   );
   assert.equal(
     buildMemoryBoardEvidenceHref({ gameId: 7, roundId: 5, submissionId: 9 }),
-    "/?game=7&round=5#submission-9",
+    "/games/7/rounds/5#submission-9",
   );
   assert.equal(
     buildMemoryBoardEvidenceHref({ gameId: 7, roundId: 5, section: "vote-breakdown" }),
-    "/?game=7&round=5#vote-breakdown",
+    "/games/7/rounds/5#vote-breakdown",
   );
   assert.equal(buildMemoryBoardEvidenceHref({ roundId: 5, songId: 2 }), null);
 });
@@ -3529,18 +3529,18 @@ test("selected-game route context adapter rewrites return and evidence hrefs wit
   const adaptedRound = applySelectedGameRouteContext(roundPayload, {
     selectedGameId: 7,
     openRoundId: 5,
-    selectedGameHref: "/?game=7",
+    selectedGameHref: "/games/7",
   });
 
   assert.notEqual(adaptedRound, roundPayload);
   assert.equal(adaptedRound.id, roundPayload.id);
-  assert.equal(adaptedRound.closeHref, "/?game=7");
-  assert.equal(adaptedRound.href, "/?game=7&round=5");
-  assert.equal(adaptedRound.submissions[0].href, "/?game=7&round=5#submission-9");
-  assert.equal(adaptedRound.submissions[0].songHref, "/?game=7&round=5&song=2");
-  assert.equal(adaptedRound.submissions[0].playerHref, "/?game=7&round=5&player=3");
-  assert.equal(adaptedRound.voteBreakdownHref, "/?game=7&round=5#vote-breakdown");
-  assert.equal(adaptedRound.voteBreakdown[0].href, "/?game=7&round=5#submission-9");
+  assert.equal(adaptedRound.closeHref, "/games/7");
+  assert.equal(adaptedRound.href, "/games/7/rounds/5");
+  assert.equal(adaptedRound.submissions[0].href, "/games/7/rounds/5#submission-9");
+  assert.equal(adaptedRound.submissions[0].songHref, "/songs/2");
+  assert.equal(adaptedRound.submissions[0].playerHref, "/players/3");
+  assert.equal(adaptedRound.voteBreakdownHref, "/games/7/rounds/5#vote-breakdown");
+  assert.equal(adaptedRound.voteBreakdown[0].href, "/games/7/rounds/5#submission-9");
 });
 
 test(

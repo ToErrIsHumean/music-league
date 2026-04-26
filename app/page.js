@@ -1,10 +1,20 @@
 import React from "react";
-import archivePageModule from "../src/archive/game-archive-page";
+import routeSkeletonModule from "../src/archive/route-skeletons";
+import routeUtils from "../src/archive/route-utils";
 
-const { buildGameMemoryBoardPageProps, GameMemoryBoardPage } = archivePageModule;
+const { ArchiveRoutePage, buildRouteMetadata, getLandingRouteData } = routeSkeletonModule;
+const { stripRetiredOverlayParams } = routeUtils;
+
+export async function generateMetadata({ searchParams }) {
+  const params = stripRetiredOverlayParams((await searchParams) ?? {});
+  const data = await getLandingRouteData({ searchParams: Object.fromEntries(params) });
+
+  return buildRouteMetadata(data);
+}
 
 export default async function ArchivePageRoute({ searchParams }) {
-  const props = await buildGameMemoryBoardPageProps({ searchParams });
+  const params = stripRetiredOverlayParams((await searchParams) ?? {});
+  const data = await getLandingRouteData({ searchParams: Object.fromEntries(params) });
 
-  return React.createElement(GameMemoryBoardPage, props);
+  return React.createElement(ArchiveRoutePage, { data });
 }

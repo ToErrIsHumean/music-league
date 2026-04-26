@@ -3,12 +3,10 @@ const {
   applySelectedGameRouteContext,
   buildArchiveHref,
   buildCanonicalSongMemoryHref,
-  getPlayerModalSubmission,
-  getPlayerRoundModal,
-  getRoundDetail,
   getSelectedGameMemoryBoard,
-  getSongMemoryModal,
   listSelectableGames,
+  parsePositiveRouteId,
+  stripRetiredOverlayParams,
 } = require("./archive-utils");
 
 const archiveDateFormatter = new Intl.DateTimeFormat("en-US", {
@@ -16,116 +14,6 @@ const archiveDateFormatter = new Intl.DateTimeFormat("en-US", {
   day: "numeric",
   year: "numeric",
 });
-
-function normalizeQueryInteger(value) {
-  const candidate = Array.isArray(value) ? value[0] : value;
-
-  if (typeof candidate !== "string" || !/^\d+$/.test(candidate)) {
-    return null;
-  }
-
-  const parsedValue = Number.parseInt(candidate, 10);
-
-  return Number.isInteger(parsedValue) && parsedValue > 0 ? parsedValue : null;
-}
-
-async function resolveNestedSelection(searchParams, roundSelection, input) {
-  if (!roundSelection.openRound) {
-    return {
-      nestedEntity: null,
-      openSongModal: null,
-      openPlayerModal: null,
-    };
-  }
-
-  const requestedPlayerId = normalizeQueryInteger(searchParams?.player);
-  const requestedPlayerSubmissionId = normalizeQueryInteger(searchParams?.playerSubmission);
-  const requestedSongId = normalizeQueryInteger(searchParams?.song);
-
-  if (requestedPlayerId !== null && requestedPlayerSubmissionId !== null) {
-    const openPlayerModal = await getPlayerRoundModal(
-      roundSelection.openRound.id,
-      requestedPlayerId,
-      input,
-    );
-
-    if (openPlayerModal) {
-      const activeSubmission = await getPlayerModalSubmission(
-        roundSelection.openRound.id,
-        requestedPlayerId,
-        requestedPlayerSubmissionId,
-        input,
-      );
-
-      return {
-        nestedEntity: {
-          kind: "player",
-          id: openPlayerModal.playerId,
-        },
-        openSongModal: null,
-        openPlayerModal: {
-          ...openPlayerModal,
-          activeSubmissionId: activeSubmission?.submissionId ?? null,
-          activeSubmission,
-        },
-      };
-    }
-  }
-
-  if (requestedSongId !== null) {
-    const openSongModal = await getSongMemoryModal(
-      roundSelection.openRound.id,
-      requestedSongId,
-      input,
-    );
-
-    return {
-      nestedEntity: openSongModal
-        ? {
-            kind: "song",
-            id: openSongModal.song?.id ?? requestedSongId,
-          }
-        : null,
-      openSongModal,
-      openPlayerModal: null,
-    };
-  }
-
-  if (requestedPlayerId !== null) {
-    const openPlayerModal = await getPlayerRoundModal(
-      roundSelection.openRound.id,
-      requestedPlayerId,
-      input,
-    );
-
-    if (!openPlayerModal) {
-      return {
-        nestedEntity: null,
-        openSongModal: null,
-        openPlayerModal: null,
-      };
-    }
-
-    return {
-      nestedEntity: {
-        kind: "player",
-        id: openPlayerModal.playerId,
-      },
-      openSongModal: null,
-      openPlayerModal: {
-        ...openPlayerModal,
-        activeSubmissionId: null,
-        activeSubmission: null,
-      },
-    };
-  }
-
-  return {
-    nestedEntity: null,
-    openSongModal: null,
-    openPlayerModal: null,
-  };
-}
 
 function findSelectableGame(games, gameId) {
   if (gameId === null) {
@@ -301,47 +189,11 @@ function resolveSelectedGame({ selectableGames, requestedGameId, requestedRound 
   };
 }
 
-function resolveRoundSelection({ requestedRoundId, requestedRound, selectedGame }) {
-  if (requestedRoundId === null) {
-    return {
-      openRoundId: null,
-      openRound: null,
-      notice: null,
-    };
-  }
-
-  if (!requestedRound) {
-    return {
-      openRoundId: null,
-      openRound: null,
-      notice: "Round not found.",
-    };
-  }
-
-  if (!selectedGame || requestedRound.game.id !== selectedGame.id) {
-    return {
-      openRoundId: null,
-      openRound: null,
-      notice: "Round not found in selected game.",
-    };
-  }
-
-  return {
-    openRoundId: requestedRound.id,
-    openRound: requestedRound,
-    notice: null,
-  };
-}
-
 async function buildGameMemoryBoardPageProps(input = {}) {
-  const searchParams = (await input.searchParams) ?? {};
+  const searchParams = stripRetiredOverlayParams((await input.searchParams) ?? {});
   const archiveInput = input.prisma ? { prisma: input.prisma } : {};
-  const requestedGameId = normalizeQueryInteger(searchParams?.game);
-  const requestedRoundId = normalizeQueryInteger(searchParams?.round);
-  const [selectableGames, requestedRound] = await Promise.all([
-    listSelectableGames(archiveInput),
-    requestedRoundId === null ? Promise.resolve(null) : getRoundDetail(requestedRoundId, archiveInput),
-  ]);
+  const requestedGameId = parsePositiveRouteId(searchParams.get("game"));
+  const selectableGames = await listSelectableGames(archiveInput);
 
   if (selectableGames.length === 0) {
     return {
@@ -360,7 +212,7 @@ async function buildGameMemoryBoardPageProps(input = {}) {
   const selected = resolveSelectedGame({
     selectableGames,
     requestedGameId,
-    requestedRound,
+    requestedRound: null,
   });
   const selectedGameFrame = buildSelectedGameFrame(
     selected.selectedGame,
@@ -370,16 +222,10 @@ async function buildGameMemoryBoardPageProps(input = {}) {
     selected.selectedGame === null
       ? null
       : await getSelectedGameMemoryBoard(selected.selectedGame.id, archiveInput);
-  const roundSelection = resolveRoundSelection({
-    requestedRoundId,
-    requestedRound,
-    selectedGame: selected.selectedGame,
-  });
-  const nestedSelection = await resolveNestedSelection(searchParams, roundSelection, archiveInput);
-  const notices = [selected.invalidGameNotice, roundSelection.notice].filter(Boolean);
+  const notices = [selected.invalidGameNotice].filter(Boolean);
   const routeContext = {
     selectedGameId: selected.selectedGame?.id ?? null,
-    openRoundId: roundSelection.openRoundId,
+    openRoundId: null,
     selectedGameHref: buildArchiveHref({ gameId: selected.selectedGame?.id ?? null }),
   };
 
@@ -387,12 +233,12 @@ async function buildGameMemoryBoardPageProps(input = {}) {
     selectedGame: selectedGameFrame,
     games: buildGameSwitcherOptions(selectableGames, selected.selectedGame?.id ?? null),
     board: selectedGameMemoryBoard?.board ?? null,
-    openRoundId: roundSelection.openRoundId,
-    openRound: applySelectedGameRouteContext(roundSelection.openRound, routeContext),
+    openRoundId: null,
+    openRound: null,
     notices,
-    nestedEntity: nestedSelection.nestedEntity,
-    openSongModal: applySelectedGameRouteContext(nestedSelection.openSongModal, routeContext),
-    openPlayerModal: applySelectedGameRouteContext(nestedSelection.openPlayerModal, routeContext),
+    nestedEntity: null,
+    openSongModal: applySelectedGameRouteContext(null, routeContext),
+    openPlayerModal: applySelectedGameRouteContext(null, routeContext),
   };
 }
 

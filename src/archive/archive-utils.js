@@ -10,6 +10,15 @@ const {
   sortSongMemoryHistory,
   sortSongMemoryHistoryNewestFirst,
 } = require("./song-memory");
+const {
+  buildGameHref,
+  buildPlayerHref,
+  buildRoundHref,
+  buildSongHref,
+  buildSongSearchHref,
+  parsePositiveRouteId,
+  stripRetiredOverlayParams,
+} = require("./route-utils");
 
 const SHORT_GAME_ID_MAX_LENGTH = 16;
 const SONG_RECALL_COMMENT_MAX_LENGTH = 140;
@@ -3249,37 +3258,28 @@ function appendHrefFragment(href, fragment) {
 function buildArchiveHref(input = {}) {
   const gameId = normalizePositiveInteger(input.gameId);
   const roundId = normalizePositiveInteger(input.roundId);
-  const params = new URLSearchParams();
   const fragment = normalizeFragment(input.fragment);
-
-  if (gameId !== null) {
-    params.set("game", String(gameId));
-  }
-
-  if (roundId === null) {
-    const query = params.toString();
-
-    return appendHrefFragment(query ? `/?${query}` : "/", fragment);
-  }
 
   const songId = normalizePositiveInteger(input.songId);
   const playerId = normalizePositiveInteger(input.playerId);
-  const playerSubmissionId =
-    playerId === null ? null : normalizePositiveInteger(input.playerSubmissionId);
-
-  params.set("round", String(roundId));
 
   if (playerId !== null) {
-    params.set("player", String(playerId));
-
-    if (playerSubmissionId !== null) {
-      params.set("playerSubmission", String(playerSubmissionId));
-    }
-  } else if (songId !== null) {
-    params.set("song", String(songId));
+    return appendHrefFragment(buildPlayerHref(playerId), fragment);
   }
 
-  return appendHrefFragment(`/?${params.toString()}`, fragment);
+  if (songId !== null) {
+    return appendHrefFragment(buildSongHref(songId), fragment);
+  }
+
+  if (roundId !== null) {
+    return appendHrefFragment(buildRoundHref(gameId, roundId), fragment);
+  }
+
+  if (gameId !== null) {
+    return appendHrefFragment(buildGameHref(gameId), fragment);
+  }
+
+  return appendHrefFragment("/", fragment);
 }
 
 function buildCanonicalSongMemoryHref(input = {}) {
@@ -3528,8 +3528,13 @@ module.exports = {
   applySelectedGameRouteContext,
   buildArchiveHref,
   buildCanonicalSongMemoryHref,
+  buildGameHref,
   buildMemoryBoardEvidenceHref,
+  buildPlayerHref,
+  buildRoundHref,
   buildSelectedGameCompetitiveAnchor,
+  buildSongHref,
+  buildSongSearchHref,
   compareSongMemoryHistoryOrder,
   deriveSongFamiliarity,
   deriveGameStandings,
@@ -3546,6 +3551,8 @@ module.exports = {
   getSongRoundModal,
   listArchiveGames,
   listSelectableGames,
+  parsePositiveRouteId,
   selectPlayerNotablePicks,
   sortSongMemoryHistory,
+  stripRetiredOverlayParams,
 };
