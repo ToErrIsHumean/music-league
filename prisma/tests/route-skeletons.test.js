@@ -174,6 +174,10 @@ test(
     assert.match(markup, /Submission history/);
     assert.match(markup, /Votes given/);
     assert.match(markup, /Votes received/);
+    assert.match(markup, /data-archive-badge-variant="status-/);
+    assert.match(markup, /data-archive-badge-variant="rank-/);
+    assert.match(markup, /data-archive-badge-variant="score"/);
+    assert.match(markup, /data-archive-badge-role="primary"/);
     assert.ok(!markup.includes("role=\"dialog\""));
     assert.ok(!markup.includes("archive-overlay"));
   },

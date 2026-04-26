@@ -16,6 +16,10 @@ const {
 const { deriveSongFamiliarity, sortSongMemoryHistory, sortSongMemoryHistoryNewestFirst } =
   require("./song-memory");
 const {
+  ARCHIVE_BADGE_VARIANTS,
+  buildArchiveBadgeModel,
+} = require("./archive-badges");
+const {
   derivePlayerTrait,
   getSelectedGameMemoryBoard,
   selectPlayerNotablePicks,
@@ -123,6 +127,18 @@ function formatRank(rank) {
 
 function formatScore(score) {
   return score === null ? "Score pending" : `${score} points`;
+}
+
+function formatRankBadgeLabel(rank, tied = false) {
+  if (rank === null) {
+    return "Unranked";
+  }
+
+  return tied ? `T${rank}` : `#${rank}`;
+}
+
+function getFamiliarityBadgeVariant(familiarity) {
+  return familiarity?.kind === "debut" ? "familiarity-first-time" : "familiarity-returning";
 }
 
 function sum(values) {
@@ -247,6 +263,12 @@ function buildGameLeaderboard(game) {
   let previousScore = null;
   let previousRank = 0;
 
+  const scoreCounts = new Map();
+
+  for (const row of rows) {
+    scoreCounts.set(row.totalScore, (scoreCounts.get(row.totalScore) ?? 0) + 1);
+  }
+
   return rows.map((row, index) => {
     const rank = previousScore === row.totalScore ? previousRank : index + 1;
 
@@ -256,6 +278,7 @@ function buildGameLeaderboard(game) {
     return {
       ...row,
       rank,
+      tied: scoreCounts.get(row.totalScore) > 1,
     };
   });
 }
@@ -1436,6 +1459,22 @@ function ArchiveHeader() {
   );
 }
 
+function ArchiveBadge({ variant, label, ariaLabel, href, rel, target }) {
+  const badge = buildArchiveBadgeModel({ variant, label, ariaLabel });
+  const props = {
+    className: "archive-badge",
+    "data-archive-badge-variant": badge.variant,
+    "data-archive-badge-role": ARCHIVE_BADGE_VARIANTS[badge.variant].tokenRole,
+    "aria-label": badge.ariaLabel ?? undefined,
+  };
+
+  if (href) {
+    return React.createElement("a", { ...props, href, rel, target }, badge.label);
+  }
+
+  return React.createElement("span", props, badge.label);
+}
+
 function StatusNotice({ status, href, linkLabel }) {
   if (!status) {
     return null;
@@ -1463,7 +1502,12 @@ function RouteList({ items, emptyCopy }) {
       React.createElement(
         "li",
         { key: item.id },
-        React.createElement("a", { href: item.href }, item.title ?? item.name),
+        React.createElement(
+          "span",
+          { className: "archive-route-list-main" },
+          React.createElement("a", { href: item.href }, item.title ?? item.name),
+          item.badge ? React.createElement(ArchiveBadge, item.badge) : null,
+        ),
         item.meta ? React.createElement("span", null, item.meta) : null,
       ),
     ),
@@ -1551,6 +1595,7 @@ function LandingContent({ data }) {
           id: game.id,
           title: game.title,
           href: game.href,
+          badge: { variant: "status-current" },
           meta: `${game.roundCount} rounds - ${game.timeframe}`,
         })),
         emptyCopy: "No current games in the archive.",
@@ -1565,6 +1610,7 @@ function LandingContent({ data }) {
           id: game.id,
           title: game.title,
           href: game.href,
+          badge: { variant: "status-completed" },
           meta: `${game.roundCount} rounds - ${game.timeframe}`,
         })),
         emptyCopy: "No completed games match these filters.",
@@ -1591,7 +1637,10 @@ function GameContent({ data }) {
     React.Fragment,
     null,
     React.createElement("h1", null, data.game.title),
-    React.createElement("p", null, data.game.finished ? "Completed game" : "Current game"),
+    React.createElement(ArchiveBadge, {
+      variant: data.game.finished ? "status-completed" : "status-current",
+      label: data.game.finished ? "Completed game" : "Current game",
+    }),
     React.createElement("p", null, data.game.timeframe),
     React.createElement(StatusNotice, { status: data.status }),
     data.status
@@ -1605,9 +1654,16 @@ function GameContent({ data }) {
             rows: data.game.leaderboard.map((row) => ({
               id: row.player.id,
               cells: [
-                formatRank(row.rank),
+                React.createElement(ArchiveBadge, {
+                  variant: row.tied ? "rank-tie" : "rank-plain",
+                  label: formatRankBadgeLabel(row.rank, row.tied),
+                  ariaLabel: row.tied ? `Tied rank ${row.rank}` : `Rank ${row.rank}`,
+                }),
                 React.createElement("a", { href: row.player.href }, row.player.displayName),
-                `${row.totalScore} points`,
+                React.createElement(ArchiveBadge, {
+                  variant: "score",
+                  label: `${row.totalScore} points`,
+                }),
                 String(row.wins),
               ],
             })),
@@ -1689,7 +1745,13 @@ function RoundContent({ data }) {
     data.round.description ? React.createElement("p", null, data.round.description) : null,
     React.createElement("p", null, formatDate(data.round.occurredAt)),
     data.round.playlistUrl
-      ? React.createElement("a", { href: data.round.playlistUrl, rel: "noreferrer", target: "_blank" }, "Open playlist")
+      ? React.createElement(ArchiveBadge, {
+          variant: "playlist-link",
+          label: "Open playlist",
+          href: data.round.playlistUrl,
+          rel: "noreferrer",
+          target: "_blank",
+        })
       : null,
     data.round.highlights.length
       ? React.createElement(DefinitionList, {
@@ -1715,7 +1777,11 @@ function RoundContent({ data }) {
           React.createElement(
             "p",
             null,
-            `${submission.song.artist.name} - ${submission.player.displayName} - ${formatScore(submission.score)}`,
+            `${submission.song.artist.name} - ${submission.player.displayName} - `,
+            React.createElement(ArchiveBadge, {
+              variant: "score",
+              label: formatScore(submission.score),
+            }),
           ),
           submission.comment ? React.createElement("p", null, submission.comment) : null,
           React.createElement(
@@ -1796,6 +1862,9 @@ function SongsContent({ data }) {
         id: song.id,
         title: song.title,
         href: song.href,
+        badge: {
+          variant: song.appearances <= 1 ? "familiarity-first-time" : "familiarity-returning",
+        },
         meta: `${song.artistName} - ${song.appearances} appearances`,
       })),
       emptyCopy: data.isEmpty ? "No songs imported yet." : "No songs match these filters.",
@@ -1826,7 +1895,15 @@ function SongContent({ data }) {
       "section",
       { className: "archive-route-section" },
       React.createElement("h2", null, "Familiarity"),
-      React.createElement("p", null, `${data.song.familiarity.label}: ${data.song.familiarity.shortSummary}`),
+      React.createElement(
+        "p",
+        null,
+        React.createElement(ArchiveBadge, {
+          variant: getFamiliarityBadgeVariant(data.song.familiarity),
+          label: data.song.familiarity.label,
+        }),
+        ` ${data.song.familiarity.shortSummary}`,
+      ),
     ),
     React.createElement(DefinitionList, {
       items: data.song.summaryFacts.map((fact, index) => ({
@@ -1924,7 +2001,16 @@ function PlayerContent({ data }) {
           "section",
           { className: "archive-route-section" },
           React.createElement("h2", null, "Trait"),
-          React.createElement("p", null, data.player.trait.line),
+          React.createElement(
+            "p",
+            null,
+            React.createElement(ArchiveBadge, {
+              variant: "trait",
+              label: "Trait",
+              ariaLabel: data.player.trait.line,
+            }),
+            ` ${data.player.trait.line}`,
+          ),
         )
       : null,
     React.createElement(
