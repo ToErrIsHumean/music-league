@@ -15,7 +15,7 @@
 | TASK-07 | Build the game page | `done` | TASK-03, TASK-04 |
 | TASK-08 | Build the round page and inline vote disclosures | `done` | TASK-03, TASK-04 |
 | TASK-09 | Build song browser route | `done` | TASK-03, TASK-04 |
-| TASK-10 | Build song detail route | `pending` | TASK-03, TASK-04 |
+| TASK-10 | Build song detail route | `done` | TASK-03, TASK-04 |
 | TASK-11 | Build player detail route and trait registry | `pending` | TASK-05, TASK-06, TASK-07, TASK-08, TASK-09, TASK-10 |
 | TASK-12 | Run cross-route accessibility and regression hardening | `pending` | TASK-05, TASK-06, TASK-07, TASK-08, TASK-09, TASK-10, TASK-11 |
 
@@ -53,10 +53,13 @@ elevated override.
 | TASK-07 | pass | null | 1 | gpt-5.5 | high | 2026-04-26T05:26:36.874Z |
 | TASK-08 | pass | null | 1 | gpt-5.5 | high | 2026-04-26T05:41:34.064Z |
 | TASK-09 | pass | null | 1 | gpt-5.5 | xhigh | 2026-04-26T05:56:22.873Z |
+| TASK-10 | pass | null | 1 | gpt-5.5 | high | 2026-04-26T06:10:25.338Z |
 
 ## Review Notes
 
 <!-- Orchestrator review notes append below. -->
+
+- TASK-10 cycle 1: `deferred` -> `docs/sdd/reviews/TASK-10-epoch-1-cycle-1.md`
 
 - TASK-09 cycle 1: `deferred` -> `docs/sdd/reviews/TASK-09-epoch-1-cycle-1.md`
 
