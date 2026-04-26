@@ -19,7 +19,7 @@
     "sdd:define-slices": "bolder-define-slices",
     "sdd:extract-slices": "bolder-extract-slices",
     "test": "npm run test:unit",
-    "test:unit": "node --test src/lib/normalize.test.js src/import/parse-bundle.test.js src/import/source-player-id-remaps.test.js src/import/semantic-fixture-manifest.test.js src/archive/route-utils.test.js src/archive/archive-badges.test.js src/archive/song-memory.test.js src/archive/player-metrics.test.js src/archive/insight-guardrails.test.js scripts/import-zips.test.js",
+    "test:unit": "node --test src/lib/normalize.test.js src/import/parse-bundle.test.js src/import/source-player-id-remaps.test.js src/import/semantic-fixture-manifest.test.js src/archive/route-utils.test.js src/archive/archive-badges.test.js src/archive/archive-shell.test.js src/archive/song-memory.test.js src/archive/player-metrics.test.js src/archive/insight-guardrails.test.js scripts/import-zips.test.js",
     "test:integration": "node --test prisma/tests/archive-page.test.js prisma/tests/constraints.test.js prisma/tests/migration.test.js prisma/tests/queries.test.js prisma/tests/route-skeletons.test.js prisma/tests/seed.test.js src/import/analyze-batch.test.js src/import/commit-batch.test.js src/import/get-batch-summary.test.js src/import/list-batch-issues.test.js src/import/list-batches.test.js src/import/recompute-round-results.test.js src/import/stage-batch.test.js src/import/workflow-integration.test.js",
     "test:all": "npm run test:unit && npm run test:integration"
   },
