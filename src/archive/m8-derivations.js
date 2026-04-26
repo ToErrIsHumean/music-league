@@ -187,21 +187,32 @@ function deriveLeaderboardRows(submissions = []) {
     }
 
     const row = rowsByPlayer.get(playerId) ?? {
+      playerId,
+      displayName: getPlayerDisplayName(submission),
+      href: buildPlayerHref(playerId),
       player: {
         id: playerId,
         displayName: getPlayerDisplayName(submission),
         href: buildPlayerHref(playerId),
       },
       totalScore: 0,
+      totalPoints: 0,
       roundWins: 0,
       wins: 0,
       scoredSubmissionCount: 0,
+      roundsPlayed: 0,
+      roundIds: new Set(),
       rank: null,
+      rankLabel: "",
       tied: false,
+      isTiedRank: false,
     };
 
     row.totalScore += submission.score;
+    row.totalPoints = row.totalScore;
     row.scoredSubmissionCount += 1;
+    row.roundIds.add(submission.roundId ?? submission.round?.id ?? `submission-${row.scoredSubmissionCount}`);
+    row.roundsPlayed = row.roundIds.size;
     row.roundWins += submission.rank === 1 ? 1 : 0;
     row.wins = row.roundWins;
     rowsByPlayer.set(playerId, row);
@@ -237,10 +248,14 @@ function deriveLeaderboardRows(submissions = []) {
     previousTieKey = tieKey;
     previousRank = rank;
 
+    const { roundIds, ...serializableRow } = row;
+
     return {
-      ...row,
+      ...serializableRow,
       rank,
+      rankLabel: tied ? `T${rank}` : `#${rank}`,
       tied,
+      isTiedRank: tied,
     };
   });
   const hasTies = rankedRows.some((row) => row.tied);
@@ -501,6 +516,7 @@ function deriveGameRoundListItems({ gameId, rounds = [] } = {}) {
   return [...rounds].sort(compareGameRoundAscending).map((round, index) => {
     const submissions = round.submissions ?? [];
     const roundStatus = resolveRoundStatus(submissions);
+    const scoringStatus = roundStatus.status === "no-submissions" ? "unscored" : roundStatus.status;
     const winners = submissions
       .filter((submission) => submission.rank === 1)
       .sort((left, right) =>
@@ -510,6 +526,8 @@ function deriveGameRoundListItems({ gameId, rounds = [] } = {}) {
 
     return {
       id: round.id,
+      roundId: round.id,
+      gameId,
       name: round.name,
       sequenceNumber: round.sequenceNumber ?? null,
       sequenceLabel:
@@ -517,12 +535,14 @@ function deriveGameRoundListItems({ gameId, rounds = [] } = {}) {
           ? `Round ${index + 1}`
           : `Round ${round.sequenceNumber}`,
       occurredAt: round.occurredAt ?? null,
+      occurredAtLabel: round.occurredAt ? formatArchiveDate(round.occurredAt) : null,
       playlistUrl: round.playlistUrl ?? null,
       href: buildRoundHref(gameId, round.id),
       submissionCount: submissions.length,
       scoredSubmissionCount: roundStatus.scoredSubmissionCount,
       unscoredSubmissionCount: submissions.length - roundStatus.scoredSubmissionCount,
       status: roundStatus.status,
+      scoringStatus,
       statusLabel: roundStatus.statusLabel,
       isScored: roundStatus.status === "scored",
       winnerLabels,
