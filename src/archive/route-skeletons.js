@@ -16,6 +16,7 @@ const {
   buildArchiveBadgeModel,
 } = require("./archive-badges");
 const { ArchiveShell } = require("./archive-shell");
+const { LandingContent } = require("./landing-page-content");
 const {
   derivePlayerTrait,
   getSelectedGameMemoryBoard,
@@ -132,41 +133,140 @@ function formatGameTimeframe(rounds) {
   })?.label ?? null;
 }
 
-function hasWinner(game, winnerFilter) {
-  if (winnerFilter.length === 0) {
-    return true;
+function getGameTimeframe(game) {
+  return deriveGameTimeframe({
+    rounds: game.rounds ?? [],
+    submissions: (game.rounds ?? []).flatMap((round) => round.submissions ?? []),
+    votes: (game.rounds ?? []).flatMap((round) => round.votes ?? []),
+  });
+}
+
+function compareStableGameFallback(left, right) {
+  const leftSourceId = typeof left.sourceGameId === "string" ? left.sourceGameId : "";
+  const rightSourceId = typeof right.sourceGameId === "string" ? right.sourceGameId : "";
+
+  if (leftSourceId && rightSourceId && leftSourceId !== rightSourceId) {
+    return leftSourceId.localeCompare(rightSourceId);
   }
 
-  const normalizedWinner = winnerFilter.toLocaleLowerCase();
+  if (leftSourceId && !rightSourceId) {
+    return -1;
+  }
 
-  return game.rounds.some((round) =>
-    round.submissions.some(
-      (submission) =>
-        submission.rank === 1 &&
-        submission.player.displayName.toLocaleLowerCase().includes(normalizedWinner),
-    ),
+  if (!leftSourceId && rightSourceId) {
+    return 1;
+  }
+
+  return left.id - right.id;
+}
+
+function compareLandingGames(left, right) {
+  let dateComparison = 0;
+
+  if (left.timeframeEnd && right.timeframeEnd) {
+    dateComparison = right.timeframeEnd.getTime() - left.timeframeEnd.getTime();
+  } else if (left.timeframeEnd) {
+    dateComparison = -1;
+  } else if (right.timeframeEnd) {
+    dateComparison = 1;
+  }
+
+  return dateComparison !== 0 ? dateComparison : compareStableGameFallback(left, right);
+}
+
+function normalizeLandingYearFilter(value) {
+  const requestedYear = normalizeQueryText(value);
+
+  return /^\d{4}$/.test(requestedYear) ? requestedYear : null;
+}
+
+function normalizeLandingWinnerFilter(value) {
+  const requestedWinner = normalizeQueryText(value);
+
+  return normalizeArchiveSearch(requestedWinner).length > 0 ? requestedWinner : null;
+}
+
+function timeframeIntersectsYear(timeframe, year) {
+  if (year === null) {
+    return year === null;
+  }
+
+  if (!timeframe?.start || !timeframe?.end) {
+    return false;
+  }
+
+  const numericYear = Number.parseInt(year, 10);
+
+  return (
+    timeframe.start.getUTCFullYear() <= numericYear &&
+    timeframe.end.getUTCFullYear() >= numericYear
   );
 }
 
-function gameHasYear(game, yearFilter) {
-  if (yearFilter === null) {
-    return true;
-  }
+function getGameWinnerRows(game) {
+  const leaderboard = deriveLeaderboardRows(
+    (game.rounds ?? []).flatMap((round) =>
+      (round.submissions ?? []).map((submission) => ({
+        playerId: submission.player?.id ?? submission.playerId ?? null,
+        playerName: submission.player?.displayName ?? submission.playerName ?? "Unknown player",
+        score: submission.score,
+        rank: submission.rank,
+      })),
+    ),
+  );
 
-  return game.rounds.some((round) => round.occurredAt?.getUTCFullYear() === yearFilter);
+  return leaderboard.rows.filter((row) => row.rank === 1);
 }
 
-function buildGameSummary(game) {
-  const orderedRounds = [...game.rounds].sort(compareRounds);
+function formatWinnerLabel(game) {
+  const winnerRows = getGameWinnerRows(game);
+
+  if (winnerRows.length === 0) {
+    return null;
+  }
+
+  const winnerNames = winnerRows.map((row) => row.player.displayName);
+
+  return winnerNames.length === 1 ? winnerNames[0] : `${winnerNames.join(", ")} tied`;
+}
+
+function buildLandingGameCard(game) {
+  const timeframe = getGameTimeframe(game);
+  const rounds = game.rounds ?? [];
+  const winnerLabel = formatWinnerLabel(game);
 
   return {
-    id: game.id,
-    title: resolveGameDisplayLabel(game),
-    finished: game.finished,
-    timeframe: formatGameTimeframe(orderedRounds),
-    roundCount: orderedRounds.length,
+    gameId: game.id,
+    displayName: resolveGameDisplayLabel(game),
+    status: game.finished ? "Completed" : "Current",
+    timeframeLabel: timeframe?.label ?? null,
+    timeframeStart: timeframe?.start ?? null,
+    timeframeEnd: timeframe?.end ?? null,
+    roundCount: rounds.length,
+    scoredRoundCount: rounds.filter((round) =>
+      (round.submissions ?? []).some((submission) => submission.score !== null),
+    ).length,
+    winnerLabel,
+    winnerSearchText: normalizeArchiveSearch(winnerLabel ?? ""),
     href: buildGameHref(game.id),
+    sourceGameId: game.sourceGameId,
   };
+}
+
+function stripLandingSortFields(card) {
+  const { timeframeStart, timeframeEnd, sourceGameId, winnerSearchText, ...serializableCard } = card;
+
+  return serializableCard;
+}
+
+function applyCompletedGameFilters(games, filters) {
+  const normalizedWinner = normalizeArchiveSearch(filters.winner ?? "");
+
+  return games
+    .filter((game) => timeframeIntersectsYear({ start: game.timeframeStart, end: game.timeframeEnd }, filters.year))
+    .filter((game) =>
+      normalizedWinner.length === 0 ? true : game.winnerSearchText.includes(normalizedWinner),
+    );
 }
 
 function buildGameContext(game) {
@@ -468,82 +568,99 @@ function buildPlayerTrait(playerId, allSubmissions) {
 async function getLandingRouteData(input = {}) {
   const { prisma, ownsPrismaClient } = resolveArchiveInput(input);
   const searchParams = normalizeSearchParams(await input.searchParams);
-  const requestedYear = normalizeQueryText(searchParams.year);
-  const winnerFilter = normalizeQueryText(searchParams.winner);
-  const yearFilter = /^\d{4}$/.test(requestedYear) ? Number.parseInt(requestedYear, 10) : null;
 
   try {
-    const games = await prisma.game.findMany({
-      select: {
-        id: true,
-        sourceGameId: true,
-        displayName: true,
-        finished: true,
-        createdAt: true,
-        rounds: {
-          select: {
-            id: true,
-            occurredAt: true,
-            sequenceNumber: true,
-            submissions: {
-              select: {
-                rank: true,
-                submittedAt: true,
-                player: {
-                  select: {
-                    displayName: true,
-                  },
-                },
-              },
-            },
-            votes: {
-              select: {
-                votedAt: true,
-              },
-            },
-          },
-        },
-      },
+    const landingPageData = await loadLandingPageData({
+      prisma,
+      year: searchParams.year,
+      winner: searchParams.winner,
     });
-    const visibleGames = games
-      .filter((game) => gameHasYear(game, yearFilter))
-      .filter((game) => hasWinner(game, winnerFilter))
-      .sort((left, right) => {
-        const leftDates = getRoundDates(left.rounds);
-        const rightDates = getRoundDates(right.rounds);
-        const dateComparison = compareNullableDescending(leftDates.latest, rightDates.latest);
-
-        if (dateComparison !== 0) {
-          return dateComparison;
-        }
-
-        const createdAtComparison = compareNullableDescending(left.createdAt, right.createdAt);
-
-        if (createdAtComparison !== 0) {
-          return createdAtComparison;
-        }
-
-        return left.id - right.id;
-      })
-      .map(buildGameSummary);
 
     return await withArchiveShellData({
       kind: "landing",
       title: "Music League Archive",
       description: "Browse current and completed Music League games.",
-      currentGames: visibleGames.filter((game) => !game.finished),
-      completedGames: visibleGames.filter((game) => game.finished),
-      isEmpty: games.length === 0,
-      filters: {
-        year: yearFilter,
-        winner: winnerFilter,
-      },
+      ...landingPageData,
     }, {
       activeRoute: "landing",
       gameContext: null,
       searchParams,
       input: { prisma },
     });
+  } finally {
+    if (ownsPrismaClient) {
+      await prisma.$disconnect();
+    }
+  }
+}
+
+async function loadLandingPageData({ prisma, year, winner }) {
+  const filters = {
+    year: normalizeLandingYearFilter(year),
+    winner: normalizeLandingWinnerFilter(winner),
+  };
+  const games = await prisma.game.findMany({
+    select: {
+      id: true,
+      sourceGameId: true,
+      displayName: true,
+      finished: true,
+      rounds: {
+        select: {
+          id: true,
+          occurredAt: true,
+          sequenceNumber: true,
+          submissions: {
+            select: {
+              score: true,
+              rank: true,
+              submittedAt: true,
+              playerId: true,
+              player: {
+                select: {
+                  id: true,
+                  displayName: true,
+                },
+              },
+            },
+          },
+          votes: {
+            select: {
+              votedAt: true,
+            },
+          },
+        },
+      },
+    },
+  });
+  const cards = games.map(buildLandingGameCard);
+  const currentGames = cards
+    .filter((game) => game.status === "Current")
+    .sort(compareLandingGames)
+    .map(stripLandingSortFields);
+  const completedCorpus = cards
+    .filter((game) => game.status === "Completed")
+    .sort(compareLandingGames);
+  const filteredCompletedGames = applyCompletedGameFilters(completedCorpus, filters);
+  const completedTotal = filteredCompletedGames.length;
+
+  return {
+    currentGames,
+    completedGames: filteredCompletedGames.map(stripLandingSortFields),
+    completedTotal,
+    completedVisibleCount: Math.min(100, completedTotal),
+    completedCorpusCount: completedCorpus.length,
+    showCompletedFilters: completedCorpus.length > 30,
+    filters,
+    isEmpty: games.length === 0,
+  };
+}
+
+async function getLandingPageData({ year, winner, input } = {}) {
+  const { prisma, ownsPrismaClient } = resolveArchiveInput(input ?? {});
+
+  try {
+    return await loadLandingPageData({ prisma, year, winner });
   } finally {
     if (ownsPrismaClient) {
       await prisma.$disconnect();
@@ -1496,55 +1613,6 @@ function SimpleTable({ caption, headers, rows, emptyCopy }) {
   );
 }
 
-function LandingContent({ data }) {
-  if (data.isEmpty) {
-    return React.createElement(
-      React.Fragment,
-      null,
-      React.createElement("h1", null, "Music League Archive"),
-      React.createElement(StatusNotice, {
-        status: "No imported games yet. Search results will appear after songs are imported.",
-      }),
-    );
-  }
-
-  return React.createElement(
-    React.Fragment,
-    null,
-    React.createElement("h1", null, "Music League Archive"),
-    React.createElement(
-      "section",
-      { className: "archive-route-section" },
-      React.createElement("h2", null, "Current games"),
-      React.createElement(RouteList, {
-        items: data.currentGames.map((game) => ({
-          id: game.id,
-          title: game.title,
-          href: game.href,
-          badge: { variant: "status-current" },
-          meta: [formatCount(game.roundCount, "round"), game.timeframe].filter(Boolean).join(" - "),
-        })),
-        emptyCopy: "No current games in the archive.",
-      }),
-    ),
-    React.createElement(
-      "section",
-      { className: "archive-route-section" },
-      React.createElement("h2", null, "Completed games"),
-      React.createElement(RouteList, {
-        items: data.completedGames.map((game) => ({
-          id: game.id,
-          title: game.title,
-          href: game.href,
-          badge: { variant: "status-completed" },
-          meta: [formatCount(game.roundCount, "round"), game.timeframe].filter(Boolean).join(" - "),
-        })),
-        emptyCopy: "No completed games match these filters.",
-      }),
-    ),
-  );
-}
-
 function GameContent({ data }) {
   if (!data.game) {
     return React.createElement(
@@ -2038,6 +2106,7 @@ module.exports = {
   ArchiveRoutePage,
   getArchiveShellData,
   buildRouteMetadata,
+  getLandingPageData,
   getGameRouteData,
   getLandingRouteData,
   getPlayerRouteData,

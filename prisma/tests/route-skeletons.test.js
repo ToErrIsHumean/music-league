@@ -6,6 +6,7 @@ const { createTempPrismaDb } = require("./helpers/temp-prisma-db");
 const {
   ArchiveRoutePage,
   getGameRouteData,
+  getLandingPageData,
   getLandingRouteData,
   getPlayerRouteData,
   getRoundRouteData,
@@ -55,6 +56,168 @@ async function findSongIdBySpotifyUri(spotifyUri) {
 test.after(async () => {
   await cleanup();
 });
+
+test(
+  "landing page data partitions games, filters completed games, and caps initial completed visibility",
+  { concurrency: false },
+  async () => {
+    const landingDb = createTempPrismaDb({
+      prefix: "music-league-landing-route-",
+      filename: "landing-route.sqlite",
+      seed: false,
+    });
+
+    try {
+      const alpha = await landingDb.prisma.player.create({
+        data: {
+          displayName: "Alpha Ace",
+          normalizedName: "alpha ace",
+          sourcePlayerId: "landing-alpha",
+        },
+      });
+      const beta = await landingDb.prisma.player.create({
+        data: {
+          displayName: "Beta Bard",
+          normalizedName: "beta bard",
+          sourcePlayerId: "landing-beta",
+        },
+      });
+      const artist = await landingDb.prisma.artist.create({
+        data: {
+          name: "Landing Band",
+          normalizedName: "landing band",
+        },
+      });
+      const song = await landingDb.prisma.song.create({
+        data: {
+          title: "Landing Song",
+          normalizedTitle: "landing song",
+          spotifyUri: "spotify:track:landing-song",
+          artistId: artist.id,
+        },
+      });
+
+      async function createLandingGame(index, overrides = {}) {
+        const winner = overrides.winner ?? alpha;
+        const occurredAt =
+          overrides.occurredAt === undefined
+            ? new Date(Date.UTC(2025, 0, 1 + index))
+            : overrides.occurredAt;
+        const game = await landingDb.prisma.game.create({
+          data: {
+            sourceGameId: overrides.sourceGameId ?? `landing-${String(index).padStart(3, "0")}`,
+            displayName: overrides.displayName ?? `Landing Game ${index}`,
+            finished: overrides.finished ?? true,
+          },
+        });
+        const round = await landingDb.prisma.round.create({
+          data: {
+            gameId: game.id,
+            leagueSlug: game.sourceGameId,
+            sourceRoundId: `${game.sourceGameId}-round`,
+            name: `Round ${index}`,
+            sequenceNumber: 1,
+            occurredAt,
+          },
+        });
+
+        await landingDb.prisma.submission.create({
+          data: {
+            roundId: round.id,
+            playerId: winner.id,
+            songId: song.id,
+            score: overrides.scored === false ? null : 12,
+            rank: overrides.scored === false ? null : 1,
+            submittedAt: overrides.submittedAt ?? occurredAt,
+          },
+        });
+
+        return game;
+      }
+
+      for (let index = 0; index < 102; index += 1) {
+        await createLandingGame(index);
+      }
+
+      await createLandingGame(200, {
+        displayName: "Filtered 2024 Winner",
+        sourceGameId: "landing-2024-beta",
+        winner: beta,
+        occurredAt: new Date("2024-06-01T00:00:00.000Z"),
+      });
+      await createLandingGame(300, {
+        displayName: "Current Filter Bypass",
+        sourceGameId: "landing-current",
+        finished: false,
+        winner: beta,
+        occurredAt: new Date("2023-06-01T00:00:00.000Z"),
+      });
+      await createLandingGame(400, {
+        displayName: "Undated Completed",
+        sourceGameId: "landing-undated",
+        occurredAt: null,
+        submittedAt: null,
+        scored: false,
+      });
+
+      const filtered = await getLandingPageData({
+        year: "2025",
+        winner: "alpha",
+        input: { prisma: landingDb.prisma },
+      });
+
+      assert.equal(filtered.currentGames.length, 1);
+      assert.equal(filtered.currentGames[0].displayName, "Current Filter Bypass");
+      assert.equal(filtered.completedTotal, 102);
+      assert.equal(filtered.completedVisibleCount, 100);
+      assert.equal(filtered.completedGames.length, 102);
+      assert.equal(filtered.showCompletedFilters, true);
+      assert.deepEqual(filtered.filters, { year: "2025", winner: "alpha" });
+      assert.equal(filtered.completedGames[0].displayName, "Landing Game 101");
+      assert.equal(filtered.completedGames[0].winnerLabel, "Alpha Ace");
+      assert.match(filtered.completedGames[0].timeframeLabel, /Apr 12, 2025/);
+      assert.ok(
+        filtered.completedGames.every((game) => game.status === "Completed"),
+        "filtered completed grid should contain completed games only",
+      );
+      assert.ok(
+        filtered.currentGames.every((game) => game.status === "Current"),
+        "current band should contain current games only",
+      );
+
+      const invalidYear = await getLandingPageData({
+        year: "not-a-year",
+        winner: "",
+        input: { prisma: landingDb.prisma },
+      });
+
+      assert.deepEqual(invalidYear.filters, { year: null, winner: null });
+      assert.equal(invalidYear.completedTotal, 104);
+      assert.equal(
+        invalidYear.completedGames.find((game) => game.displayName === "Undated Completed").timeframeLabel,
+        null,
+      );
+
+      const routeData = await getLandingRouteData({
+        prisma: landingDb.prisma,
+        searchParams: { year: "2025", winner: "alpha", round: "999" },
+      });
+      const markup = renderToStaticMarkup(React.createElement(ArchiveRoutePage, { data: routeData }));
+
+      assert.match(markup, /name="year"/);
+      assert.match(markup, /name="winner"/);
+      assert.match(markup, /Showing 100 of 102 completed games/);
+      assert.match(markup, /Show more \(2\)/);
+      assert.match(markup, /data-archive-badge-variant="status-current"/);
+      assert.match(markup, /data-archive-badge-variant="status-completed"/);
+      assert.equal(markup.match(/class="archive-landing-card"/g)?.length, 101);
+      assert.ok(!markup.includes("role=\"dialog\""));
+      assert.ok(!markup.includes("archive-overlay"));
+    } finally {
+      await landingDb.cleanup();
+    }
+  },
+);
 
 test(
   "route skeleton loaders render stable route data and invalid-id status notices",
