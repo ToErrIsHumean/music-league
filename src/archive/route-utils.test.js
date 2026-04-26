@@ -72,6 +72,14 @@ test("song search href builder keeps canonical browser state only", () => {
     }),
     "/songs",
   );
+  assert.equal(
+    buildSongSearchHref({
+      q: "solar",
+      familiarity: "all",
+      sort: "most-recent",
+    }),
+    "/songs?q=solar",
+  );
 });
 
 test("route metadata falls back to archive-specific copy", () => {

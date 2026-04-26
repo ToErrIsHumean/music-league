@@ -118,7 +118,7 @@ function buildSongSearchHref(input = {}) {
     params.set("familiarity", familiarity);
   }
 
-  if (VALID_SONG_SORTS.has(sort)) {
+  if (VALID_SONG_SORTS.has(sort) && sort !== "most-recent") {
     params.set("sort", sort);
   }
 

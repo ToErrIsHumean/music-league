@@ -19,6 +19,7 @@ const {
 const { ArchiveShell } = require("./archive-shell");
 const { LandingContent } = require("./landing-page-content");
 const { RoundSubmissionsList } = require("./round-vote-disclosures");
+const { SongBrowser } = require("./song-browser");
 const {
   derivePlayerTrait,
   getSelectedGameMemoryBoard,
@@ -49,6 +50,8 @@ const archiveDateFormatter = new Intl.DateTimeFormat("en-US", {
   day: "numeric",
   year: "numeric",
 });
+const SONG_FAMILIARITY_FILTERS = new Set(["all", "first-time", "returning"]);
+const SONG_SORTS = new Set(["most-appearances", "most-recent", "best-finish", "alphabetical"]);
 
 function firstParam(value) {
   return Array.isArray(value) ? value[0] : value;
@@ -1288,19 +1291,60 @@ async function getRoundRouteData(gameId, roundId, input = {}) {
   }
 }
 
-async function getSongsRouteData(input = {}) {
+function buildSongBrowserStatus({ invalidFamiliarity, invalidSort, catalog }) {
+  const statusMessages = [
+    invalidFamiliarity && catalog.totalMatchCount > 0
+      ? "Invalid familiarity filter reset to all songs."
+      : null,
+    invalidSort ? "Invalid sort reset to most recent." : null,
+  ].filter(Boolean);
+
+  return statusMessages.join(" ");
+}
+
+async function getSongBrowserData({ q = "", familiarity = "all", sort = "most-recent", input = {} } = {}) {
   const { prisma, ownsPrismaClient } = resolveArchiveInput(input);
-  const searchParams = normalizeSearchParams(await input.searchParams);
-  const rawFamiliarity = normalizeArchiveSearch(searchParams.familiarity);
-  const rawSort = normalizeArchiveSearch(searchParams.sort);
+  const rawFamiliarity = normalizeArchiveSearch(familiarity);
+  const rawSort = normalizeArchiveSearch(sort);
   const invalidFamiliarity =
-    rawFamiliarity.length > 0 && !["all", "first-time", "returning"].includes(rawFamiliarity);
+    rawFamiliarity.length > 0 && !SONG_FAMILIARITY_FILTERS.has(rawFamiliarity);
   const invalidSort =
-    rawSort.length > 0 &&
-    !["most-appearances", "most-recent", "best-finish", "alphabetical"].includes(rawSort);
+    rawSort.length > 0 && !SONG_SORTS.has(rawSort);
 
   try {
     const catalog = await getSongCatalog({
+      q,
+      familiarity,
+      sort,
+      input: { prisma },
+    });
+
+    return {
+      query: catalog.q,
+      familiarity: catalog.familiarity,
+      sort: catalog.sort,
+      rows: catalog.rows,
+      totalMatches: catalog.totalMatchCount,
+      totalCatalogSize: catalog.totalSongCount,
+      capped: catalog.capped,
+      isEmpty: catalog.isEmpty,
+      isZeroResult: catalog.isZeroResult,
+      clearHref: buildSongSearchHref({}),
+      status: buildSongBrowserStatus({ invalidFamiliarity, invalidSort, catalog }),
+    };
+  } finally {
+    if (ownsPrismaClient) {
+      await prisma.$disconnect();
+    }
+  }
+}
+
+async function getSongsRouteData(input = {}) {
+  const { prisma, ownsPrismaClient } = resolveArchiveInput(input);
+  const searchParams = normalizeSearchParams(await input.searchParams);
+
+  try {
+    const browserData = await getSongBrowserData({
       q: searchParams.q,
       familiarity: searchParams.familiarity,
       sort: searchParams.sort,
@@ -1311,19 +1355,8 @@ async function getSongsRouteData(input = {}) {
       kind: "songs",
       title: "Songs",
       description: "Search songs and artists in the Music League archive.",
-      query: catalog.q,
-      familiarity: catalog.familiarity,
-      sort: catalog.sort,
-      status: [
-        invalidFamiliarity ? "Invalid familiarity filter reset to all songs." : null,
-        invalidSort ? "Invalid sort reset to most recent." : null,
-      ]
-        .filter(Boolean)
-        .join(" "),
-      songs: catalog.rows,
-      isEmpty: catalog.isEmpty,
-      isZeroResult: catalog.isZeroResult,
-      clearHref: buildSongSearchHref({}),
+      ...browserData,
+      songs: browserData.rows,
     }, {
       activeRoute: "songs",
       gameContext: null,
@@ -2120,59 +2153,7 @@ function SongsContent({ data }) {
     null,
     React.createElement("h1", null, "Songs"),
     React.createElement(StatusNotice, { status: data.status }),
-    React.createElement(
-      "form",
-      { action: "/songs", method: "get", className: "archive-route-controls" },
-      React.createElement("label", null, "Search", React.createElement("input", { name: "q", defaultValue: data.query })),
-      React.createElement(
-        "label",
-        null,
-        "Familiarity",
-        React.createElement(
-          "select",
-          { name: "familiarity", defaultValue: data.familiarity },
-          React.createElement("option", { value: "all" }, "All"),
-          React.createElement("option", { value: "first-time" }, "First-time"),
-          React.createElement("option", { value: "returning" }, "Returning"),
-        ),
-      ),
-      React.createElement(
-        "label",
-        null,
-        "Sort",
-        React.createElement(
-          "select",
-          { name: "sort", defaultValue: data.sort },
-          React.createElement("option", { value: "most-recent" }, "Most recent"),
-          React.createElement("option", { value: "most-appearances" }, "Most appearances"),
-          React.createElement("option", { value: "best-finish" }, "Best finish"),
-          React.createElement("option", { value: "alphabetical" }, "Alphabetical"),
-        ),
-      ),
-      React.createElement("button", { type: "submit" }, "Apply"),
-    ),
-    React.createElement(
-      "p",
-      null,
-      data.isEmpty
-        ? "Import songs to populate the archive browser."
-        : `${data.songs.length} matching songs - ${data.familiarity} - ${data.sort}`,
-    ),
-    data.songs.length === 0 && !data.isEmpty
-      ? React.createElement("a", { href: data.clearHref }, "Clear filters")
-      : null,
-    React.createElement(RouteList, {
-      items: data.songs.map((song) => ({
-        id: song.id,
-        title: song.title,
-        href: song.href,
-        badge: {
-          variant: getFamiliarityBadgeVariant(song.familiarity),
-        },
-        meta: `${song.artistName} - ${song.appearances} appearances`,
-      })),
-      emptyCopy: data.isEmpty ? "No songs imported yet." : "No songs match these filters.",
-    }),
+    React.createElement(SongBrowser, { data }),
   );
 }
 
@@ -2416,6 +2397,7 @@ module.exports = {
   getPlayerRouteData,
   getRoundPageData,
   getRoundRouteData,
+  getSongBrowserData,
   getSongRouteData,
   getSongsRouteData,
 };

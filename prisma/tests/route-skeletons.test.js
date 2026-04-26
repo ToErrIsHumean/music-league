@@ -12,6 +12,7 @@ const {
   getPlayerRouteData,
   getRoundPageData,
   getRoundRouteData,
+  getSongBrowserData,
   getSongRouteData,
   getSongsRouteData,
 } = require("../../src/archive/route-skeletons");
@@ -57,6 +58,68 @@ async function findSongIdBySpotifyUri(spotifyUri) {
 
 test.after(async () => {
   await cleanup();
+});
+
+test("song browser loader normalizes filters and exposes zero-state metadata", async () => {
+  const prismaStub = {
+    song: {
+      async findMany() {
+        return [
+          {
+            id: 1,
+            title: "Bright Signal",
+            artist: { name: "Signal Choir" },
+            submissions: [
+              {
+                id: 1,
+                songId: 1,
+                rank: 1,
+                score: 10,
+                submittedAt: new Date("2026-01-02T00:00:00Z"),
+                round: {
+                  id: 3,
+                  name: "Opening Night",
+                  occurredAt: null,
+                  game: { id: 2, sourceGameId: "browser-game", displayName: "Browser Game" },
+                },
+              },
+            ],
+          },
+        ];
+      },
+    },
+  };
+
+  const invalidVisible = await getSongBrowserData({
+    familiarity: "unsupported",
+    sort: "unknown-sort",
+    input: { prisma: prismaStub },
+  });
+  const zeroResult = await getSongBrowserData({
+    q: "missing",
+    familiarity: "unsupported",
+    input: { prisma: prismaStub },
+  });
+  const emptyArchive = await getSongBrowserData({
+    input: { prisma: { song: { async findMany() { return []; } } } },
+  });
+
+  assert.equal(invalidVisible.familiarity, "all");
+  assert.equal(invalidVisible.sort, "most-recent");
+  assert.match(invalidVisible.status, /Invalid familiarity filter reset/);
+  assert.match(invalidVisible.status, /Invalid sort reset/);
+  assert.equal(invalidVisible.rows[0].artistSearchHref, "/songs?q=Signal+Choir");
+  assert.deepEqual(invalidVisible.rows[0].mostRecentAppearance, {
+    gameName: "Browser Game",
+    roundName: "Opening Night",
+    href: "/games/2/rounds/3",
+  });
+
+  assert.equal(zeroResult.isZeroResult, true);
+  assert.equal(zeroResult.status, "");
+  assert.equal(zeroResult.clearHref, "/songs");
+  assert.equal(emptyArchive.isEmpty, true);
+  assert.equal(emptyArchive.totalCatalogSize, 0);
 });
 
 test(

@@ -244,15 +244,27 @@ test("builds song catalog rows and header suggestions from normalized song and a
                 id: 1,
                 songId: 1,
                 rank: 1,
+                score: 12,
                 submittedAt: new Date("2026-04-01T00:00:00Z"),
-                round: { occurredAt: new Date("2026-04-02T00:00:00Z") },
+                round: {
+                  id: 11,
+                  name: "Sun Round",
+                  occurredAt: new Date("2026-04-02T00:00:00Z"),
+                  game: { id: 7, sourceGameId: "solar-game", displayName: "Solar Game" },
+                },
               },
               {
                 id: 2,
                 songId: 1,
                 rank: 2,
+                score: 8,
                 submittedAt: new Date("2026-04-10T00:00:00Z"),
-                round: { occurredAt: null },
+                round: {
+                  id: 12,
+                  name: "Finale",
+                  occurredAt: null,
+                  game: { id: 7, sourceGameId: "solar-game", displayName: "Solar Game" },
+                },
               },
             ],
           },
@@ -265,8 +277,14 @@ test("builds song catalog rows and header suggestions from normalized song and a
                 id: 3,
                 songId: 2,
                 rank: null,
+                score: null,
                 submittedAt: null,
-                round: { occurredAt: new Date("2026-03-01T00:00:00Z") },
+                round: {
+                  id: 13,
+                  name: "Moon Round",
+                  occurredAt: new Date("2026-03-01T00:00:00Z"),
+                  game: { id: 8, sourceGameId: "moon-game", displayName: "Moon Game" },
+                },
               },
             ],
           },
@@ -285,6 +303,14 @@ test("builds song catalog rows and header suggestions from normalized song and a
   assert.equal(catalog.q, "solar");
   assert.equal(catalog.rows.length, 1);
   assert.equal(catalog.rows[0].familiarity.kind, "returning");
+  assert.equal(catalog.rows[0].songId, 1);
+  assert.equal(catalog.rows[0].artistSearchHref, "/songs?q=The+Comets");
+  assert.deepEqual(catalog.rows[0].mostRecentAppearance, {
+    gameName: "Solar Game",
+    roundName: "Finale",
+    href: "/games/7/rounds/12",
+  });
+  assert.deepEqual(catalog.rows[0].bestFinish, { rank: 1, score: 12 });
   assert.deepEqual(
     suggestions.map((suggestion) => suggestion.type),
     ["song", "artist"],
@@ -336,6 +362,30 @@ test("builds song catalog rows and header suggestions from normalized song and a
       error: "method not allowed",
     },
   });
+});
+
+test("caps empty-query song catalog results at 100 rows", async () => {
+  const songs = Array.from({ length: 101 }, (_, index) => ({
+    id: index + 1,
+    title: `Catalog Song ${String(index + 1).padStart(3, "0")}`,
+    artist: { name: "Catalog Artist" },
+    submissions: [],
+  }));
+  const prisma = {
+    song: {
+      async findMany() {
+        return songs;
+      },
+    },
+  };
+  const catalog = await getSongCatalog({ input: { prisma } });
+
+  assert.equal(catalog.q, "");
+  assert.equal(catalog.totalSongCount, 101);
+  assert.equal(catalog.totalMatchCount, 101);
+  assert.equal(catalog.rows.length, 100);
+  assert.equal(catalog.capped, true);
+  assert.equal(catalog.rows[0].href, "/songs/1");
 });
 
 test("constructs shared route data result shapes", () => {
