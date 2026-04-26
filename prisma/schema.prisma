@@ -7,6 +7,12 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum GameSpeed {
+  Steady
+  Accelerated
+  Speedy
+}
+
 model Player {
   id                Int                   @id @default(autoincrement())
   displayName       String
@@ -47,11 +53,15 @@ model Song {
 }
 
 model Game {
-  id           Int      @id @default(autoincrement())
-  sourceGameId String   @unique
+  id           Int        @id @default(autoincrement())
+  sourceGameId String     @unique
   displayName  String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  description  String?
+  finished     Boolean    @default(true)
+  speed        GameSpeed?
+  leagueMaster String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
   rounds       Round[]
 
   @@index([sourceGameId])

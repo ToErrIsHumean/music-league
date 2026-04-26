@@ -4,16 +4,45 @@ const path = require("node:path");
 const { execFileSync } = require("node:child_process");
 
 const repoRoot = path.resolve(__dirname, "..", "..", "..");
-const prismaCommand = process.platform === "win32" ? "npx.cmd" : "npx";
+const prismaCommand = path.join(
+  repoRoot,
+  "node_modules",
+  ".bin",
+  process.platform === "win32" ? "prisma.cmd" : "prisma",
+);
 const nodeCommand = process.execPath;
+const inheritedEnvKeys = [
+  "PATH",
+  "Path",
+  "HOME",
+  "USERPROFILE",
+  "APPDATA",
+  "LOCALAPPDATA",
+  "SystemRoot",
+  "ComSpec",
+  "TMPDIR",
+  "TEMP",
+  "TMP",
+];
+
+function createCommandEnv(databaseUrl) {
+  const env = {
+    DATABASE_URL: databaseUrl,
+  };
+
+  for (const key of inheritedEnvKeys) {
+    if (process.env[key] !== undefined) {
+      env[key] = process.env[key];
+    }
+  }
+
+  return env;
+}
 
 function runInRepo(command, args, databaseUrl) {
   execFileSync(command, args, {
     cwd: repoRoot,
-    env: {
-      ...process.env,
-      DATABASE_URL: databaseUrl,
-    },
+    env: createCommandEnv(databaseUrl),
     stdio: "pipe",
   });
 }
@@ -23,7 +52,7 @@ function createTempPrismaDb({ prefix, filename, seed = false }) {
   const databasePath = path.join(tempDir, filename);
   const databaseUrl = `file:${databasePath}`;
 
-  runInRepo(prismaCommand, ["prisma", "migrate", "deploy"], databaseUrl);
+  runInRepo(prismaCommand, ["migrate", "deploy"], databaseUrl);
 
   function runSeed() {
     runInRepo(nodeCommand, ["prisma/seed.js"], databaseUrl);

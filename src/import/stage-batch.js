@@ -1,6 +1,9 @@
 const { PrismaClient } = require("@prisma/client");
 
 const { normalize } = require("../lib/normalize");
+const {
+  normalizeSourcePlayerIdsForImport,
+} = require("./source-player-id-remaps");
 
 const FILE_KINDS = ["competitors", "rounds", "submissions", "votes"];
 
@@ -71,8 +74,15 @@ async function stageImportBundle(input) {
     throw new TypeError("stageImportBundle: parsedBundle is required");
   }
 
-  const duplicateResult = collectDuplicateRows(parsedBundle);
-  const stagedRows = buildStagedRows(parsedBundle, duplicateResult.duplicateRowNumbers);
+  const normalizedBundle = normalizeSourcePlayerIdsForImport(
+    parsedBundle,
+    input?.sourcePlayerIdRemapRules,
+  );
+  const duplicateResult = collectDuplicateRows(normalizedBundle);
+  const stagedRows = buildStagedRows(
+    normalizedBundle,
+    duplicateResult.duplicateRowNumbers,
+  );
   const issueRows = [
     ...parsedBundle.issues.map((issue) => toIssueCreateInput(issue)),
     ...duplicateResult.issues,

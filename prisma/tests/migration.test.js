@@ -6,15 +6,56 @@ const path = require("node:path");
 const { execFileSync } = require("node:child_process");
 
 const repoRoot = path.resolve(__dirname, "..", "..");
-const prismaCommand = process.platform === "win32" ? "npx.cmd" : "npx";
+const prismaCommand = path.join(
+  repoRoot,
+  "node_modules",
+  ".bin",
+  process.platform === "win32" ? "prisma.cmd" : "prisma",
+);
+const inheritedEnvKeys = [
+  "PATH",
+  "Path",
+  "HOME",
+  "USERPROFILE",
+  "APPDATA",
+  "LOCALAPPDATA",
+  "SystemRoot",
+  "ComSpec",
+  "TMPDIR",
+  "TEMP",
+  "TMP",
+];
+const gameMetadataMigration = path.join(
+  repoRoot,
+  "prisma",
+  "migrations",
+  "20260425160000_add_game_metadata_fields",
+  "migration.sql",
+);
+const gameFinishedMigration = path.join(
+  repoRoot,
+  "prisma",
+  "migrations",
+  "20260426090000_add_game_finished_field",
+  "migration.sql",
+);
+
+function createPrismaEnv(databaseUrl) {
+  const env = { DATABASE_URL: databaseUrl };
+
+  for (const key of inheritedEnvKeys) {
+    if (process.env[key] !== undefined) {
+      env[key] = process.env[key];
+    }
+  }
+
+  return env;
+}
 
 function runPrisma(args, databaseUrl, input) {
   execFileSync(prismaCommand, args, {
     cwd: repoRoot,
-    env: {
-      ...process.env,
-      DATABASE_URL: databaseUrl,
-    },
+    env: createPrismaEnv(databaseUrl),
     input,
     stdio: "pipe",
   });
@@ -22,14 +63,14 @@ function runPrisma(args, databaseUrl, input) {
 
 function executeSqlFile(databaseUrl, filePath) {
   runPrisma(
-    ["prisma", "db", "execute", "--url", databaseUrl, "--file", filePath],
+    ["db", "execute", "--url", databaseUrl, "--file", filePath],
     databaseUrl,
   );
 }
 
 function executeSql(databaseUrl, sql) {
   runPrisma(
-    ["prisma", "db", "execute", "--url", databaseUrl, "--stdin"],
+    ["db", "execute", "--url", databaseUrl, "--stdin"],
     databaseUrl,
     sql,
   );
@@ -97,6 +138,8 @@ test(
         `,
       );
       executeSqlFile(databaseUrl, explicitGameMigration);
+      executeSqlFile(databaseUrl, gameMetadataMigration);
+      executeSqlFile(databaseUrl, gameFinishedMigration);
 
       const { PrismaClient } = require("@prisma/client");
       const prisma = new PrismaClient({
@@ -191,6 +234,154 @@ test(
             },
           }),
           isConstraintViolation,
+        );
+
+        await prisma.$disconnect();
+      } catch (error) {
+        await prisma.$disconnect();
+        throw error;
+      }
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  },
+);
+
+test(
+  "game metadata migrations add metadata without game date or player relationship",
+  { concurrency: false },
+  async () => {
+    const { tempDir, databaseUrl } = createTempDatabase();
+    const initialMigration = path.join(
+      repoRoot,
+      "prisma",
+      "migrations",
+      "20260416015910_init",
+      "migration.sql",
+    );
+    const importBatchMigration = path.join(
+      repoRoot,
+      "prisma",
+      "migrations",
+      "20260417090000_import_batch_staging",
+      "migration.sql",
+    );
+    const explicitGameMigration = path.join(
+      repoRoot,
+      "prisma",
+      "migrations",
+      "20260417113000_explicit_game_identity",
+      "migration.sql",
+    );
+
+    try {
+      executeSqlFile(databaseUrl, initialMigration);
+      executeSqlFile(databaseUrl, importBatchMigration);
+      executeSql(
+        databaseUrl,
+        `
+          INSERT INTO "Round" (
+            "leagueSlug",
+            "name",
+            "sequenceNumber",
+            "sourceRoundId",
+            "createdAt",
+            "updatedAt"
+          )
+          VALUES (
+            'legacy-main',
+            'Opening',
+            1,
+            'opening-round',
+            '2026-04-01T00:00:00.000Z',
+            '2026-04-01T00:00:00.000Z'
+          );
+        `,
+      );
+      executeSqlFile(databaseUrl, explicitGameMigration);
+      executeSqlFile(databaseUrl, gameMetadataMigration);
+      executeSqlFile(databaseUrl, gameFinishedMigration);
+
+      const { PrismaClient } = require("@prisma/client");
+      const prisma = new PrismaClient({
+        datasources: {
+          db: {
+            url: databaseUrl,
+          },
+        },
+      });
+
+      try {
+        const columns = await prisma.$queryRaw`PRAGMA table_info("Game")`;
+        const columnByName = new Map(
+          columns.map((column) => [column.name, column]),
+        );
+
+        assert.equal(columnByName.get("description")?.type, "TEXT");
+        assert.equal(columnByName.get("finished")?.type, "BOOLEAN");
+        assert.equal(columnByName.get("speed")?.type, "TEXT");
+        assert.equal(columnByName.get("leagueMaster")?.type, "TEXT");
+        assert.equal(columnByName.get("description")?.notnull, 0n);
+        assert.equal(columnByName.get("finished")?.notnull, 1n);
+        assert.equal(columnByName.get("finished")?.dflt_value, "true");
+        assert.equal(columnByName.get("speed")?.notnull, 0n);
+        assert.equal(columnByName.get("leagueMaster")?.notnull, 0n);
+        assert.equal(columnByName.has("date"), false);
+        assert.equal(columnByName.has("occurredAt"), false);
+
+        const foreignKeys = await prisma.$queryRaw`PRAGMA foreign_key_list("Game")`;
+
+        assert.deepEqual(foreignKeys, []);
+
+        const migratedGame = await prisma.game.findUniqueOrThrow({
+          where: {
+            sourceGameId: "legacy-main",
+          },
+        });
+
+        assert.equal(migratedGame.description, null);
+        assert.equal(migratedGame.finished, true);
+        assert.equal(migratedGame.speed, null);
+        assert.equal(migratedGame.leagueMaster, null);
+
+        executeSql(
+          databaseUrl,
+          `
+            INSERT INTO "Game" (
+              "sourceGameId",
+              "speed",
+              "createdAt",
+              "updatedAt"
+            )
+            VALUES (
+              'valid-speed',
+              'Speedy',
+              '2026-04-02T00:00:00.000Z',
+              '2026-04-02T00:00:00.000Z'
+            );
+          `,
+        );
+
+        assert.throws(
+          () =>
+            executeSql(
+              databaseUrl,
+              `
+                INSERT INTO "Game" (
+                  "sourceGameId",
+                  "speed",
+                  "createdAt",
+                  "updatedAt"
+                )
+                VALUES (
+                  'invalid-speed',
+                  'Glacial',
+                  '2026-04-03T00:00:00.000Z',
+                  '2026-04-03T00:00:00.000Z'
+                );
+              `,
+            ),
+          /CHECK constraint failed|constraint failed/i,
         );
 
         await prisma.$disconnect();

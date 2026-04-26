@@ -6,7 +6,37 @@ const path = require("node:path");
 const { execFileSync } = require("node:child_process");
 
 const repoRoot = path.resolve(__dirname, "..", "..");
-const prismaCommand = process.platform === "win32" ? "npx.cmd" : "npx";
+const prismaCommand = path.join(
+  repoRoot,
+  "node_modules",
+  ".bin",
+  process.platform === "win32" ? "prisma.cmd" : "prisma",
+);
+const inheritedEnvKeys = [
+  "PATH",
+  "Path",
+  "HOME",
+  "USERPROFILE",
+  "APPDATA",
+  "LOCALAPPDATA",
+  "SystemRoot",
+  "ComSpec",
+  "TMPDIR",
+  "TEMP",
+  "TMP",
+];
+
+function createPrismaEnv(databaseUrl) {
+  const env = { DATABASE_URL: databaseUrl };
+
+  for (const key of inheritedEnvKeys) {
+    if (process.env[key] !== undefined) {
+      env[key] = process.env[key];
+    }
+  }
+
+  return env;
+}
 
 const { PrismaClient } = require("@prisma/client");
 
@@ -34,12 +64,9 @@ async function withTestDatabase(run) {
   const databasePath = path.join(tempDir, "analyze.sqlite");
   const databaseUrl = `file:${databasePath}`;
 
-  execFileSync(prismaCommand, ["prisma", "migrate", "deploy"], {
+  execFileSync(prismaCommand, ["migrate", "deploy"], {
     cwd: repoRoot,
-    env: {
-      ...process.env,
-      DATABASE_URL: databaseUrl,
-    },
+    env: createPrismaEnv(databaseUrl),
     stdio: "pipe",
   });
 

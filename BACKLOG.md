@@ -40,6 +40,16 @@
 **Notes:** Preserve the deferral reason; only promote a moment when it can satisfy source facts, evidence link, omission behavior, and copy guardrails.
 **Notes:** SPEC-006 bootstrap defers comment-backed `People Reacted` board moments and direct board comment snippets for risk reduction; Participation Pulse remains the v1 social/participation moment, and later promotion requires provenance, denominator, fixture, and copy-safety contracts.
 
+---
+
+## Vote SubmissionId Canonicalization
+
+**Outcome:** Backend vote storage can reference the resolved canonical submission directly, while preserving Music League import replay semantics and submission-scoped vote display.
+**Trigger:** After M8 ships the read-side vote-to-submission resolver and a future backend/data-model milestone explicitly accepts a schema migration.
+**Complexity:** High
+**Dependencies:** Accepted schema migration plan, canonical backfill from `Vote.roundId + Vote.songId`, replay-safe import commit updates, score recomputation updates, and regression coverage for recurring songs across rounds/games.
+**Notes:** Do not change the import CSV/data schema; source vote rows remain resolved from round plus Spotify URI before any canonical `submissionId` is stored.
+
 <!-- SKILL CONTRACT
   Location: First comment block in the file, immediately after the # Title line. Must not appear elsewhere.
   Purpose: Holding pen for Music League work that is real but not yet sequenced. Exists to prevent scope creep and amnesia.

@@ -16,7 +16,25 @@ const { parseMusicLeagueBundle } = require("./parse-bundle");
 const { stageImportBundle } = require("./stage-batch");
 
 const repoRoot = path.resolve(__dirname, "..", "..");
-const prismaCommand = process.platform === "win32" ? "npx.cmd" : "npx";
+const prismaCommand = path.join(
+  repoRoot,
+  "node_modules",
+  ".bin",
+  process.platform === "win32" ? "prisma.cmd" : "prisma",
+);
+const inheritedEnvKeys = [
+  "PATH",
+  "Path",
+  "HOME",
+  "USERPROFILE",
+  "APPDATA",
+  "LOCALAPPDATA",
+  "SystemRoot",
+  "ComSpec",
+  "TMPDIR",
+  "TEMP",
+  "TMP",
+];
 const fixtureRoot = path.join(__dirname, "test-fixtures");
 const semanticFixtureManifestPath = path.join(
   fixtureRoot,
@@ -39,6 +57,18 @@ const SEMANTIC_FIXTURE_BEHAVIORS = [
   "sparse-player-history",
   "stale-origin-context-modal-route",
 ];
+
+function createPrismaEnv(databaseUrl) {
+  const env = { DATABASE_URL: databaseUrl };
+
+  for (const key of inheritedEnvKeys) {
+    if (process.env[key] !== undefined) {
+      env[key] = process.env[key];
+    }
+  }
+
+  return env;
+}
 
 function getFixturePath(name) {
   return path.join(fixtureRoot, name);
@@ -81,12 +111,9 @@ async function withTestDatabase(run) {
   const databasePath = path.join(tempDir, "workflow.sqlite");
   const databaseUrl = `file:${databasePath}`;
 
-  execFileSync(prismaCommand, ["prisma", "migrate", "deploy"], {
+  execFileSync(prismaCommand, ["migrate", "deploy"], {
     cwd: repoRoot,
-    env: {
-      ...process.env,
-      DATABASE_URL: databaseUrl,
-    },
+    env: createPrismaEnv(databaseUrl),
     stdio: "pipe",
   });
 

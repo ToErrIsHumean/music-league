@@ -134,6 +134,48 @@ test("creates one record for each Prisma model", { concurrency: false }, async (
 });
 
 test(
+  "stores game metadata without date or player relationship",
+  { concurrency: false },
+  async () => {
+    await withRollback(async (tx) => {
+      const game = await tx.game.create({
+        data: {
+          sourceGameId: "game-metadata-ac08",
+          displayName: null,
+          description: "Imported operator description",
+          finished: false,
+          speed: "Accelerated",
+          leagueMaster: "Alex",
+        },
+      });
+
+      assert.equal(game.description, "Imported operator description");
+      assert.equal(game.finished, false);
+      assert.equal(game.speed, "Accelerated");
+      assert.equal(game.leagueMaster, "Alex");
+
+      const gameModel = prisma._runtimeDataModel.models.Game;
+      const fieldNames = new Set(gameModel.fields.map((field) => field.name));
+      const leagueMasterField = gameModel.fields.find(
+        (field) => field.name === "leagueMaster",
+      );
+      const finishedField = gameModel.fields.find(
+        (field) => field.name === "finished",
+      );
+      const speedField = gameModel.fields.find((field) => field.name === "speed");
+
+      assert.equal(fieldNames.has("date"), false);
+      assert.equal(fieldNames.has("occurredAt"), false);
+      assert.equal(finishedField.kind, "scalar");
+      assert.equal(finishedField.type, "Boolean");
+      assert.equal(speedField.kind, "enum");
+      assert.equal(speedField.type, "GameSpeed");
+      assert.equal(leagueMasterField.kind, "scalar");
+    });
+  },
+);
+
+test(
   "rejects duplicate submission round/player/song tuples",
   { concurrency: false },
   async () => {
