@@ -17,7 +17,7 @@
 | TASK-09 | Build song browser route | `done` | TASK-03, TASK-04 |
 | TASK-10 | Build song detail route | `done` | TASK-03, TASK-04 |
 | TASK-11 | Build player detail route and trait registry | `done` | TASK-05, TASK-06, TASK-07, TASK-08, TASK-09, TASK-10 |
-| TASK-12 | Run cross-route accessibility and regression hardening | `pending` | TASK-05, TASK-06, TASK-07, TASK-08, TASK-09, TASK-10, TASK-11 |
+| TASK-12 | Run cross-route accessibility and regression hardening | `done` | TASK-05, TASK-06, TASK-07, TASK-08, TASK-09, TASK-10, TASK-11 |
 
 Status values: `pending` | `active` | `done` | `fail` | `blocked` | `skipped`
 
@@ -55,10 +55,16 @@ elevated override.
 | TASK-09 | pass | null | 1 | gpt-5.5 | xhigh | 2026-04-26T05:56:22.873Z |
 | TASK-10 | pass | null | 1 | gpt-5.5 | high | 2026-04-26T06:10:25.338Z |
 | TASK-11 | pass | null | 1 | gpt-5.5 | xhigh | 2026-04-26T06:30:11.954Z |
+| TASK-12 | pass | null | 1 | gpt-5.5 | xhigh | 2026-04-26T06:45:34.963Z |
+| TASK-12 | pass | null | 2 | gpt-5.5 | xhigh | 2026-04-26T07:03:41.225Z |
 
 ## Review Notes
 
 <!-- Orchestrator review notes append below. -->
+
+- TASK-12 cycle 2: `deferred` -> `docs/sdd/reviews/TASK-12-epoch-1-cycle-2.md`
+
+- TASK-12 cycle 1: `contested` -> `docs/sdd/reviews/TASK-12-epoch-1-cycle-1.md`
 
 - TASK-11 cycle 1: `deferred` -> `docs/sdd/reviews/TASK-11-epoch-1-cycle-1.md`
 
