@@ -565,10 +565,10 @@ function normalizeSongSort(value) {
   return VALID_SONG_SORTS.has(normalized) ? normalized : "most-recent";
 }
 
-function getMostRecentAppearance(submissions) {
+function getMostRecentSubmission(submissions) {
   const mostRecent = [...submissions].sort(compareSongAppearanceDescending)[0] ?? null;
 
-  return mostRecent ? getSubmissionAppearanceAt(mostRecent) : null;
+  return mostRecent;
 }
 
 function getBestFinish(submissions) {
@@ -576,9 +576,52 @@ function getBestFinish(submissions) {
     (submission) => submission.rank !== null && submission.rank !== undefined,
   );
 
-  return rankedSubmissions.length === 0
-    ? null
-    : Math.min(...rankedSubmissions.map((submission) => submission.rank));
+  if (rankedSubmissions.length === 0) {
+    return null;
+  }
+
+  const best = [...rankedSubmissions].sort((left, right) => {
+    const rankComparison = compareNullableAscending(left.rank ?? null, right.rank ?? null);
+
+    if (rankComparison !== 0) {
+      return rankComparison;
+    }
+
+    const scoreComparison = compareNullableDescending(left.score ?? null, right.score ?? null);
+
+    if (scoreComparison !== 0) {
+      return scoreComparison;
+    }
+
+    return compareSongAppearanceDescending(left, right);
+  })[0];
+
+  return {
+    rank: best.rank,
+    score: best.score ?? null,
+  };
+}
+
+function buildMostRecentSongCatalogAppearance(submissions) {
+  const mostRecent = getMostRecentSubmission(submissions);
+  const round = mostRecent?.round ?? null;
+  const game = round?.game ?? null;
+
+  if (!mostRecent || !round || !game) {
+    return null;
+  }
+
+  return {
+    gameName: resolveGameDisplayLabel(game),
+    roundName: round.name,
+    href: buildRoundHref(game.id, round.id),
+  };
+}
+
+function getMostRecentAppearanceAt(submissions) {
+  const mostRecent = getMostRecentSubmission(submissions);
+
+  return mostRecent ? getDateTime(getSubmissionAppearanceAt(mostRecent)) : null;
 }
 
 function buildSongCatalogRow(song) {
@@ -586,14 +629,17 @@ function buildSongCatalogRow(song) {
 
   return {
     id: song.id,
+    songId: song.id,
     title: song.title,
     normalizedTitle: normalizeArchiveSearch(song.title),
     artistName: song.artist.name,
     normalizedArtistName: normalizeArchiveSearch(song.artist.name),
+    artistSearchHref: buildSongSearchHref({ q: song.artist.name }),
     href: buildSongHref(song.id),
     appearanceCount: familiarity.appearanceCount,
     appearances: familiarity.appearanceCount,
-    mostRecentAppearance: getMostRecentAppearance(song.submissions),
+    mostRecentAppearance: buildMostRecentSongCatalogAppearance(song.submissions),
+    mostRecentAppearanceAt: getMostRecentAppearanceAt(song.submissions),
     bestFinish: getBestFinish(song.submissions),
     familiarity,
   };
@@ -606,10 +652,22 @@ function compareSongCatalogRows(sort) {
     }
 
     if (sort === "best-finish") {
-      const finishComparison = compareNullableAscending(left.bestFinish, right.bestFinish);
+      const finishComparison = compareNullableAscending(
+        left.bestFinish?.rank ?? null,
+        right.bestFinish?.rank ?? null,
+      );
 
       if (finishComparison !== 0) {
         return finishComparison;
+      }
+
+      const scoreComparison = compareNullableDescending(
+        left.bestFinish?.score ?? null,
+        right.bestFinish?.score ?? null,
+      );
+
+      if (scoreComparison !== 0) {
+        return scoreComparison;
       }
     }
 
@@ -627,8 +685,8 @@ function compareSongCatalogRows(sort) {
       }
     } else {
       const recentComparison = compareNullableDescending(
-        getDateTime(left.mostRecentAppearance),
-        getDateTime(right.mostRecentAppearance),
+        left.mostRecentAppearanceAt,
+        right.mostRecentAppearanceAt,
       );
 
       if (recentComparison !== 0) {
@@ -667,10 +725,20 @@ async function getSongCatalog({
             id: true,
             songId: true,
             rank: true,
+            score: true,
             submittedAt: true,
             round: {
               select: {
+                id: true,
+                name: true,
                 occurredAt: true,
+                game: {
+                  select: {
+                    id: true,
+                    sourceGameId: true,
+                    displayName: true,
+                  },
+                },
               },
             },
           },

@@ -1657,6 +1657,95 @@ a {
   font-weight: 800;
 }
 
+.archive-song-browser {
+  display: grid;
+  gap: 14px;
+  margin-top: 20px;
+}
+
+.archive-song-browser-controls {
+  padding: 16px;
+  border: 1px solid rgba(var(--ink-muted-rgb), 0.16);
+  border-radius: 8px;
+  background: rgba(var(--surface-paper-rgb), 0.72);
+}
+
+.archive-song-browser-controls input {
+  width: min(100%, 320px);
+}
+
+.archive-song-browser-summary,
+.archive-song-browser-refine,
+.archive-song-browser-artist,
+.archive-song-browser-clear {
+  margin: 0;
+}
+
+.archive-song-browser-summary {
+  color: var(--ink-primary);
+  font-weight: 800;
+}
+
+.archive-song-browser-refine,
+.archive-song-browser-artist {
+  color: var(--ink-muted);
+}
+
+.archive-song-browser-clear,
+.archive-song-browser-artist a,
+.archive-song-browser-facts a {
+  color: var(--brand-purple);
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+}
+
+.archive-song-browser-list {
+  margin-top: 0;
+}
+
+.archive-song-browser-row {
+  display: grid;
+  gap: 10px;
+}
+
+.archive-song-browser-row-heading {
+  justify-content: space-between;
+}
+
+.archive-song-browser-title {
+  color: var(--ink-primary);
+  font-size: 1.04rem;
+  font-weight: 850;
+}
+
+.archive-song-browser-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.archive-song-browser-facts div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.archive-song-browser-facts dt {
+  color: var(--ink-muted);
+  font-size: 0.78rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.archive-song-browser-facts dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--ink-primary);
+  overflow-wrap: anywhere;
+}
+
 .archive-badge {
   display: inline-flex;
   width: fit-content;
@@ -1745,6 +1834,21 @@ a {
 
   .archive-shell-back-chip {
     grid-column: 1 / -1;
+  }
+
+  .archive-song-browser-controls {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .archive-song-browser-controls input,
+  .archive-song-browser-controls select,
+  .archive-song-browser-controls button {
+    width: 100%;
+  }
+
+  .archive-song-browser-facts {
+    grid-template-columns: 1fr;
   }
 
   .archive-page-shell {
