@@ -9,7 +9,7 @@
 | TASK-01 | Replace overlay routing with real route skeletons | `done` | — |
 | TASK-02 | Establish archive visual tokens and badge primitives | `done` | TASK-01 |
 | TASK-03 | Introduce persistent archive shell chrome | `done` | TASK-01, TASK-02 |
-| TASK-04 | Centralize M8 derivation utilities | `pending` | TASK-01 |
+| TASK-04 | Centralize M8 derivation utilities | `done` | TASK-01 |
 | TASK-05 | Implement header interactions and search suggestions | `pending` | TASK-03, TASK-04 |
 | TASK-06 | Build the landing page | `pending` | TASK-03, TASK-04 |
 | TASK-07 | Build the game page | `pending` | TASK-03, TASK-04 |
@@ -46,10 +46,16 @@ elevated override.
 | TASK-02 | pass | null | 1 | gpt-5.5 | high | 2026-04-26T03:56:16.993Z |
 | TASK-03 | pass | null | 1 | gpt-5.5 | high | 2026-04-26T04:10:34.657Z |
 | TASK-03 | pass | null | 2 | gpt-5.5 | high | 2026-04-26T04:16:14.987Z |
+| TASK-04 | pass | null | 1 | gpt-5.5 | xhigh | 2026-04-26T04:36:03.605Z |
+| TASK-04 | pass | null | 2 | gpt-5.5 | xhigh | 2026-04-26T04:45:26.621Z |
 
 ## Review Notes
 
 <!-- Orchestrator review notes append below. -->
+
+- TASK-04 cycle 2: `confirmed` -> `docs/sdd/reviews/TASK-04-epoch-1-cycle-2.md`
+
+- TASK-04 cycle 1: `contested` -> `docs/sdd/reviews/TASK-04-epoch-1-cycle-1.md`
 
 - TASK-03 cycle 2: `confirmed` -> `docs/sdd/reviews/TASK-03-epoch-1-cycle-2.md`
 
