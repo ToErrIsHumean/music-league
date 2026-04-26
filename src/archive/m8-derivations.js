@@ -1,5 +1,5 @@
 const { PrismaClient } = require("@prisma/client");
-const { normalize } = require("../lib/normalize");
+const { normalizeArchiveSearch } = require("./search-normalization");
 const {
   buildGameHref,
   buildPlayerHref,
@@ -70,28 +70,6 @@ function buildStatusNotice({ title, body, href, hrefLabel }) {
     href,
     hrefLabel,
   };
-}
-
-function firstParam(value) {
-  return Array.isArray(value) ? value[0] : value;
-}
-
-function normalizeArchiveSearch(value) {
-  const candidate = firstParam(value);
-
-  if (typeof candidate !== "string") {
-    return "";
-  }
-
-  try {
-    return normalize(candidate);
-  } catch (error) {
-    if (error instanceof Error && error.message.startsWith("normalize: empty output")) {
-      return "";
-    }
-
-    throw error;
-  }
 }
 
 function toUsableDate(value) {
@@ -756,10 +734,10 @@ async function getHeaderSearchSuggestions(q, { limit = HEADER_SEARCH_LIMIT, inpu
   for (const row of catalog.rows) {
     if (row.normalizedTitle.includes(normalizedQuery)) {
       suggestions.push({
-        id: `song-${row.id}`,
         type: "song",
-        label: row.title,
-        meta: row.artistName,
+        songId: row.id,
+        title: row.title,
+        artistName: row.artistName,
         href: buildSongHref(row.id),
       });
     }
@@ -774,10 +752,8 @@ async function getHeaderSearchSuggestions(q, { limit = HEADER_SEARCH_LIMIT, inpu
     ) {
       artistSuggestions.add(row.normalizedArtistName);
       suggestions.push({
-        id: `artist-${row.normalizedArtistName}`,
         type: "artist",
-        label: row.artistName,
-        meta: "Artist",
+        artistName: row.artistName,
         href: buildSongSearchHref({ q: row.artistName }),
       });
     }

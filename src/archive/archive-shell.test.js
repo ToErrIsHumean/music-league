@@ -104,3 +104,38 @@ test("ArchiveShell renders persistent landmarks, search, switcher control, and e
   assert.match(markup, /Music League archive project/);
   assert.match(markup, /https:\/\/github.com\/ToErrIsHumean\/music-league/);
 });
+
+test("ArchiveShell renders search suggestion rows with registered badge variants", () => {
+  const markup = renderToStaticMarkup(
+    React.createElement(
+      ArchiveShell,
+      buildShell({
+        search: {
+          value: "solar",
+          submitHrefBase: "/songs",
+          suggestions: [
+            {
+              type: "song",
+              songId: 7,
+              title: "Solar Static",
+              artistName: "The Comets",
+              href: "/songs/7",
+            },
+            {
+              type: "artist",
+              artistName: "Solar Fields",
+              href: "/songs?q=Solar+Fields",
+            },
+          ],
+        },
+      }),
+      React.createElement("h1", null, "Songs"),
+    ),
+  );
+
+  assert.match(markup, /id="archive-shell-search-suggestions"/);
+  assert.match(markup, /data-archive-badge-variant="search-type-song"/);
+  assert.match(markup, /data-archive-badge-variant="search-type-artist"/);
+  assert.match(markup, /Solar Static/);
+  assert.match(markup, /by Solar Fields|Solar Fields/);
+});
