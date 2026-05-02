@@ -23,6 +23,9 @@
     "test:integration": "node --test prisma/tests/archive-page.test.js prisma/tests/constraints.test.js prisma/tests/migration.test.js prisma/tests/queries.test.js prisma/tests/route-skeletons.test.js prisma/tests/seed.test.js src/import/analyze-batch.test.js src/import/commit-batch.test.js src/import/get-batch-summary.test.js src/import/list-batch-issues.test.js src/import/list-batches.test.js src/import/recompute-round-results.test.js src/import/stage-batch.test.js src/import/workflow-integration.test.js",
     "test:all": "npm run test:unit && npm run test:integration"
   },
+  "engines": {
+    "node": ">=24 <25"
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",
